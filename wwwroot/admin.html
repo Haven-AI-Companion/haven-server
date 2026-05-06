@@ -331,7 +331,7 @@ select.form-input{cursor:pointer}
         <div class="add-form" id="add-backend-form" style="display:none;">
           <div class="add-form-title">New Backend</div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">Name</label><input type="text" id="nb-name" class="form-input" placeholder="My LM Studio"></div>
+            <div class="form-group"><label class="form-label">Name</label><input type="text" id="nb-name" class="form-input" placeholder="Local Ollama"></div>
             <div class="form-group"><label class="form-label">Type</label>
               <select id="nb-type" class="form-input" onchange="updateBackendPlaceholder()">
                 <option value="ollama">Ollama</option>
@@ -808,15 +808,33 @@ async function createBackup() {
 }
 
 /* Backends */
+const BACKEND_DEFAULTS = {
+  ollama:       { name: 'Local Ollama', url: 'http://localhost:11434' },
+  openai_compat:{ name: 'LM Studio',   url: 'http://localhost:1234'  }
+};
+
 function toggleAddForm() {
   const f = document.getElementById('add-backend-form');
-  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  const opening = f.style.display === 'none';
+  f.style.display = opening ? 'block' : 'none';
+  if (opening) applyBackendDefaults(true);
 }
 
-function updateBackendPlaceholder() {
-  const map = { ollama: 'http://localhost:11434', openai_compat: 'http://localhost:1234' };
-  document.getElementById('nb-url').placeholder = map[document.getElementById('nb-type').value] || 'http://localhost:8080';
+function applyBackendDefaults(force = false) {
+  const type    = document.getElementById('nb-type').value;
+  const defaults = BACKEND_DEFAULTS[type] || { name: '', url: 'http://localhost:8080' };
+  const nameEl  = document.getElementById('nb-name');
+  const urlEl   = document.getElementById('nb-url');
+  // Known default names — replace if the field is empty or still holds a default
+  const knownNames = Object.values(BACKEND_DEFAULTS).map(d => d.name);
+  if (force || !nameEl.value || knownNames.includes(nameEl.value)) nameEl.value = defaults.name;
+  // Same logic for URL
+  const knownUrls = Object.values(BACKEND_DEFAULTS).map(d => d.url);
+  if (force || !urlEl.value || knownUrls.includes(urlEl.value)) urlEl.value = defaults.url;
+  urlEl.placeholder = defaults.url;
 }
+
+function updateBackendPlaceholder() { applyBackendDefaults(); }
 
 async function loadBackends() {
   const list = document.getElementById('backends-list');
@@ -862,6 +880,7 @@ async function addBackend() {
     const res = await fetch('/api/admin/backends', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
     if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
     ['nb-name','nb-url','nb-key'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('nb-type').value = 'ollama';
     document.getElementById('add-backend-form').style.display = 'none';
     toast('Backend added'); loadBackends();
   } catch (err) { statusDiv.innerHTML = `<span class="txt-error">\u2715 ${err.message}</span>`; }
