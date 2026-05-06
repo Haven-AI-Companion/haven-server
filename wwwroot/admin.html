@@ -335,7 +335,18 @@ select.form-input{cursor:pointer}
             <div class="form-group"><label class="form-label">Type</label>
               <select id="nb-type" class="form-input" onchange="updateBackendPlaceholder()">
                 <option value="ollama">Ollama</option>
-                <option value="openai_compat">OpenAI-compatible (LM Studio, llama.cpp, Jan, LocalAI, vLLM, OpenAI...)</option>
+                <optgroup label="OpenAI-compatible">
+                  <option value="lmstudio">LM Studio</option>
+                  <option value="llamacpp">llama.cpp</option>
+                  <option value="jan">Jan</option>
+                  <option value="localai">LocalAI</option>
+                  <option value="vllm">vLLM</option>
+                  <option value="kobold">Kobold.cpp</option>
+                  <option value="textgen">text-generation-webui</option>
+                  <option value="tabbyapi">TabbyAPI</option>
+                  <option value="openai">OpenAI (cloud)</option>
+                  <option value="openai_compat">Other OpenAI-compatible</option>
+                </optgroup>
               </select>
             </div>
             <div class="form-group"><label class="form-label">Base URL</label><input type="text" id="nb-url" class="form-input" placeholder="http://localhost:11434"></div>
@@ -809,8 +820,17 @@ async function createBackup() {
 
 /* Backends */
 const BACKEND_DEFAULTS = {
-  ollama:       { name: 'Local Ollama', url: 'http://localhost:11434' },
-  openai_compat:{ name: 'LM Studio',   url: 'http://localhost:1234'  }
+  ollama:       { name: 'Local Ollama',            url: 'http://localhost:11434',        apiType: 'ollama'        },
+  lmstudio:     { name: 'LM Studio',               url: 'http://localhost:1234',         apiType: 'openai_compat' },
+  llamacpp:     { name: 'llama.cpp',               url: 'http://localhost:8080',         apiType: 'openai_compat' },
+  jan:          { name: 'Jan',                     url: 'http://localhost:1337',         apiType: 'openai_compat' },
+  localai:      { name: 'LocalAI',                 url: 'http://localhost:8080',         apiType: 'openai_compat' },
+  vllm:         { name: 'vLLM',                    url: 'http://localhost:8000',         apiType: 'openai_compat' },
+  kobold:       { name: 'Kobold.cpp',              url: 'http://localhost:5001',         apiType: 'openai_compat' },
+  textgen:      { name: 'text-generation-webui',   url: 'http://localhost:5000',         apiType: 'openai_compat' },
+  tabbyapi:     { name: 'TabbyAPI',                url: 'http://localhost:5000',         apiType: 'openai_compat' },
+  openai:       { name: 'OpenAI',                  url: 'https://api.openai.com',        apiType: 'openai_compat', needsKey: true },
+  openai_compat:{ name: 'Custom OpenAI-compatible',url: 'http://localhost:8080',         apiType: 'openai_compat' },
 };
 
 function toggleAddForm() {
@@ -821,17 +841,20 @@ function toggleAddForm() {
 }
 
 function applyBackendDefaults(force = false) {
-  const type    = document.getElementById('nb-type').value;
-  const defaults = BACKEND_DEFAULTS[type] || { name: '', url: 'http://localhost:8080' };
-  const nameEl  = document.getElementById('nb-name');
-  const urlEl   = document.getElementById('nb-url');
-  // Known default names — replace if the field is empty or still holds a default
+  const type     = document.getElementById('nb-type').value;
+  const defaults = BACKEND_DEFAULTS[type] || { name: '', url: 'http://localhost:8080', apiType: 'openai_compat' };
+  const nameEl   = document.getElementById('nb-name');
+  const urlEl    = document.getElementById('nb-url');
+  const keyEl    = document.getElementById('nb-key');
+  // Known default names — replace if the field is empty or still holds a known default
   const knownNames = Object.values(BACKEND_DEFAULTS).map(d => d.name);
   if (force || !nameEl.value || knownNames.includes(nameEl.value)) nameEl.value = defaults.name;
   // Same logic for URL
   const knownUrls = Object.values(BACKEND_DEFAULTS).map(d => d.url);
   if (force || !urlEl.value || knownUrls.includes(urlEl.value)) urlEl.value = defaults.url;
   urlEl.placeholder = defaults.url;
+  // Update API key placeholder to hint when a key is needed
+  keyEl.placeholder = defaults.needsKey ? 'sk-...' : 'Leave blank for local servers';
 }
 
 function updateBackendPlaceholder() { applyBackendDefaults(); }
@@ -868,10 +891,11 @@ async function loadBackends() {
 
 async function addBackend() {
   const statusDiv = document.getElementById('add-backend-status');
-  const name    = document.getElementById('nb-name').value.trim();
-  const type    = document.getElementById('nb-type').value;
-  const base_url= document.getElementById('nb-url').value.trim();
-  const api_key = document.getElementById('nb-key').value.trim();
+  const name     = document.getElementById('nb-name').value.trim();
+  const uiType   = document.getElementById('nb-type').value;
+  const base_url = document.getElementById('nb-url').value.trim();
+  const api_key  = document.getElementById('nb-key').value.trim();
+  const type     = (BACKEND_DEFAULTS[uiType] || {}).apiType || 'openai_compat';
   if (!name || !base_url) { statusDiv.innerHTML = '<span class="txt-error">Name and URL are required.</span>'; return; }
   statusDiv.innerHTML = '';
   try {
