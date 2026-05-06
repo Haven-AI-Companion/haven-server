@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ash Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:          #0f0f10;
+  --surface:     #18181b;
+  --surface2:    #1f1f23;
+  --surface3:    #26262c;
+  --border:      #2a2a30;
+  --border2:     #3a3a42;
+  --text:        #e4e4e7;
+  --text-muted:  #71717a;
+  --text-dim:    #52525b;
+  --accent:      #a78bfa;
+  --accent-dim:  #7c3aed22;
+  --accent-glow: #a78bfa33;
+  --success:     #34d399;
+  --error:       #f87171;
+  --warning:     #fbbf24;
+  --scrollbar:   #2a2a30;
+  --radius:      12px;
+  --radius-sm:   8px;
+  --shadow:      0 4px 24px #00000066;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:3px}
+
+/* Shell */
+.admin-shell{display:flex;height:100vh;overflow:hidden}
+
+/* Sidebar */
+.sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.sidebar-head{padding:16px 14px 14px;border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{width:30px;height:30px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.logo-name{font-size:14px;font-weight:600}
+.logo-badge{font-size:10px;color:var(--text-muted);background:var(--surface2);border:1px solid var(--border);padding:1px 6px;border-radius:8px;margin-left:auto}
+.sidebar-nav{flex:1;overflow-y:auto;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.nav-section{font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;padding:10px 8px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--radius-sm);background:none;border:none;color:var(--text-muted);font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;text-align:left;width:100%;transition:background .15s,color .15s}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:var(--accent-dim);color:var(--text);border:1px solid var(--accent-glow)}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;opacity:.75}
+.nav-item.active svg{opacity:1}
+.sidebar-foot{padding:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:9px}
+.user-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#374151,#4b5563);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#d1d5db}
+.user-meta{flex:1;min-width:0}
+.user-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-role{font-size:10px;color:var(--text-muted)}
+.foot-btn{padding:4px 8px;background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;font-size:11px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s;text-decoration:none;display:inline-block}
+.foot-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Main */
+.admin-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.page-header{padding:18px 24px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg);flex-shrink:0}
+.page-title{font-size:17px;font-weight:600}
+.page-sub{font-size:12px;color:var(--text-muted);margin-top:2px}
+.page-actions{display:flex;gap:8px}
+.page-body{flex:1;overflow-y:auto;padding:20px 24px}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.stat-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.stat-value{font-size:26px;font-weight:700;color:var(--accent);line-height:1}
+.stat-sub{font-size:11px;color:var(--text-dim);margin-top:4px}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+.card-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.card-title span{color:var(--text-muted);font-size:12px;font-weight:400}
+
+/* Tables */
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)}
+.data-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--surface2)}
+.data-table .actions{display:flex;gap:6px}
+
+/* Buttons */
+.btn{padding:6px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;font-family:inherit;border:1px solid var(--border);cursor:pointer;background:var(--surface2);color:var(--text-muted);transition:all .15s;white-space:nowrap}
+.btn:hover{border-color:var(--border2);color:var(--text);background:var(--surface3)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#8b5cf6;border-color:#8b5cf6;color:#fff}
+.btn-danger{background:transparent;border-color:var(--border);color:var(--error)}
+.btn-danger:hover{border-color:var(--error);background:#f8717122}
+.btn-sm{padding:4px 8px;font-size:11px}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-success{background:#34d39922;color:var(--success);border:1px solid #34d39933}
+.badge-muted{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)}
+.badge-accent{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-glow)}
+.badge-warn{background:#fbbf2422;color:var(--warning);border:1px solid #fbbf2433}
+
+/* Forms */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-row.cols-1{grid-template-columns:1fr}
+.form-row.cols-3{grid-template-columns:1fr 1fr 1fr}
+.form-group{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.form-group:last-child{margin-bottom:0}
+.form-label{font-size:11px;font-weight:600;color:var(--text-muted)}
+.form-hint{font-size:11px;color:var(--text-dim)}
+.form-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:var(--radius-sm);font-size:13px;font-family:inherit;transition:border-color .15s}
+.form-input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-glow)}
+.form-input::placeholder{color:var(--text-dim)}
+select.form-input{cursor:pointer}
+
+/* Config blocks */
+.config-block{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.config-block-title{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;display:flex;align-items:center;gap:7px}
+
+/* Backend cards */
+.backend-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.backend-info{flex:1;min-width:160px}
+.backend-name{font-weight:600;font-size:14px}
+.backend-meta{font-size:12px;color:var(--text-muted);margin-top:2px;font-family:'JetBrains Mono',monospace}
+.backend-actions{display:flex;gap:6px;flex-wrap:wrap}
+
+/* Model rows */
+.model-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:6px;background:var(--surface2);cursor:pointer;transition:border-color .15s,background .15s}
+.model-row:hover{border-color:var(--accent);background:var(--accent-dim)}
+.model-row.current{border-color:var(--accent);background:var(--accent-dim)}
+.model-row-name{font-size:13px;font-weight:600;flex:1;font-family:'JetBrains Mono',monospace}
+.model-row-meta{font-size:11px;color:var(--text-muted)}
+
+/* Plugin rows */
+.plugin-row{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);margin-bottom:6px}
+.plugin-name{font-size:13px;font-weight:600;flex:1}
+.plugin-meta{font-size:11px;color:var(--text-muted)}
+
+/* KV table */
+.kv-table{width:100%;border-collapse:collapse;font-size:13px}
+.kv-table td{padding:7px 0;vertical-align:top}
+.kv-table td:first-child{width:160px;color:var(--text-muted);font-size:12px;padding-right:12px}
+.kv-table tr{border-bottom:1px solid var(--border)}
+.kv-table tr:last-child{border-bottom:none}
+
+/* Activity chart */
+.chart-area{display:flex;align-items:flex-end;gap:8px;height:140px;padding:0 4px 4px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);margin-top:10px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px;padding:8px 0 0}
+.bar{width:100%;background:var(--accent-dim);border:1px solid var(--accent-glow);border-radius:3px 3px 0 0;min-height:4px;transition:all .3s}
+.bar:hover{background:var(--accent)}
+.bar-lbl{font-size:10px;color:var(--text-dim);white-space:nowrap;padding-bottom:4px}
+
+/* Empty */
+.empty{text-align:center;padding:36px 20px;color:var(--text-muted);font-size:13px}
+.empty-icon{font-size:28px;margin-bottom:10px}
+
+/* JSON editor */
+.json-editor{width:100%;min-height:340px;resize:vertical;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:12.5px;padding:12px;line-height:1.6}
+.json-editor:focus{outline:none;border-color:var(--accent)}
+
+/* Add-backend form */
+.add-form{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.add-form-title{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+
+/* Toast */
+#admin-toast{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);animation:toastIn .2s ease;pointer-events:all;max-width:320px}
+.toast-item.toast-success{border-color:var(--success);color:var(--success)}
+.toast-item.toast-error{border-color:var(--error);color:var(--error)}
+.toast-item.toast-out{animation:toastOut .25s ease forwards}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0;transform:translateY(10px)}}
+
+/* Utility */
+.txt-accent{color:var(--accent)}.txt-muted{color:var(--text-muted)}.txt-error{color:var(--error)}.txt-success{color:var(--success)}
+.mono{font-family:'JetBrains Mono',monospace}
+.row-gap{display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+<div id="admin-toast"></div>
+<div class="admin-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="logo">
+        <div class="logo-icon">🦞</div>
+        <span class="logo-name">Ash Admin</span>
+        <span class="logo-badge">v2</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Dashboard</div>
+      <button class="nav-item active" data-tab="overview" data-title="Overview" data-sub="System statistics at a glance">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Overview
+      </button>
+      <div class="nav-section">Manage</div>
+      <button class="nav-item" data-tab="users" data-title="Users" data-sub="Manage accounts and permissions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Users
+      </button>
+      <button class="nav-item" data-tab="backends" data-title="AI Backends" data-sub="Manage connected AI providers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        AI Backends
+      </button>
+      <div class="nav-section">Monitor</div>
+      <button class="nav-item" data-tab="analytics" data-title="Analytics" data-sub="Usage patterns and activity">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Analytics
+      </button>
+      <button class="nav-item" data-tab="plugins" data-title="Plugins" data-sub="Installed plugin modules">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+        Plugins
+      </button>
+      <div class="nav-section">System</div>
+      <button class="nav-item" data-tab="config" data-title="Configuration" data-sub="Server settings and AI defaults">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Configuration
+      </button>
+      <button class="nav-item" data-tab="database" data-title="Database" data-sub="Backups and storage management">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        Database
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="user-avatar" id="sidebar-avatar">A</div>
+      <div class="user-meta">
+        <div class="user-name" id="sidebar-username">admin</div>
+        <div class="user-role">Administrator</div>
+      </div>
+      <a href="/chat" class="foot-btn">Chat</a>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="admin-main">
+    <div class="page-header">
+      <div>
+        <div class="page-title" id="page-title">Overview</div>
+        <div class="page-sub"  id="page-sub">System statistics at a glance</div>
+      </div>
+      <div class="page-actions" id="page-actions"></div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- Overview -->
+      <div class="tab-content active" id="overview">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-label">Users</div><div class="stat-value" id="stat-users">—</div><div class="stat-sub" id="stat-recent-signups"></div></div>
+          <div class="stat-card"><div class="stat-label">Conversations</div><div class="stat-value" id="stat-conversations">—</div></div>
+          <div class="stat-card"><div class="stat-label">Messages</div><div class="stat-value" id="stat-messages">—</div></div>
+          <div class="stat-card"><div class="stat-label">Plugins</div><div class="stat-value" id="stat-plugins">—</div><div class="stat-sub" id="stat-plugins-enabled"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Server Info</div>
+          <table class="kv-table">
+            <tr><td>AI Name</td><td id="server-ai-name">—</td></tr>
+            <tr><td>Default Model</td><td id="server-model" class="mono">—</td></tr>
+            <tr><td>Personality Path</td><td id="server-personality" class="mono txt-muted">—</td></tr>
+            <tr><td>Plugins Enabled</td><td id="server-plugins-enabled">—</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Users -->
+      <div class="tab-content" id="users">
+        <div class="card">
+          <table class="data-table" id="users-table">
+            <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Joined</th><th>Last Login</th><th>Actions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AI Backends -->
+      <div class="tab-content" id="backends">
+        <div class="add-form" id="add-backend-form" style="display:none;">
+          <div class="add-form-title">New Backend</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Name</label><input type="text" id="nb-name" class="form-input" placeholder="My LM Studio"></div>
+            <div class="form-group"><label class="form-label">Type</label>
+              <select id="nb-type" class="form-input" onchange="updateBackendPlaceholder()">
+                <option value="ollama">Ollama</option>
+                <option value="openai_compat">OpenAI-compatible (LM Studio, llama.cpp, Jan, LocalAI, vLLM, OpenAI...)</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Base URL</label><input type="text" id="nb-url" class="form-input" placeholder="http://localhost:11434"></div>
+            <div class="form-group"><label class="form-label">API Key <span class="txt-muted">(optional)</span></label><input type="password" id="nb-key" class="form-input" placeholder="Leave blank for local servers"></div>
+          </div>
+          <div id="add-backend-status" style="margin-bottom:8px;font-size:12px;"></div>
+          <div class="row-gap">
+            <button class="btn btn-primary" onclick="addBackend()">Save Backend</button>
+            <button class="btn" onclick="document.getElementById('add-backend-form').style.display='none'">Cancel</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Connected Backends <button class="btn btn-sm btn-primary" onclick="toggleAddForm()">+ Add Backend</button></div>
+          <div id="backends-list"><p class="txt-muted" style="font-size:13px;">Loading...</p></div>
+        </div>
+      </div>
+
+      <!-- Analytics -->
+      <div class="tab-content" id="analytics">
+        <div class="card">
+          <div class="card-title">Most Active Users</div>
+          <table class="data-table" id="active-users-table">
+            <thead><tr><th>Username</th><th>Messages</th><th>Last Active</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-title">Activity — Last 7 Days</div>
+          <div class="chart-area" id="activity-chart"><div class="empty txt-muted" style="width:100%;align-self:center;">Loading...</div></div>
+        </div>
+      </div>
+
+      <!-- Plugins -->
+      <div class="tab-content" id="plugins">
+        <div class="card">
+          <div class="card-title">Installed Plugins</div>
+          <div id="plugins-list"><div class="empty"><div class="empty-icon">🔌</div>Loading...</div></div>
+        </div>
+      </div>
+
+      <!-- Configuration -->
+      <div class="tab-content" id="config">
+        <div class="card">
+          <div class="card-title">Available Models <button class="btn btn-sm" onclick="loadOllamaModels()">Refresh</button></div>
+          <div id="ollama-models-list"><div class="empty"><div class="empty-icon">🤖</div><p>Click Refresh to load models from all enabled backends.</p></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Server Configuration <button class="btn btn-sm" onclick="toggleConfigMode()" id="config-mode-toggle">Advanced JSON</button></div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:16px;">Changes require a server restart to take effect.</p>
+          <div id="config-menu">
+            <div class="config-block">
+              <div class="config-block-title">Server</div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Host</label><input type="text" id="cfg-server-host" class="form-input" placeholder="0.0.0.0"><span class="form-hint">0.0.0.0 = all interfaces, 127.0.0.1 = local only</span></div>
+                <div class="form-group"><label class="form-label">Port</label><input type="number" id="cfg-server-port" class="form-input" placeholder="8765" min="1" max="65535"></div>
+                <div class="form-group"><label class="form-label">Require Login</label>
+                  <select id="cfg-require-auth" class="form-input">
+                    <option value="false">No — open access (local use)</option>
+                    <option value="true">Yes — require username &amp; password</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">Allow Signup</label>
+                  <select id="cfg-allow-registration" class="form-input">
+                    <option value="true">Yes — anyone can register</option>
+                    <option value="false">No — invite only</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="config-block">
+              <div class="config-block-title">Default AI</div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Fallback Model</label><input type="text" id="cfg-ollama-model" class="form-input mono" placeholder="gemma4:turbo"><span class="form-hint">Used when no model is selected.</span></div>
+                <div class="form-group"><label class="form-label">Temperature</label><input type="number" id="cfg-ollama-temp" class="form-input" placeholder="0.7" min="0" max="2" step="0.1"><span class="form-hint">0 = deterministic · 2 = very creative</span></div>
+              </div>
+            </div>
+            <div class="config-block">
+              <div class="config-block-title">Storage</div>
+              <div class="form-row cols-3">
+                <div class="form-group"><label class="form-label">Database Path</label><input type="text" id="cfg-db-path" class="form-input mono" placeholder="ash_server.db"></div>
+                <div class="form-group"><label class="form-label">Uploads Directory</label><input type="text" id="cfg-uploads-dir" class="form-input mono" placeholder="uploads"></div>
+                <div class="form-group"><label class="form-label">Max Upload (MB)</label><input type="number" id="cfg-uploads-maxsize" class="form-input" placeholder="10" min="1" max="1000"></div>
+              </div>
+            </div>
+            <div class="config-block">
+              <div class="config-block-title">Security</div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">JWT Secret</label><input type="password" id="cfg-auth-secret" class="form-input mono" placeholder="Leave blank to keep current"><span class="form-hint">Changing this invalidates all existing sessions.</span></div>
+                <div class="form-group"><label class="form-label">Token Expiry (hours)</label><input type="number" id="cfg-auth-expiry" class="form-input" placeholder="24" min="1" max="720"></div>
+              </div>
+            </div>
+            <div class="config-block">
+              <div class="config-block-title">Personality</div>
+              <div class="form-row cols-1">
+                <div class="form-group"><label class="form-label">Personality File Path</label><input type="text" id="cfg-personality-path" class="form-input mono" placeholder="personality"></div>
+              </div>
+            </div>
+            <div class="row-gap" style="margin-top:4px;">
+              <button class="btn btn-primary" onclick="saveConfigFromMenu(event)" id="save-config-btn">Save Configuration</button>
+              <button class="btn" onclick="loadConfigToMenu()">Reset to Current</button>
+            </div>
+          </div>
+          <div id="config-editor-container" style="display:none;">
+            <p style="font-size:12px;color:var(--warning);margin-bottom:10px;">⚠️ Advanced mode — invalid JSON will be rejected.</p>
+            <textarea class="json-editor" id="config-editor"></textarea>
+            <div class="row-gap" style="margin-top:10px;">
+              <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+              <button class="btn" onclick="loadConfig()">↺ Reload</button>
+            </div>
+          </div>
+          <div id="config-status"></div>
+        </div>
+      </div>
+
+      <!-- Database -->
+      <div class="tab-content" id="database">
+        <div class="card">
+          <div class="card-title">Backup</div>
+          <p class="txt-muted" style="font-size:13px;margin-bottom:14px;">Creates a timestamped copy of the SQLite database in the <code class="mono" style="font-size:12px;">backups/</code> directory.</p>
+          <button class="btn btn-primary" onclick="createBackup()">Create Backup</button>
+          <div id="backup-status" style="margin-top:12px;font-size:13px;"></div>
+        </div>
+      </div>
+
+    </div><!-- /page-body -->
+  </main>
+</div><!-- /admin-shell -->
+
+<script>
+const token = localStorage.getItem('ash_token') || 'noauth';
+
+/* Toast */
+function toast(msg, type = 'success', duration = 3500) {
+  const wrap = document.getElementById('admin-toast');
+  const el = document.createElement('div');
+  el.className = `toast-item toast-${type}`;
+  el.textContent = (type === 'success' ? '\u2713 ' : '\u2715 ') + msg;
+  wrap.appendChild(el);
+  setTimeout(() => { el.classList.add('toast-out'); setTimeout(() => el.remove(), 300); }, duration);
+}
+
+/* Auth check + boot */
+(async () => {
+  try {
+    const cfg = await fetch('/api/auth/config');
+    if (cfg.ok) {
+      const d = await cfg.json();
+      if (d.require_auth && token === 'noauth') { window.location.href = '/'; return; }
+    }
+  } catch {}
+  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadConfigToMenu();
+  const raw = token !== 'noauth' ? token.split('.')[1] : null;
+  if (raw) {
+    try {
+      const p = JSON.parse(atob(raw));
+      if (p.username) {
+        document.getElementById('sidebar-username').textContent = p.username;
+        document.getElementById('sidebar-avatar').textContent = p.username[0].toUpperCase();
+      }
+    } catch {}
+  }
+})();
+
+/* Sidebar navigation */
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById(tab).classList.add('active');
+    document.getElementById('page-title').textContent = btn.dataset.title || tab;
+    document.getElementById('page-sub').textContent   = btn.dataset.sub  || '';
+  });
+});
+
+/* Overview stats */
+async function loadStats() {
+  try {
+    const resp = await fetch('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } });
+    const s = await resp.json();
+    document.getElementById('stat-users').textContent         = s.total_users ?? '\u2014';
+    document.getElementById('stat-conversations').textContent = s.total_conversations ?? '\u2014';
+    document.getElementById('stat-messages').textContent      = s.total_messages ?? '\u2014';
+    document.getElementById('stat-plugins').textContent       = s.server?.plugins_loaded ?? '\u2014';
+    if (s.recent_signups) document.getElementById('stat-recent-signups').textContent = `+${s.recent_signups} this week`;
+    if (s.server?.plugins_enabled !== undefined) document.getElementById('stat-plugins-enabled').textContent = `${s.server.plugins_enabled} enabled`;
+    document.getElementById('server-ai-name').textContent         = s.server?.ai_name || '\u2014';
+    document.getElementById('server-model').textContent           = s.server?.model || '\u2014';
+    document.getElementById('server-personality').textContent     = s.server?.personality_path || '\u2014';
+    document.getElementById('server-plugins-enabled').textContent = s.server?.plugins_enabled ?? '\u2014';
+  } catch (err) { console.error('loadStats:', err); }
+}
+
+/* Users */
+async function loadUsers() {
+  try {
+    const resp = await fetch('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await resp.json();
+    const tbody = document.querySelector('#users-table tbody');
+    if (!data.users?.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty">No users yet</div></td></tr>'; return; }
+    tbody.innerHTML = data.users.map(u => `
+      <tr>
+        <td class="txt-muted">${u.id}</td>
+        <td><strong>${u.username}</strong></td>
+        <td class="txt-muted">${u.email}</td>
+        <td>${u.is_admin ? '<span class="badge badge-accent">Admin</span>' : '<span class="badge badge-muted">User</span>'}</td>
+        <td class="txt-muted">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '\u2014'}</td>
+        <td class="txt-muted">${u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never'}</td>
+        <td><div class="actions"><button class="btn btn-sm" onclick="toggleAdmin(${u.id})">Toggle Admin</button><button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">Delete</button></div></td>
+      </tr>`).join('');
+  } catch (err) { console.error('loadUsers:', err); }
+}
+
+async function toggleAdmin(userId) {
+  if (!confirm('Toggle admin status for this user?')) return;
+  try {
+    await fetch(`/api/admin/users/${userId}/toggle-admin`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    loadUsers(); loadStats();
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+async function deleteUser(userId) {
+  if (!confirm('Delete this user? This cannot be undone.')) return;
+  try {
+    await fetch(`/api/admin/users/${userId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    loadUsers(); loadStats();
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+/* Analytics */
+async function loadAnalytics() {
+  try {
+    const resp = await fetch('/api/admin/analytics', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await resp.json();
+    const tbody = document.querySelector('#active-users-table tbody');
+    if (data.active_users?.length) {
+      tbody.innerHTML = data.active_users.map(u => `
+        <tr>
+          <td><strong>${u.username}</strong></td>
+          <td>${u.message_count || 0}</td>
+          <td class="txt-muted">${u.last_message ? new Date(u.last_message).toLocaleDateString() : 'Never'}</td>
+        </tr>`).join('');
+    } else {
+      tbody.innerHTML = '<tr><td colspan="3"><div class="empty">No activity data yet</div></td></tr>';
+    }
+    const chart = document.getElementById('activity-chart');
+    if (data.recent_activity?.length) {
+      const max = Math.max(...data.recent_activity.map(d => d.count), 1);
+      chart.innerHTML = data.recent_activity.map(day => `
+        <div class="bar-col">
+          <div class="bar" style="height:${Math.max(4, (day.count / max) * 90)}%" title="${day.count} messages"></div>
+          <div class="bar-lbl">${new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric'})}</div>
+        </div>`).join('');
+    } else {
+      chart.innerHTML = '<div class="empty" style="width:100%;align-self:center;">No activity in the last 7 days</div>';
+    }
+  } catch (err) { console.error('loadAnalytics:', err); }
+}
+
+/* Plugins */
+async function loadPlugins() {
+  try {
+    const resp = await fetch('/api/plugins', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await resp.json();
+    const list = document.getElementById('plugins-list');
+    if (data.plugins?.length) {
+      list.innerHTML = data.plugins.map(p => `
+        <div class="plugin-row">
+          <div><div class="plugin-name">${p.name}</div><div class="plugin-meta">Hooks: ${p.hooks} \u00b7 Commands: ${p.commands} \u00b7 Routes: ${p.routes}</div></div>
+          <span class="badge ${p.enabled ? 'badge-success' : 'badge-muted'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+        </div>`).join('');
+    } else {
+      list.innerHTML = '<div class="empty"><div class="empty-icon">🔌</div>No plugins installed</div>';
+    }
+  } catch (err) { console.error('loadPlugins:', err); }
+}
+
+/* Config */
+async function loadConfig() {
+  try {
+    const resp = await fetch('/api/admin/config', { headers: { Authorization: `Bearer ${token}` } });
+    document.getElementById('config-editor').value = JSON.stringify(await resp.json(), null, 2);
+  } catch (err) { console.error('loadConfig:', err); }
+}
+
+async function saveConfig() {
+  try {
+    const config = JSON.parse(document.getElementById('config-editor').value);
+    const resp = await fetch('/api/admin/config', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(config) });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.detail || 'Save failed');
+    toast(result.message || 'Configuration saved');
+  } catch (err) { toast('Error: ' + err.message, 'error'); }
+}
+
+function toggleConfigMode() {
+  const menu   = document.getElementById('config-menu');
+  const editor = document.getElementById('config-editor-container');
+  const btn    = document.getElementById('config-mode-toggle');
+  if (menu.style.display === 'none') { menu.style.display = 'block'; editor.style.display = 'none'; btn.textContent = 'Advanced JSON'; loadConfigToMenu(); }
+  else { menu.style.display = 'none'; editor.style.display = 'block'; btn.textContent = 'Form View'; loadConfig(); }
+  document.getElementById('config-status').innerHTML = '';
+}
+
+async function loadConfigToMenu() {
+  try {
+    const resp   = await fetch('/api/admin/config', { headers: { Authorization: `Bearer ${token}` } });
+    const config = await resp.json();
+    document.getElementById('cfg-server-host').value        = config.server?.host ?? '0.0.0.0';
+    document.getElementById('cfg-server-port').value        = config.server?.port ?? 8765;
+    document.getElementById('cfg-require-auth').value       = String(config.server?.require_auth ?? false);
+    document.getElementById('cfg-allow-registration').value = String(config.server?.allow_registration ?? true);
+    document.getElementById('cfg-ollama-model').value       = config.ai?.model ?? config.ollama?.model ?? 'gemma4:turbo';
+    document.getElementById('cfg-ollama-temp').value        = config.ai?.temperature ?? config.ollama?.temperature ?? 0.7;
+    document.getElementById('cfg-db-path').value            = config.database?.path ?? 'ash_server.db';
+    document.getElementById('cfg-uploads-dir').value        = config.uploads?.directory ?? 'uploads';
+    document.getElementById('cfg-uploads-maxsize').value    = config.uploads?.max_size_mb ?? 10;
+    document.getElementById('cfg-auth-secret').value        = '';
+    document.getElementById('cfg-auth-expiry').value        = config.auth?.token_expiry_hours ?? 24;
+    document.getElementById('cfg-personality-path').value   = config.personality?.path ?? config.ai?.personality_path ?? 'personality';
+  } catch (err) { console.error('loadConfigToMenu:', err); }
+}
+
+function validateConfigForm() {
+  const errors = [];
+  const port   = parseInt(document.getElementById('cfg-server-port').value);
+  if (isNaN(port) || port < 1 || port > 65535) errors.push('Port must be 1-65535');
+  const temp   = parseFloat(document.getElementById('cfg-ollama-temp').value);
+  if (isNaN(temp) || temp < 0 || temp > 2) errors.push('Temperature must be 0-2');
+  const maxSz  = parseInt(document.getElementById('cfg-uploads-maxsize').value);
+  if (isNaN(maxSz) || maxSz < 1 || maxSz > 1000) errors.push('Max upload 1-1000 MB');
+  const expiry = parseInt(document.getElementById('cfg-auth-expiry').value);
+  if (isNaN(expiry) || expiry < 1 || expiry > 720) errors.push('Token expiry 1-720 hours');
+  if (!document.getElementById('cfg-server-host').value.trim())      errors.push('Host is required');
+  if (!document.getElementById('cfg-ollama-model').value.trim())     errors.push('Fallback model is required');
+  if (!document.getElementById('cfg-db-path').value.trim())          errors.push('Database path is required');
+  if (!document.getElementById('cfg-uploads-dir').value.trim())      errors.push('Uploads directory is required');
+  if (!document.getElementById('cfg-personality-path').value.trim()) errors.push('Personality path is required');
+  return errors;
+}
+
+async function saveConfigFromMenu(event) {
+  const btn = event.currentTarget;
+  const orig = btn.textContent;
+  const errors = validateConfigForm();
+  if (errors.length) { toast('Fix: ' + errors.join(', '), 'error', 5000); return; }
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    const secret = document.getElementById('cfg-auth-secret').value;
+    const config = {
+      server:      { host: document.getElementById('cfg-server-host').value, port: parseInt(document.getElementById('cfg-server-port').value), require_auth: document.getElementById('cfg-require-auth').value === 'true', allow_registration: document.getElementById('cfg-allow-registration').value === 'true' },
+      ai:          { model: document.getElementById('cfg-ollama-model').value, temperature: parseFloat(document.getElementById('cfg-ollama-temp').value) },
+      database:    { path: document.getElementById('cfg-db-path').value },
+      uploads:     { directory: document.getElementById('cfg-uploads-dir').value, max_size_mb: parseInt(document.getElementById('cfg-uploads-maxsize').value) },
+      auth:        { jwt_secret: secret || undefined, token_expiry_hours: parseInt(document.getElementById('cfg-auth-expiry').value) },
+      personality: { path: document.getElementById('cfg-personality-path').value }
+    };
+    if (!config.auth.jwt_secret) delete config.auth.jwt_secret;
+    const resp = await fetch('/api/admin/config', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(config) });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.detail || 'Save failed');
+    toast(result.message || 'Configuration saved — restart server to apply');
+    btn.textContent = 'Saved!';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+    loadStats();
+  } catch (err) { toast('Error: ' + err.message, 'error'); btn.textContent = orig; btn.disabled = false; }
+}
+
+/* Models */
+async function loadOllamaModels() {
+  const container = document.getElementById('ollama-models-list');
+  container.innerHTML = '<div class="empty txt-muted">Loading models...</div>';
+  try {
+    const resp = await fetch('/api/admin/ollama/models', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await resp.json();
+    if (!data.models?.length) { container.innerHTML = '<div class="empty txt-muted">No models found. Are your backends running?</div>'; return; }
+    const current = data.current_model || '';
+    container.innerHTML = data.models.map(m => {
+      const name    = m.id || m.name || '';
+      const display = m.name || name;
+      const backend = m.backend_name ? ` <span class="txt-muted">\u00b7 ${m.backend_name}</span>` : '';
+      const isCurr  = display === current || name.endsWith(':' + current) || name === current;
+      return `<div class="model-row ${isCurr ? 'current' : ''}" onclick="selectModel('${display}')">
+        <div class="model-row-name">${display}</div>
+        <div class="model-row-meta mono">${m.backend_name || ''}</div>
+        ${isCurr ? '<span class="badge badge-accent">Current</span>' : '<button class="btn btn-sm" onclick="event.stopPropagation();selectModel(\''+display+'\')">Select</button>'}
+      </div>`;
+    }).join('');
+  } catch (err) { container.innerHTML = `<div class="empty txt-error">Failed: ${err.message}</div>`; }
+}
+
+function selectModel(modelName) {
+  const menuVisible = document.getElementById('config-menu').style.display !== 'none';
+  if (menuVisible) {
+    document.getElementById('cfg-ollama-model').value = modelName;
+    toast(`Fallback model set to ${modelName} — save to apply`);
+  } else {
+    try {
+      const editor = document.getElementById('config-editor');
+      const config = JSON.parse(editor.value);
+      config.ai = config.ai || {}; config.ai.model = modelName;
+      editor.value = JSON.stringify(config, null, 2);
+      toast(`Model set to ${modelName} — save to apply`);
+    } catch { toast('Could not update model in editor', 'error'); }
+  }
+}
+
+/* Backup */
+async function createBackup() {
+  const statusDiv = document.getElementById('backup-status');
+  try {
+    const resp   = await fetch('/api/admin/backup', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const result = await resp.json();
+    toast(`Backup created: ${result.filename} (${(result.size / 1024).toFixed(1)} KB)`);
+    statusDiv.innerHTML = `<span class="txt-success">\u2713 ${result.message} \u2014 <strong>${result.filename}</strong></span>`;
+  } catch (err) { toast('Backup failed: ' + err.message, 'error'); }
+}
+
+/* Backends */
+function toggleAddForm() {
+  const f = document.getElementById('add-backend-form');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+function updateBackendPlaceholder() {
+  const map = { ollama: 'http://localhost:11434', openai_compat: 'http://localhost:1234' };
+  document.getElementById('nb-url').placeholder = map[document.getElementById('nb-type').value] || 'http://localhost:8080';
+}
+
+async function loadBackends() {
+  const list = document.getElementById('backends-list');
+  try {
+    const res  = await fetch('/api/admin/backends', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const backends = data.backends || data;
+    if (!backends.length) {
+      list.innerHTML = '<div class="empty"><div class="empty-icon">🤖</div>No backends configured. Add one above.</div>';
+      return;
+    }
+    list.innerHTML = backends.map(b => `
+      <div class="backend-card">
+        <div class="backend-info">
+          <div class="backend-name">${b.name}
+            <span class="badge ${b.enabled ? 'badge-success' : 'badge-muted'}" style="margin-left:8px;">${b.enabled ? 'Enabled' : 'Disabled'}</span>
+            <span class="badge badge-muted" style="margin-left:4px;">${b.type}</span>
+            ${b.api_key_set ? '<span class="badge badge-warn" style="margin-left:4px;">key set</span>' : ''}
+          </div>
+          <div class="backend-meta">${b.base_url}</div>
+        </div>
+        <div class="backend-actions">
+          <button class="btn btn-sm btn-primary" onclick="testBackend(${b.id}, this)">Test</button>
+          <button class="btn btn-sm" onclick="toggleBackend(${b.id}, ${b.enabled})">${b.enabled ? 'Disable' : 'Enable'}</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteBackend(${b.id})">Delete</button>
+        </div>
+      </div>`).join('');
+  } catch (err) { list.innerHTML = `<div class="empty txt-error">Failed to load: ${err.message}</div>`; }
+}
+
+async function addBackend() {
+  const statusDiv = document.getElementById('add-backend-status');
+  const name    = document.getElementById('nb-name').value.trim();
+  const type    = document.getElementById('nb-type').value;
+  const base_url= document.getElementById('nb-url').value.trim();
+  const api_key = document.getElementById('nb-key').value.trim();
+  if (!name || !base_url) { statusDiv.innerHTML = '<span class="txt-error">Name and URL are required.</span>'; return; }
+  statusDiv.innerHTML = '';
+  try {
+    const fd = new URLSearchParams({ name, type, base_url });
+    if (api_key) fd.append('api_key', api_key);
+    const res = await fetch('/api/admin/backends', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    ['nb-name','nb-url','nb-key'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('add-backend-form').style.display = 'none';
+    toast('Backend added'); loadBackends();
+  } catch (err) { statusDiv.innerHTML = `<span class="txt-error">\u2715 ${err.message}</span>`; }
+}
+
+async function toggleBackend(id, currentlyEnabled) {
+  try {
+    await fetch(`/api/admin/backends/${id}/toggle`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: new URLSearchParams({ enabled: !currentlyEnabled }) });
+    loadBackends();
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+async function testBackend(id, btn) {
+  const orig = btn.textContent;
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    const res  = await fetch(`/api/admin/backends/${id}/test`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.success || data.ok) { btn.textContent = `\u2713 ${data.model_count}`; btn.classList.add('btn-primary'); }
+    else { btn.textContent = '\u2715 Failed'; btn.title = data.error || ''; }
+  } catch { btn.textContent = '\u2715 Error'; }
+  btn.disabled = false;
+  setTimeout(() => { btn.textContent = orig; btn.title = ''; btn.classList.remove('btn-primary'); }, 4000);
+}
+
+async function deleteBackend(id) {
+  if (!confirm('Delete this backend? This cannot be undone.')) return;
+  try {
+    await fetch(`/api/admin/backends/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    toast('Backend deleted'); loadBackends();
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+</script>
+</body>
+</html>

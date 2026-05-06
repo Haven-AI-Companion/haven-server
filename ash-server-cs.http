@@ -1,0 +1,6 @@
+@ash_server_cs_HostAddress = http://localhost:5155
+
+GET {{ash_server_cs_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,12 @@
+bin/
+obj/
+*.user
+.vs/
+ash_server.db
+ash_server.db-shm
+ash_server.db-wal
+ash_server_backup_*.db
+config.json
+appsettings.Development.json
+run_err.txt
+run_out.txt
