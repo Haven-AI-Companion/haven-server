@@ -274,7 +274,27 @@ select.form-input{cursor:pointer}
 
       <!-- Users -->
       <div class="tab-content" id="users">
+        <div class="add-form" id="add-user-form" style="display:none;">
+          <div class="add-form-title">New User</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Username</label><input type="text" id="nu-username" class="form-input" placeholder="username" autocomplete="off"></div>
+            <div class="form-group"><label class="form-label">Email</label><input type="email" id="nu-email" class="form-input" placeholder="user@example.com" autocomplete="off"></div>
+            <div class="form-group"><label class="form-label">Password</label><input type="password" id="nu-password" class="form-input" placeholder="••••••••" autocomplete="new-password"></div>
+            <div class="form-group"><label class="form-label">Role</label>
+              <select id="nu-role" class="form-input">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <div id="add-user-status" style="margin-bottom:8px;font-size:12px;"></div>
+          <div class="row-gap">
+            <button class="btn btn-primary" onclick="addUser()">Create User</button>
+            <button class="btn" onclick="document.getElementById('add-user-form').style.display='none'">Cancel</button>
+          </div>
+        </div>
         <div class="card">
+          <div class="card-title">Users <button class="btn btn-sm btn-primary" onclick="document.getElementById('add-user-form').style.display=(document.getElementById('add-user-form').style.display==='none'?'':'none')">+ Add User</button></div>
           <table class="data-table" id="users-table">
             <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Joined</th><th>Last Login</th><th>Actions</th></tr></thead>
             <tbody></tbody>
@@ -520,6 +540,35 @@ async function deleteUser(userId) {
     await fetch(`/api/admin/users/${userId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
     loadUsers(); loadStats();
   } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+async function addUser() {
+  const username = document.getElementById('nu-username').value.trim();
+  const email    = document.getElementById('nu-email').value.trim();
+  const password = document.getElementById('nu-password').value;
+  const isAdmin  = document.getElementById('nu-role').value === 'admin';
+  const status   = document.getElementById('add-user-status');
+
+  if (!username || !email || !password) { status.style.color = 'var(--error)'; status.textContent = 'All fields are required.'; return; }
+  status.style.color = ''; status.textContent = 'Creating…';
+
+  try {
+    const fd = new URLSearchParams();
+    fd.append('username', username);
+    fd.append('email', email);
+    fd.append('password', password);
+    fd.append('is_admin', isAdmin);
+    const resp = await fetch('/api/admin/users', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || data.detail || 'Failed');
+    status.style.color = 'var(--success)'; status.textContent = `User "${username}" created.`;
+    document.getElementById('nu-username').value = '';
+    document.getElementById('nu-email').value = '';
+    document.getElementById('nu-password').value = '';
+    document.getElementById('nu-role').value = 'user';
+    loadUsers(); loadStats();
+    setTimeout(() => { status.textContent = ''; document.getElementById('add-user-form').style.display = 'none'; }, 1500);
+  } catch (err) { status.style.color = 'var(--error)'; status.textContent = err.message; }
 }
 
 /* Analytics */

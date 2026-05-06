@@ -255,6 +255,23 @@ public class AdminController : ControllerBase
         return Ok(new { ok = true });
     }
 
+    [HttpPost("users")]
+    public async Task<IActionResult> CreateUser([FromForm] string username, [FromForm] string email,
+        [FromForm] string password, [FromForm] bool is_admin = false)
+    {
+        if (!IsAdmin) return Forbid();
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+            return BadRequest(new { error = "username, email, and password are required" });
+
+        var existing = await _db.GetUserByUsername(username);
+        if (existing != null)
+            return Conflict(new { error = $"Username '{username}' is already taken" });
+
+        var hash = BCrypt.Net.BCrypt.HashPassword(password);
+        var user = await _db.CreateUser(username, hash, email, is_admin);
+        return Ok(new { ok = true, id = user.Id, username });
+    }
+
     [HttpPost("users/{userId}/toggle-admin")]
     public async Task<IActionResult> ToggleAdmin(int userId, [FromBody] Dictionary<string, bool> body)
     {
