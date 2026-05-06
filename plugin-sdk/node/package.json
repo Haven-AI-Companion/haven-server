@@ -1,0 +1,15 @@
+{
+  "name": "ash-plugin-sdk",
+  "version": "1.0.0",
+  "description": "SDK for building Ash Server plugins (Node.js)",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "example:echo": "node examples/echo_plugin/index.js"
+  },
+  "keywords": ["ash-server", "plugin", "ai"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}

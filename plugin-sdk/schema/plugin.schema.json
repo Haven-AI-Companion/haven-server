@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/ssfdre38/ash-server/plugin-sdk/schema/plugin.schema.json",
+  "title": "Ash Server Plugin Manifest",
+  "description": "Manifest file for an Ash Server plugin (plugin.json)",
+  "type": "object",
+  "required": ["id", "name", "version", "tools"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+$",
+      "description": "Unique plugin identifier (lowercase, hyphens/underscores only)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable plugin name"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (e.g. 1.0.0)"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this plugin does"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this plugin is active"
+    },
+    "builtin": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, this plugin represents built-in server tools and cannot be disabled"
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "description": "List of tools this plugin provides",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "handler"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$",
+            "description": "Tool name (snake_case). This is what the AI calls."
+          },
+          "description": {
+            "type": "string",
+            "description": "What this tool does. The AI reads this to decide when to use it."
+          },
+          "parameters": {
+            "type": "object",
+            "description": "JSON Schema for the tool's input arguments",
+            "properties": {
+              "type": { "type": "string", "enum": ["object"] },
+              "properties": { "type": "object" },
+              "required": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "handler": {
+            "type": "object",
+            "required": ["type"],
+            "description": "How to execute this tool",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["http", "process", "builtin"],
+                "description": "Handler type: http (POST to URL), process (spawn command), builtin (core server tool)"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Required for type=http. URL to POST the tool call to."
+              },
+              "command": {
+                "type": "string",
+                "description": "Required for type=process. Executable to spawn."
+              },
+              "args": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Optional for type=process. Arguments to the command."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
