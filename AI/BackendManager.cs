@@ -56,7 +56,9 @@ public class OllamaBackend : IAiBackend
         var payload = JsonSerializer.Serialize(new
         {
             model,
-            messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+            messages = messages.Select(m => m.Images?.Count > 0
+                ? (object)new { role = m.Role, content = m.Content, images = m.Images }
+                : new { role = m.Role, content = m.Content }),
             stream = true
         });
 

@@ -68,6 +68,16 @@ public class ChatHandler
                     var modelId = (root.TryGetProperty("model", out var m) ? m.GetString() : null) ?? _config["DefaultModel"] ?? "";
                     var agentMode = root.TryGetProperty("agent_mode", out var am) && am.GetBoolean();
 
+                    // Images: base64 strings for vision models
+                    List<string>? images = null;
+                    if (root.TryGetProperty("images", out var imgsEl) && imgsEl.ValueKind == JsonValueKind.Array)
+                    {
+                        images = imgsEl.EnumerateArray()
+                            .Select(i => i.GetString()).Where(s => !string.IsNullOrEmpty(s))
+                            .Select(s => s!).ToList();
+                        if (images.Count == 0) images = null;
+                    }
+
                     if (root.TryGetProperty("conversation_id", out var cid) && !string.IsNullOrEmpty(cid.GetString()))
                     {
                         var reqId = cid.GetString()!;
@@ -97,7 +107,7 @@ public class ChatHandler
                     var history = ConvCache.GetOrAdd(conversationId, _ => []);
                     lock (history)
                     {
-                        history.Add(new ChatMessage("user", userMessage));
+                        history.Add(new ChatMessage("user", userMessage, images));
                         if (history.Count > MaxHistoryMessages)
                             history.RemoveRange(0, history.Count - MaxHistoryMessages);
                     }
@@ -106,7 +116,12 @@ public class ChatHandler
 
                     var systemPrompt = _personality.GetSystemPrompt(username);
                     var messages = new List<ChatMessage> { new("system", systemPrompt) };
-                    lock (history) { messages.AddRange(history); }
+                    // Don't pass images on history replay — only the current message
+                    lock (history)
+                    {
+                        foreach (var h in history)
+                            messages.Add(h);
+                    }
 
                     var responseText = "";
                     try

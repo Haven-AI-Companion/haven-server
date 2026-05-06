@@ -46,7 +46,7 @@ public record ChangeEmailRequest(string Email);
 
 // ── Chat DTOs ──────────────────────────────────────────────────────────────
 
-public record ChatMessage(string Role, string Content);
+public record ChatMessage(string Role, string Content, List<string>? Images = null);
 
 // ── Admin DTOs ─────────────────────────────────────────────────────────────
 

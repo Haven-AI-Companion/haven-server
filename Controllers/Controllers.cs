@@ -147,11 +147,13 @@ public class ModelsController : ControllerBase
 {
     private readonly AshServer.AI.BackendManager _backends;
     private readonly IConfiguration _config;
+    private readonly IWebHostEnvironment _env;
 
-    public ModelsController(AshServer.AI.BackendManager backends, IConfiguration config)
+    public ModelsController(AshServer.AI.BackendManager backends, IConfiguration config, IWebHostEnvironment env)
     {
         _backends = backends;
         _config = config;
+        _env = env;
     }
 
     [HttpGet("models")]
@@ -166,6 +168,45 @@ public class ModelsController : ControllerBase
 
     [HttpGet("plugins")]
     public IActionResult ListPlugins() => Ok(new { plugins = Array.Empty<object>() });
+
+    [HttpPost("upload")]
+    [Authorize]
+    [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB
+    public async Task<IActionResult> Upload(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "No file provided" });
+
+        var uploadsDir = Path.Combine(_env.WebRootPath, "uploads");
+        Directory.CreateDirectory(uploadsDir);
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var safeName = $"{Guid.NewGuid()}{ext}";
+        var fullPath = Path.Combine(uploadsDir, safeName);
+
+        using (var stream = System.IO.File.Create(fullPath))
+            await file.CopyToAsync(stream);
+
+        var isImage = ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp";
+        var url = $"/uploads/{safeName}";
+
+        // For images, also return base64 for vision models
+        string? base64 = null;
+        if (isImage)
+        {
+            var bytes = await System.IO.File.ReadAllBytesAsync(fullPath);
+            base64 = Convert.ToBase64String(bytes);
+        }
+
+        return Ok(new
+        {
+            url,
+            filename = file.FileName,
+            size = file.Length,
+            is_image = isImage,
+            base64
+        });
+    }
 }
 
 [ApiController]

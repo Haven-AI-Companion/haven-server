@@ -197,6 +197,21 @@
   .agent-step-title { font-weight: 600; color: var(--text); margin-bottom: 2px; }
   .agent-step-detail { color: var(--text-muted); word-break: break-word; white-space: pre-wrap; max-height: 80px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 
+  /* File attach */
+  .attach-btn { width: 32px; height: 32px; background: none; border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+  .attach-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+  .attach-btn.has-files { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .preview-strip { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 2px; }
+  .preview-item { position: relative; }
+  .preview-thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); display: block; }
+  .preview-file { width: 60px; height: 60px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; font-size: 10px; color: var(--text-muted); text-align: center; padding: 4px; overflow: hidden; }
+  .preview-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; text-align: center; }
+  .preview-remove { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--error); color: #fff; border: none; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .input-box.drag-over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .msg-image { max-width: 240px; max-height: 200px; border-radius: 8px; border: 1px solid var(--border); object-fit: cover; cursor: pointer; }
+  .msg-image:hover { opacity: 0.9; }
+
 
   /* Login overlay */
   #login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; align-items: center; justify-content: center; }
@@ -365,7 +380,13 @@
 
     <div class="input-area">
       <div class="input-inner">
-        <div class="input-box">
+        <div id="preview-strip" class="preview-strip" style="display:none"></div>
+        <div class="input-box" id="input-box"
+          ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+          <input type="file" id="file-input" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.py,.js,.ts,.cs,.html,.css" style="display:none" onchange="onFileSelect(event)">
+          <button class="attach-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach file">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12.5 6.5l-6 6a3.5 3.5 0 01-4.95-4.95l6-6a2 2 0 012.83 2.83l-6 6a.5.5 0 01-.71-.71l5.3-5.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
           <textarea class="input-field" id="input-field" placeholder="Message Ash…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
           <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14L14 8 2 2v4.5l8 1.5-8 1.5V14z" fill="currentColor"/></svg>
@@ -455,6 +476,9 @@ let isStreaming = false;
 let streamBuffer = '';
 let streamBubble = null;
 let agentStepsEl = null;
+
+// Pending attachments: [{base64, url, isImage, name}]
+let pendingAttachments = [];
 
 // ── Auth helpers ───────────────────────────────────────────────────────────
 function toggleForm(mode) {
@@ -774,17 +798,26 @@ function connectWebSocket() {
 function sendMessage() {
   const field = document.getElementById('input-field');
   const text = field.value.trim();
-  if (!text || isStreaming || !ws || ws.readyState !== WebSocket.OPEN) return;
+  if ((!text && pendingAttachments.length === 0) || isStreaming || !ws || ws.readyState !== WebSocket.OPEN) return;
   hideWelcome();
-  appendMessage('user', text, false);
+
+  // Build user display (images + text)
+  const imageBase64List = pendingAttachments.filter(a => a.isImage).map(a => a.base64);
+  appendMessage('user', text, false, imageBase64List);
+
   field.value = ''; autoResize(field);
+  const attachSnapshot = [...pendingAttachments];
+  clearAttachments();
+
   isStreaming = true;
   streamBuffer = ''; streamBubble = null;
   agentStepsEl = null;
   updateSendBtn();
   scrollBottom();
   const agentMode = document.getElementById('agent-mode-toggle')?.checked || false;
-  ws.send(JSON.stringify({ content: text, model: selectedModel, conversation_id: activeConvId, agent_mode: agentMode }));
+  const payload = { content: text, model: selectedModel, conversation_id: activeConvId, agent_mode: agentMode };
+  if (imageBase64List.length > 0) payload.images = imageBase64List;
+  ws.send(JSON.stringify(payload));
 }
 
 function quickPrompt(text) {
@@ -801,11 +834,12 @@ function handleKey(e) {
 function updateSendBtn() {
   const field = document.getElementById('input-field');
   const btn = document.getElementById('send-btn');
-  btn.disabled = isStreaming || !field.value.trim() || !ws || ws.readyState !== WebSocket.OPEN;
+  const hasContent = field.value.trim() || pendingAttachments.length > 0;
+  btn.disabled = isStreaming || !hasContent || !ws || ws.readyState !== WebSocket.OPEN;
 }
 
 // ── Messages ───────────────────────────────────────────────────────────────
-function appendMessage(role, content, streaming) {
+function appendMessage(role, content, streaming, images) {
   const inner = document.getElementById('messages-inner');
   const row = document.createElement('div');
   row.className = `msg-row ${role}`;
@@ -815,11 +849,18 @@ function appendMessage(role, content, streaming) {
   const name = role === 'assistant' ? 'Ash' : (currentUser?.username || 'You');
   const time = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
 
+  let imagesHtml = '';
+  if (images && images.length > 0) {
+    imagesHtml = `<div class="msg-images">${images.map(b64 =>
+      `<img class="msg-image" src="data:image/jpeg;base64,${b64}" onclick="viewImageFull(this)">`
+    ).join('')}</div>`;
+  }
+
   row.innerHTML = `
     <div class="msg-avatar ${avatarClass}">${avatarInit}</div>
     <div class="msg-body">
       <div class="msg-meta"><span class="msg-name">${escHtml(name)}</span><span>${time}</span></div>
-      <div class="msg-bubble"><div class="msg-content"></div></div>
+      <div class="msg-bubble">${imagesHtml}<div class="msg-content"></div></div>
     </div>`;
 
   inner.appendChild(row);
@@ -827,6 +868,17 @@ function appendMessage(role, content, streaming) {
   if (content) renderMarkdown(contentEl, content);
   scrollBottom();
   return contentEl;
+}
+
+function viewImageFull(img) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:#000000cc;z-index:999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+  const fullImg = document.createElement('img');
+  fullImg.src = img.src;
+  fullImg.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:10px;object-fit:contain;';
+  overlay.appendChild(fullImg);
+  overlay.onclick = () => overlay.remove();
+  document.body.appendChild(overlay);
 }
 
 let typingRow = null;
@@ -1033,6 +1085,84 @@ async function savePassword() {
     document.getElementById('s-confirm-pass').value = '';
   } catch(e) { msg.textContent = e.message; msg.className = 'settings-msg err'; }
   btn.disabled = false;
+}
+
+// ── File upload & attachments ──────────────────────────────────────────────
+async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: fd
+    });
+    if (!res.ok) { toast('Upload failed: ' + file.name, 'error'); return null; }
+    return await res.json();
+  } catch { toast('Upload error: ' + file.name, 'error'); return null; }
+}
+
+async function onFileSelect(e) {
+  const files = Array.from(e.target.files || []);
+  e.target.value = ''; // reset so same file can be picked again
+  for (const file of files) await addAttachment(file);
+}
+
+async function addAttachment(file) {
+  toast('Uploading ' + file.name + '…', '');
+  const result = await uploadFile(file);
+  if (!result) return;
+  pendingAttachments.push({ base64: result.base64, url: result.url, isImage: result.is_image, name: file.name });
+  renderPreview();
+  updateSendBtn();
+}
+
+function renderPreview() {
+  const strip = document.getElementById('preview-strip');
+  const attachBtn = document.getElementById('attach-btn');
+  if (!pendingAttachments.length) {
+    strip.style.display = 'none';
+    attachBtn.classList.remove('has-files');
+    return;
+  }
+  strip.style.display = 'flex';
+  attachBtn.classList.add('has-files');
+  strip.innerHTML = pendingAttachments.map((a, i) =>
+    `<div class="preview-item">
+      ${a.isImage
+        ? `<img class="preview-thumb" src="data:image/jpeg;base64,${a.base64}" title="${escHtml(a.name)}">`
+        : `<div class="preview-file"><span>📄</span><span title="${escHtml(a.name)}">${escHtml(a.name)}</span></div>`
+      }
+      <button class="preview-remove" onclick="removeAttachment(${i})">×</button>
+    </div>`
+  ).join('');
+}
+
+function removeAttachment(i) {
+  pendingAttachments.splice(i, 1);
+  renderPreview();
+  updateSendBtn();
+}
+
+function clearAttachments() {
+  pendingAttachments = [];
+  renderPreview();
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('input-box').classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  document.getElementById('input-box').classList.remove('drag-over');
+}
+
+async function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('input-box').classList.remove('drag-over');
+  const files = Array.from(e.dataTransfer.files || []);
+  for (const file of files) await addAttachment(file);
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
