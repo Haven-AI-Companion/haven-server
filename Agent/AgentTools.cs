@@ -64,6 +64,11 @@ public static class AgentTools
         ]
         """);
 
+    private static readonly HashSet<string> BuiltinToolNames =
+        ["web_search", "fetch_url", "calculate", "get_time"];
+
+    public static bool IsBuiltinTool(string name) => BuiltinToolNames.Contains(name);
+
     public static async Task<string> Execute(string toolName, JsonElement args)
     {
         return toolName switch

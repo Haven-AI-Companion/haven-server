@@ -397,8 +397,15 @@ select.form-input{cursor:pointer}
       <!-- Plugins -->
       <div class="tab-content" id="plugins">
         <div class="card">
-          <div class="card-title">Installed Plugins</div>
+          <div class="card-title">
+            Installed Plugins
+            <button class="btn btn-sm" onclick="reloadPlugins()">↻ Reload</button>
+          </div>
           <div id="plugins-list"><div class="empty"><div class="empty-icon">🔌</div>Loading...</div></div>
+          <div style="margin-top:12px;font-size:12px;color:var(--text-muted)">
+            Plugins live in <code>plugins/{id}/plugin.json</code> inside the server directory.
+            Click Reload to pick up new plugins or manifest changes.
+          </div>
         </div>
       </div>
 
@@ -677,19 +684,43 @@ async function loadAnalytics() {
 /* Plugins */
 async function loadPlugins() {
   try {
-    const resp = await fetch('/api/plugins', { headers: { Authorization: `Bearer ${token}` } });
+    const resp = await fetch('/api/admin/plugins', { headers: { Authorization: `Bearer ${token}` } });
     const data = await resp.json();
     const list = document.getElementById('plugins-list');
     if (data.plugins?.length) {
       list.innerHTML = data.plugins.map(p => `
-        <div class="plugin-row">
-          <div><div class="plugin-name">${p.name}</div><div class="plugin-meta">Hooks: ${p.hooks} \u00b7 Commands: ${p.commands} \u00b7 Routes: ${p.routes}</div></div>
-          <span class="badge ${p.enabled ? 'badge-success' : 'badge-muted'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+        <div class="plugin-row" style="flex-wrap:wrap;gap:8px">
+          <div style="flex:1;min-width:200px">
+            <div class="plugin-name">${esc(p.name)} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">v${esc(p.version ?? '?')}</span>${p.builtin ? ' <span style="font-size:10px;color:var(--accent);font-weight:600">BUILT-IN</span>' : ''}</div>
+            <div class="plugin-meta">${esc(p.description ?? '')}</div>
+            <div class="plugin-meta" style="margin-top:3px">${p.tool_count} tool(s): ${(p.tools ?? []).map(t => `<code style="font-size:10px">${esc(t.name)}</code>`).join(', ')}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="badge ${p.enabled ? 'badge-success' : 'badge-muted'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+            ${p.builtin ? '' : `<button class="btn btn-sm" onclick="togglePlugin('${esc(p.id)}', ${p.enabled})">${p.enabled ? 'Disable' : 'Enable'}</button>`}
+          </div>
         </div>`).join('');
     } else {
-      list.innerHTML = '<div class="empty"><div class="empty-icon">🔌</div>No plugins installed</div>';
+      list.innerHTML = '<div class="empty"><div class="empty-icon">🔌</div>No plugins installed. Add a <code>plugins/{id}/plugin.json</code> file and click Reload.</div>';
     }
   } catch (err) { console.error('loadPlugins:', err); }
+}
+
+async function togglePlugin(id, currentlyEnabled) {
+  try {
+    const resp = await fetch(`/api/admin/plugins/${encodeURIComponent(id)}/toggle`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }
+    });
+    if (resp.ok) loadPlugins();
+  } catch (err) { console.error('togglePlugin:', err); }
+}
+
+async function reloadPlugins() {
+  try {
+    await fetch('/api/admin/plugins/reload', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    await loadPlugins();
+    await loadStats();
+  } catch (err) { console.error('reloadPlugins:', err); }
 }
 
 /* Config */

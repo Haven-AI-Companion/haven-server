@@ -8,6 +8,7 @@ using AshServer.Auth;
 using AshServer.Data;
 using AshServer.Models;
 using AshServer.Personality;
+using AshServer.Plugins;
 
 namespace AshServer.Chat;
 
@@ -24,13 +25,16 @@ public class ChatHandler
     private readonly BackendManager _backends;
     private readonly PersonalityLoader _personality;
     private readonly IConfiguration _config;
+    private readonly PluginManager _plugins;
 
-    public ChatHandler(Database db, BackendManager backends, PersonalityLoader personality, IConfiguration config)
+    public ChatHandler(Database db, BackendManager backends, PersonalityLoader personality,
+        IConfiguration config, PluginManager plugins)
     {
         _db = db;
         _backends = backends;
         _personality = personality;
         _config = config;
+        _plugins = plugins;
     }
 
     public async Task Handle(HttpContext context, WebSocket ws, int userId, string username)
@@ -128,7 +132,7 @@ public class ChatHandler
                         if (agentMode)
                         {
                             var (backend, modelName) = await _backends.Resolve(modelId);
-                            var runner = new AgentRunner(backend, modelName);
+                            var runner = new AgentRunner(backend, modelName, _plugins);
                             await foreach (var evt in runner.Run(messages).WithCancellation(cts.Token))
                             {
                                 switch (evt.Type)

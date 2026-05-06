@@ -1,0 +1,52 @@
+{
+  "id": "core-tools",
+  "name": "Core Tools",
+  "version": "1.0.0",
+  "description": "Built-in agent tools: web search, URL fetching, calculator, and current time. Always active.",
+  "enabled": true,
+  "builtin": true,
+  "tools": [
+    {
+      "name": "web_search",
+      "description": "Search the web for current information. Returns titles, URLs, and snippets.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "The search query" }
+        },
+        "required": ["query"]
+      },
+      "handler": { "type": "builtin" }
+    },
+    {
+      "name": "fetch_url",
+      "description": "Fetch and read the text content of a web page.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "description": "The URL to fetch" }
+        },
+        "required": ["url"]
+      },
+      "handler": { "type": "builtin" }
+    },
+    {
+      "name": "calculate",
+      "description": "Evaluate a mathematical expression and return the result.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": { "type": "string", "description": "Math expression, e.g. '2 + 2 * 10'" }
+        },
+        "required": ["expression"]
+      },
+      "handler": { "type": "builtin" }
+    },
+    {
+      "name": "get_time",
+      "description": "Get the current date and time.",
+      "parameters": { "type": "object", "properties": {} },
+      "handler": { "type": "builtin" }
+    }
+  ]
+}

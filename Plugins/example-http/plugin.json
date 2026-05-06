@@ -1,0 +1,24 @@
+{
+  "id": "example-http",
+  "name": "Example HTTP Plugin",
+  "version": "1.0.0",
+  "description": "Example plugin showing the HTTP handler format. Disabled by default — enable only when your endpoint is running.",
+  "enabled": false,
+  "tools": [
+    {
+      "name": "example_echo",
+      "description": "Echoes back the message you send (example tool).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string", "description": "The message to echo" }
+        },
+        "required": ["message"]
+      },
+      "handler": {
+        "type": "http",
+        "url": "http://localhost:19000/echo"
+      }
+    }
+  ]
+}

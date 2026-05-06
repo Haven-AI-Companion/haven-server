@@ -218,14 +218,16 @@ public class AdminController : ControllerBase
     private readonly AshServer.AI.BackendManager _backends;
     private readonly IConfiguration _config;
     private readonly AshServer.Personality.PersonalityLoader _personality;
+    private readonly AshServer.Plugins.PluginManager _plugins;
 
     public AdminController(Database db, AshServer.AI.BackendManager backends, IConfiguration config,
-        AshServer.Personality.PersonalityLoader personality)
+        AshServer.Personality.PersonalityLoader personality, AshServer.Plugins.PluginManager plugins)
     {
         _db = db;
         _backends = backends;
         _config = config;
         _personality = personality;
+        _plugins = plugins;
     }
 
     private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
@@ -259,8 +261,8 @@ public class AdminController : ControllerBase
                 model            = activeModel,
                 backend          = backendName,
                 personality_path = personalityDir,
-                plugins_loaded   = 0,
-                plugins_enabled  = 0
+                plugins_loaded   = _plugins.LoadedCount,
+                plugins_enabled  = _plugins.EnabledCount
             }
         });
     }
@@ -449,6 +451,38 @@ public class AdminController : ControllerBase
         {
             return Ok(new { models = Array.Empty<string>(), error = ex.Message });
         }
+    }
+
+    [HttpGet("plugins")]
+    public IActionResult GetPlugins()
+    {
+        if (!IsAdmin) return Forbid();
+        var list = _plugins.Plugins.Select(p => new
+        {
+            p.Id, p.Name, p.Version, p.Description, p.Enabled, p.Builtin,
+            tool_count = p.Tools.Count,
+            tools = p.Tools.Select(t => new { t.Name, t.Description, handler_type = t.Handler.Type })
+        });
+        return Ok(new { plugins = list });
+    }
+
+    [HttpPost("plugins/{id}/toggle")]
+    public IActionResult TogglePlugin(string id)
+    {
+        if (!IsAdmin) return Forbid();
+        var plugin = _plugins.Plugins.FirstOrDefault(p => p.Id == id);
+        if (plugin == null) return NotFound(new { error = "Plugin not found" });
+        if (plugin.Builtin) return BadRequest(new { error = "Built-in plugins cannot be toggled" });
+        _plugins.SetEnabled(id, !plugin.Enabled);
+        return Ok(new { ok = true, id, enabled = plugin.Enabled });
+    }
+
+    [HttpPost("plugins/reload")]
+    public IActionResult ReloadPlugins()
+    {
+        if (!IsAdmin) return Forbid();
+        _plugins.Reload();
+        return Ok(new { ok = true, loaded = _plugins.LoadedCount, enabled = _plugins.EnabledCount });
     }
 
     [HttpPost("backup")]

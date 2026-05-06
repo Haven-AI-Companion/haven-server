@@ -9,6 +9,7 @@ using AshServer.Auth;
 using AshServer.Chat;
 using AshServer.Data;
 using AshServer.Personality;
+using AshServer.Plugins;
 
 namespace AshServer;
 
@@ -41,6 +42,7 @@ public class Program
         var backendManager = new BackendManager(db);
         builder.Services.AddSingleton(backendManager);
 
+        builder.Services.AddSingleton<AshServer.Plugins.PluginManager>();
         builder.Services.AddSingleton<AuthService>();
         builder.Services.AddSingleton<ChatHandler>();
 

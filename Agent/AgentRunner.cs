@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AshServer.AI;
 using AshServer.Models;
+using AshServer.Plugins;
 
 namespace AshServer.Agent;
 
@@ -20,11 +21,49 @@ public class AgentRunner
 
     private readonly IAiBackend _backend;
     private readonly string _model;
+    private readonly PluginManager? _plugins;
 
-    public AgentRunner(IAiBackend backend, string model)
+    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null)
     {
         _backend = backend;
-        _model = model;
+        _model   = model;
+        _plugins = plugins;
+    }
+
+    /// Merge built-in tool definitions with enabled plugin tools.
+    private JsonElement BuildToolDefinitions()
+    {
+        var builtins = JsonSerializer.Deserialize<List<JsonElement>>(
+            AgentTools.ToolDefinitions.GetRawText())!;
+
+        if (_plugins != null)
+        {
+            var pluginTools = _plugins.GetToolDefinitions();
+            if (pluginTools.ValueKind == JsonValueKind.Array)
+            {
+                // Skip builtin-type tools from plugin manifests (already in AgentTools)
+                var external = pluginTools.EnumerateArray()
+                    .Where(t =>
+                    {
+                        // exclude if it matches a builtin tool name
+                        var name = t.TryGetProperty("function", out var f) &&
+                                   f.TryGetProperty("name", out var n) ? n.GetString() : null;
+                        return name != null && !AgentTools.IsBuiltinTool(name);
+                    });
+                builtins.AddRange(external);
+            }
+        }
+
+        return JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(builtins));
+    }
+
+    private async Task<string> DispatchTool(string name, JsonElement args)
+    {
+        // Plugin tools (non-builtin) take priority if PluginManager knows them
+        if (_plugins != null && _plugins.IsPluginTool(name))
+            return await _plugins.ExecuteTool(name, args);
+
+        return await AgentTools.Execute(name, args);
     }
 
     public async IAsyncEnumerable<AgentEvent> Run(
@@ -40,7 +79,7 @@ public class AgentRunner
             string? callError = null;
             try
             {
-                response = await _backend.ChatWithTools(_model, working, AgentTools.ToolDefinitions);
+                response = await _backend.ChatWithTools(_model, working, BuildToolDefinitions());
             }
             catch (Exception ex)
             {
@@ -91,7 +130,7 @@ public class AgentRunner
 
                 string result;
                 string? toolError = null;
-                try { result = await AgentTools.Execute(name, args); }
+                try { result = await DispatchTool(name, args); }
                 catch (Exception ex) { result = ""; toolError = ex.Message; }
 
                 if (toolError != null)
