@@ -189,6 +189,180 @@ public class OpenAiCompatBackend : IAiBackend
         => throw new NotSupportedException("Tool calling not yet implemented for OpenAI-compat backend");
 }
 
+// ── Anthropic Claude backend ──────────────────────────────────────────────────
+
+public class AnthropicBackend : IAiBackend
+{
+    private readonly string _baseUrl;
+    private readonly string _apiKey;
+    private const string AnthropicVersion = "2023-06-01";
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+
+    public AnthropicBackend(string baseUrl, string? apiKey)
+    {
+        _baseUrl = baseUrl.TrimEnd('/');
+        _apiKey = apiKey ?? throw new ArgumentException("Anthropic backend requires an API key");
+    }
+
+    public async Task<List<string>> ListModels()
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/v1/models");
+        req.Headers.Add("x-api-key", _apiKey);
+        req.Headers.Add("anthropic-version", AnthropicVersion);
+        var resp = await Http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+        var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
+        return doc.RootElement.GetProperty("data")
+            .EnumerateArray()
+            .Select(m => m.GetProperty("id").GetString()!)
+            .ToList();
+    }
+
+    public async IAsyncEnumerable<string> StreamChat(
+        string model, List<ChatMessage> messages,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var systemMsg  = messages.FirstOrDefault(m => m.Role == "system");
+        var chatMsgs   = messages
+            .Where(m => m.Role != "system")
+            .Select(m => new { role = m.Role, content = m.Content })
+            .ToList();
+
+        var payload = new Dictionary<string, object>
+        {
+            ["model"]      = model,
+            ["max_tokens"] = 8096,
+            ["stream"]     = true,
+            ["messages"]   = chatMsgs
+        };
+        if (systemMsg != null) payload["system"] = systemMsg.Content;
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/messages")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+        req.Headers.Add("x-api-key", _apiKey);
+        req.Headers.Add("anthropic-version", AnthropicVersion);
+
+        using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        resp.EnsureSuccessStatusCode();
+
+        using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(stream);
+
+        string? line;
+        while ((line = await reader.ReadLineAsync(ct)) != null && !ct.IsCancellationRequested)
+        {
+            if (!line.StartsWith("data: ")) continue;
+            var data = line[6..].Trim();
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(data); }
+            catch { continue; }
+            using (doc)
+            {
+                if (!doc.RootElement.TryGetProperty("type", out var typeEl)) continue;
+                var type = typeEl.GetString();
+                if (type == "message_stop") yield break;
+                if (type == "content_block_delta" &&
+                    doc.RootElement.TryGetProperty("delta", out var delta) &&
+                    delta.TryGetProperty("text", out var text))
+                {
+                    var t = text.GetString();
+                    if (!string.IsNullOrEmpty(t)) yield return t;
+                }
+            }
+        }
+    }
+
+    public Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
+        => throw new NotSupportedException("Tool calling not yet implemented for Anthropic backend");
+}
+
+// ── Google Gemini backend ─────────────────────────────────────────────────────
+
+public class GeminiBackend : IAiBackend
+{
+    private readonly string _baseUrl;
+    private readonly string _apiKey;
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+
+    public GeminiBackend(string baseUrl, string? apiKey)
+    {
+        _baseUrl = baseUrl.TrimEnd('/');
+        _apiKey = apiKey ?? throw new ArgumentException("Gemini backend requires an API key");
+    }
+
+    public async Task<List<string>> ListModels()
+    {
+        var resp = await Http.GetAsync($"{_baseUrl}/v1beta/models?key={_apiKey}");
+        resp.EnsureSuccessStatusCode();
+        var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
+        return doc.RootElement.GetProperty("models")
+            .EnumerateArray()
+            .Select(m => m.GetProperty("name").GetString()!.Replace("models/", ""))
+            .Where(n => n.Contains("gemini"))
+            .ToList();
+    }
+
+    public async IAsyncEnumerable<string> StreamChat(
+        string model, List<ChatMessage> messages,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var systemMsg = messages.FirstOrDefault(m => m.Role == "system");
+        var contents  = messages
+            .Where(m => m.Role != "system")
+            .Select(m => new
+            {
+                role  = m.Role == "assistant" ? "model" : "user",
+                parts = new[] { new { text = m.Content } }
+            })
+            .ToList();
+
+        var payload = new Dictionary<string, object> { ["contents"] = contents };
+        if (systemMsg != null)
+            payload["systemInstruction"] = new { parts = new[] { new { text = systemMsg.Content } } };
+
+        var url = $"{_baseUrl}/v1beta/models/{model}:streamGenerateContent?key={_apiKey}&alt=sse";
+        using var req = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+
+        using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        resp.EnsureSuccessStatusCode();
+
+        using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(stream);
+
+        string? line;
+        while ((line = await reader.ReadLineAsync(ct)) != null && !ct.IsCancellationRequested)
+        {
+            if (!line.StartsWith("data: ")) continue;
+            var data = line[6..].Trim();
+            if (string.IsNullOrEmpty(data)) continue;
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(data); }
+            catch { continue; }
+            using (doc)
+            {
+                if (doc.RootElement.TryGetProperty("candidates", out var candidates) &&
+                    candidates.GetArrayLength() > 0 &&
+                    candidates[0].TryGetProperty("content", out var content) &&
+                    content.TryGetProperty("parts", out var parts) &&
+                    parts.GetArrayLength() > 0 &&
+                    parts[0].TryGetProperty("text", out var text))
+                {
+                    var t = text.GetString();
+                    if (!string.IsNullOrEmpty(t)) yield return t;
+                }
+            }
+        }
+    }
+
+    public Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
+        => throw new NotSupportedException("Tool calling not yet implemented for Gemini backend");
+}
+
 // ── Backend manager ───────────────────────────────────────────────────────────
 
 public class BackendManager
@@ -222,8 +396,10 @@ public class BackendManager
 
     private static IAiBackend MakeBackend(AiBackend row) => row.Type switch
     {
-        "openai" => new OpenAiCompatBackend(row.BaseUrl, row.ApiKey),
-        _ => new OllamaBackend(row.BaseUrl)
+        "openai" or "openai_compat" => new OpenAiCompatBackend(row.BaseUrl, row.ApiKey),
+        "anthropic"                 => new AnthropicBackend(row.BaseUrl, row.ApiKey),
+        "gemini"                    => new GeminiBackend(row.BaseUrl, row.ApiKey),
+        _                           => new OllamaBackend(row.BaseUrl)
     };
 
     public static string MakeModelId(int backendId, string modelName) => $"{backendId}:{modelName}";

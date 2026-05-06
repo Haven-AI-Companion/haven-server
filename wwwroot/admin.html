@@ -334,17 +334,32 @@ select.form-input{cursor:pointer}
             <div class="form-group"><label class="form-label">Name</label><input type="text" id="nb-name" class="form-input" placeholder="Local Ollama"></div>
             <div class="form-group"><label class="form-label">Type</label>
               <select id="nb-type" class="form-input" onchange="updateBackendPlaceholder()">
-                <option value="ollama">Ollama</option>
-                <optgroup label="OpenAI-compatible">
+                <optgroup label="Local / Self-hosted">
+                  <option value="ollama">Ollama</option>
                   <option value="lmstudio">LM Studio</option>
                   <option value="llamacpp">llama.cpp</option>
                   <option value="jan">Jan</option>
                   <option value="localai">LocalAI</option>
-                  <option value="vllm">vLLM</option>
                   <option value="kobold">Kobold.cpp</option>
                   <option value="textgen">text-generation-webui</option>
                   <option value="tabbyapi">TabbyAPI</option>
-                  <option value="openai">OpenAI (cloud)</option>
+                  <option value="vllm">vLLM</option>
+                </optgroup>
+                <optgroup label="Cloud — OpenAI-compatible">
+                  <option value="openai">OpenAI</option>
+                  <option value="groq">Groq</option>
+                  <option value="mistral">Mistral AI</option>
+                  <option value="together">Together AI</option>
+                  <option value="perplexity">Perplexity</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="github_copilot">GitHub Copilot</option>
+                  <option value="azure">Azure OpenAI</option>
+                </optgroup>
+                <optgroup label="Cloud — Native API">
+                  <option value="anthropic">Anthropic Claude</option>
+                  <option value="gemini">Google Gemini</option>
+                </optgroup>
+                <optgroup label="Custom">
                   <option value="openai_compat">Other OpenAI-compatible</option>
                 </optgroup>
               </select>
@@ -820,17 +835,30 @@ async function createBackup() {
 
 /* Backends */
 const BACKEND_DEFAULTS = {
-  ollama:       { name: 'Local Ollama',            url: 'http://localhost:11434',        apiType: 'ollama'        },
-  lmstudio:     { name: 'LM Studio',               url: 'http://localhost:1234',         apiType: 'openai_compat' },
-  llamacpp:     { name: 'llama.cpp',               url: 'http://localhost:8080',         apiType: 'openai_compat' },
-  jan:          { name: 'Jan',                     url: 'http://localhost:1337',         apiType: 'openai_compat' },
-  localai:      { name: 'LocalAI',                 url: 'http://localhost:8080',         apiType: 'openai_compat' },
-  vllm:         { name: 'vLLM',                    url: 'http://localhost:8000',         apiType: 'openai_compat' },
-  kobold:       { name: 'Kobold.cpp',              url: 'http://localhost:5001',         apiType: 'openai_compat' },
-  textgen:      { name: 'text-generation-webui',   url: 'http://localhost:5000',         apiType: 'openai_compat' },
-  tabbyapi:     { name: 'TabbyAPI',                url: 'http://localhost:5000',         apiType: 'openai_compat' },
-  openai:       { name: 'OpenAI',                  url: 'https://api.openai.com',        apiType: 'openai_compat', needsKey: true },
-  openai_compat:{ name: 'Custom OpenAI-compatible',url: 'http://localhost:8080',         apiType: 'openai_compat' },
+  // Local / self-hosted
+  ollama:         { name: 'Local Ollama',            url: 'http://localhost:11434',                     apiType: 'ollama'        },
+  lmstudio:       { name: 'LM Studio',               url: 'http://localhost:1234',                      apiType: 'openai_compat' },
+  llamacpp:       { name: 'llama.cpp',               url: 'http://localhost:8080',                      apiType: 'openai_compat' },
+  jan:            { name: 'Jan',                     url: 'http://localhost:1337',                      apiType: 'openai_compat' },
+  localai:        { name: 'LocalAI',                 url: 'http://localhost:8080',                      apiType: 'openai_compat' },
+  kobold:         { name: 'Kobold.cpp',              url: 'http://localhost:5001',                      apiType: 'openai_compat' },
+  textgen:        { name: 'text-generation-webui',   url: 'http://localhost:5000',                      apiType: 'openai_compat' },
+  tabbyapi:       { name: 'TabbyAPI',                url: 'http://localhost:5000',                      apiType: 'openai_compat' },
+  vllm:           { name: 'vLLM',                    url: 'http://localhost:8000',                      apiType: 'openai_compat' },
+  // Cloud — OpenAI-compatible
+  openai:         { name: 'OpenAI',                  url: 'https://api.openai.com',                     apiType: 'openai_compat', needsKey: true },
+  groq:           { name: 'Groq',                    url: 'https://api.groq.com/openai',                apiType: 'openai_compat', needsKey: true },
+  mistral:        { name: 'Mistral AI',              url: 'https://api.mistral.ai',                     apiType: 'openai_compat', needsKey: true },
+  together:       { name: 'Together AI',             url: 'https://api.together.xyz',                   apiType: 'openai_compat', needsKey: true },
+  perplexity:     { name: 'Perplexity',              url: 'https://api.perplexity.ai',                  apiType: 'openai_compat', needsKey: true },
+  openrouter:     { name: 'OpenRouter',              url: 'https://openrouter.ai/api',                  apiType: 'openai_compat', needsKey: true },
+  github_copilot: { name: 'GitHub Copilot',          url: 'https://api.githubcopilot.com',              apiType: 'openai_compat', needsKey: true },
+  azure:          { name: 'Azure OpenAI',            url: 'https://YOUR-RESOURCE.openai.azure.com',     apiType: 'openai_compat', needsKey: true },
+  // Cloud — Native API
+  anthropic:      { name: 'Anthropic Claude',        url: 'https://api.anthropic.com',                  apiType: 'anthropic',     needsKey: true },
+  gemini:         { name: 'Google Gemini',           url: 'https://generativelanguage.googleapis.com',  apiType: 'gemini',        needsKey: true },
+  // Custom
+  openai_compat:  { name: 'Custom OpenAI-compatible',url: 'http://localhost:8080',                      apiType: 'openai_compat' },
 };
 
 function toggleAddForm() {
