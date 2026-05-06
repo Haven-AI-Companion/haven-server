@@ -265,7 +265,8 @@ select.form-input{cursor:pointer}
           <div class="card-title">Server Info</div>
           <table class="kv-table">
             <tr><td>AI Name</td><td id="server-ai-name">—</td></tr>
-            <tr><td>Default Model</td><td id="server-model" class="mono">—</td></tr>
+            <tr><td>Active Model</td><td id="server-model" class="mono">—</td></tr>
+            <tr><td>Backend</td><td id="server-backend" class="mono txt-muted">—</td></tr>
             <tr><td>Personality Path</td><td id="server-personality" class="mono txt-muted">—</td></tr>
             <tr><td>Plugins Enabled</td><td id="server-plugins-enabled">—</td></tr>
           </table>
@@ -501,6 +502,7 @@ async function loadStats() {
     if (s.server?.plugins_enabled !== undefined) document.getElementById('stat-plugins-enabled').textContent = `${s.server.plugins_enabled} enabled`;
     document.getElementById('server-ai-name').textContent         = s.server?.ai_name || '\u2014';
     document.getElementById('server-model').textContent           = s.server?.model || '\u2014';
+    document.getElementById('server-backend').textContent         = s.server?.backend || '\u2014';
     document.getElementById('server-personality').textContent     = s.server?.personality_path || '\u2014';
     document.getElementById('server-plugins-enabled').textContent = s.server?.plugins_enabled ?? '\u2014';
   } catch (err) { console.error('loadStats:', err); }

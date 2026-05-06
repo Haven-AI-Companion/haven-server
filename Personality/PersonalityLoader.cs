@@ -12,6 +12,8 @@ public class PersonalityLoader
         _personalityDir = personalityDir;
     }
 
+    public string? AiName => _soul?.Name ?? "Ash";
+
     public void Load()
     {
         var soulPath = Path.Combine(_personalityDir, "soul.json");

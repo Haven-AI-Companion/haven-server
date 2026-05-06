@@ -171,6 +171,15 @@ public class Database
         return Convert.ToInt32(cmd.ExecuteScalar());
     });
 
+    public Task<int> CountRecentUsers(int days) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM users WHERE created_at >= datetime('now', $d)";
+        cmd.Parameters.AddWithValue("$d", $"-{days} days");
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    });
+
     // ── Conversations ──────────────────────────────────────────────────────
 
     public Task<string> CreateConversation(int userId, string title = "New Conversation") => Task.Run(() =>

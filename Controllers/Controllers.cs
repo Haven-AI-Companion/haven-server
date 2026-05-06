@@ -217,12 +217,15 @@ public class AdminController : ControllerBase
     private readonly Database _db;
     private readonly AshServer.AI.BackendManager _backends;
     private readonly IConfiguration _config;
+    private readonly AshServer.Personality.PersonalityLoader _personality;
 
-    public AdminController(Database db, AshServer.AI.BackendManager backends, IConfiguration config)
+    public AdminController(Database db, AshServer.AI.BackendManager backends, IConfiguration config,
+        AshServer.Personality.PersonalityLoader personality)
     {
         _db = db;
         _backends = backends;
         _config = config;
+        _personality = personality;
     }
 
     private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
@@ -231,11 +234,34 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> Stats()
     {
         if (!IsAdmin) return Forbid();
+        var totalUsers   = await _db.CountUsers();
+        var totalConvs   = await _db.CountConversations();
+        var totalMsgs    = await _db.CountMessages();
+        var recentSignups = await _db.CountRecentUsers(7);
+
+        var personalityDir    = _config["PersonalityDir"] ?? "personality";
+        var aiName            = _personality.AiName ?? "Ash";
+
+        // Pull the active model from the backend (same fallback logic as chat)
+        var allModels    = await _backends.ListAllModels();
+        var activeModel  = allModels.Count > 0 ? allModels[0].Name : (_config["DefaultModel"] ?? "");
+        var backendName  = allModels.Count > 0 ? allModels[0].BackendName : "none";
+
         return Ok(new
         {
-            users = await _db.CountUsers(),
-            conversations = await _db.CountConversations(),
-            messages = await _db.CountMessages()
+            total_users          = totalUsers,
+            total_conversations  = totalConvs,
+            total_messages       = totalMsgs,
+            recent_signups       = recentSignups,
+            server = new
+            {
+                ai_name          = aiName,
+                model            = activeModel,
+                backend          = backendName,
+                personality_path = personalityDir,
+                plugins_loaded   = 0,
+                plugins_enabled  = 0
+            }
         });
     }
 
@@ -244,7 +270,7 @@ public class AdminController : ControllerBase
     {
         if (!IsAdmin) return Forbid();
         var users = await _db.GetAllUsers();
-        return Ok(users.Select(AuthService.ToInfo));
+        return Ok(new { users = users.Select(AuthService.ToInfo) });
     }
 
     [HttpDelete("users/{userId}")]
