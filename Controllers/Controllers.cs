@@ -404,6 +404,37 @@ public class AdminController : ControllerBase
         return Ok(new { ok = true, note = "Config changes require restart to take effect. Edit appsettings.json directly." });
     }
 
+    [HttpGet("backends/detect")]
+    public async Task<IActionResult> DetectBackends()
+    {
+        if (!IsAdmin) return Forbid();
+
+        var ollamaUrl = "http://localhost:11434";
+        bool ollamaDetected;
+        List<string> ollamaModels;
+
+        try
+        {
+            var ollama = new AshServer.AI.OllamaBackend(ollamaUrl);
+            ollamaModels  = await ollama.ListModels();
+            ollamaDetected = true;
+        }
+        catch
+        {
+            ollamaModels  = [];
+            ollamaDetected = false;
+        }
+
+        return Ok(new
+        {
+            any_detected = ollamaDetected,
+            backends = new[]
+            {
+                new { type = "ollama", url = ollamaUrl, detected = ollamaDetected, models = ollamaModels }
+            }
+        });
+    }
+
     [HttpGet("ollama/models")]
     public async Task<IActionResult> OllamaModels()
     {

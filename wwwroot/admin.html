@@ -255,6 +255,29 @@ select.form-input{cursor:pointer}
 
       <!-- Overview -->
       <div class="tab-content active" id="overview">
+        <!-- Setup banner: shown when no AI backend is detected -->
+        <div id="setup-banner" style="display:none;" class="card" style="border-color:var(--warning);background:var(--surface2);">
+          <div style="display:flex;align-items:flex-start;gap:16px;">
+            <div style="font-size:32px;line-height:1;">⚠️</div>
+            <div style="flex:1;">
+              <div class="card-title" style="color:var(--warning);margin-bottom:6px;">No AI Backend Detected</div>
+              <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Ash can't find a running AI backend. You need Ollama (or another compatible server) to use chat.</p>
+              <div style="font-size:13px;margin-bottom:12px;">
+                <strong>Quick setup with Ollama:</strong>
+                <ol style="margin:8px 0 0 18px;line-height:2;">
+                  <li>Download &amp; install from <a href="https://ollama.com/download" target="_blank" style="color:var(--accent);">ollama.com/download</a></li>
+                  <li>Open a terminal and run: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">ollama pull gemma3:4b</code></li>
+                  <li>Ollama starts automatically — then <button class="btn btn-sm" onclick="checkBackendDetection()" style="vertical-align:middle;">Check Again</button></li>
+                </ol>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-primary btn-sm" onclick="switchTab('backends')">→ Add a Backend</button>
+                <button class="btn btn-sm" onclick="checkBackendDetection()">↺ Check Again</button>
+                <a href="https://ollama.com/download" target="_blank" class="btn btn-sm">Download Ollama</a>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="stats-row">
           <div class="stat-card"><div class="stat-label">Users</div><div class="stat-value" id="stat-users">—</div><div class="stat-sub" id="stat-recent-signups"></div></div>
           <div class="stat-card"><div class="stat-label">Conversations</div><div class="stat-value" id="stat-conversations">—</div></div>
@@ -326,7 +349,7 @@ select.form-input{cursor:pointer}
         </div>
         <div class="card">
           <div class="card-title">Connected Backends <button class="btn btn-sm btn-primary" onclick="toggleAddForm()">+ Add Backend</button></div>
-          <div id="backends-list"><p class="txt-muted" style="font-size:13px;">Loading...</p></div>
+          <div id="backends-list"><div class="empty"><div class="empty-icon">🤖</div><p class="txt-muted">No backends configured yet. Add one above, or <a href="https://ollama.com/download" target="_blank" style="color:var(--accent);">install Ollama</a> and it will be detected automatically.</p></div></div>
         </div>
       </div>
 
@@ -505,7 +528,29 @@ async function loadStats() {
     document.getElementById('server-backend').textContent         = s.server?.backend || '\u2014';
     document.getElementById('server-personality').textContent     = s.server?.personality_path || '\u2014';
     document.getElementById('server-plugins-enabled').textContent = s.server?.plugins_enabled ?? '\u2014';
+    // Show setup banner when no model is detected
+    const banner = document.getElementById('setup-banner');
+    if (banner) banner.style.display = s.server?.model ? 'none' : '';
   } catch (err) { console.error('loadStats:', err); }
+}
+
+async function checkBackendDetection() {
+  const banner = document.getElementById('setup-banner');
+  try {
+    const res  = await fetch('/api/admin/backends/detect', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.any_detected) {
+      if (banner) banner.style.display = 'none';
+      toast('Backend detected! Reloading stats…');
+      await loadStats();
+    } else {
+      toast('Still no backend detected. Make sure Ollama is running.', 'warn');
+    }
+  } catch { toast('Detection check failed', 'error'); }
+}
+
+function switchTab(name) {
+  document.querySelector(`.nav-item[data-tab="${name}"]`)?.click();
 }
 
 /* Users */
@@ -781,7 +826,7 @@ async function loadBackends() {
     const data = await res.json();
     const backends = data.backends || data;
     if (!backends.length) {
-      list.innerHTML = '<div class="empty"><div class="empty-icon">🤖</div>No backends configured. Add one above.</div>';
+      list.innerHTML = '<div class="empty"><div class="empty-icon">🤖</div><p class="txt-muted">No backends configured. Add one above, or <a href="https://ollama.com/download" target="_blank" style="color:var(--accent);">install Ollama</a> for automatic detection.</p></div>';
       return;
     }
     list.innerHTML = backends.map(b => `
