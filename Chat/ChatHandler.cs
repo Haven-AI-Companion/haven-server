@@ -36,8 +36,7 @@ public class ChatHandler
     public async Task Handle(HttpContext context, WebSocket ws, int userId, string username)
     {
         string? conversationId = null;
-        var cts = new CancellationTokenSource();
-        context.RequestAborted.Register(() => cts.Cancel());
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
 
         try
         {
@@ -181,7 +180,6 @@ public class ChatHandler
         catch (WebSocketException) { }
         finally
         {
-            cts.Dispose();
             if (ws.State == WebSocketState.Open)
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
         }
