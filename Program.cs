@@ -145,7 +145,19 @@ public class Program
                 }
             }
 
-            await chat.Handle(ctx, ws, userId, username);
+            // Load user permissions for this session
+            bool isAdmin = false;
+            HashSet<string>? permissions = null;
+            if (userId > 0)
+            {
+                var user = await dbSvc.GetUserById(userId);
+                isAdmin = user?.IsAdmin ?? false;
+                permissions = isAdmin
+                    ? [.. AshServer.Auth.Permissions.All]
+                    : await dbSvc.GetUserPermissions(userId);
+            }
+
+            await chat.Handle(ctx, ws, userId, username, isAdmin, permissions);
         });
 
         // ── Fallback: serve chat.html for /chat and / ───────────────────────

@@ -208,6 +208,10 @@ select.form-input{cursor:pointer}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Users
       </button>
+      <button class="nav-item" data-tab="roles" data-title="Roles &amp; Permissions" data-sub="Custom roles and access control">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Roles
+      </button>
       <button class="nav-item" data-tab="backends" data-title="AI Backends" data-sub="Manage connected AI providers">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
         AI Backends
@@ -321,6 +325,78 @@ select.form-input{cursor:pointer}
           <div class="card-title">Users <button class="btn btn-sm btn-primary" onclick="document.getElementById('add-user-form').style.display=(document.getElementById('add-user-form').style.display==='none'?'':'none')">+ Add User</button></div>
           <table class="data-table" id="users-table">
             <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Joined</th><th>Last Login</th><th>Actions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AI Backends -->
+      <div class="tab-content" id="roles">
+        <!-- Create/Edit Role Modal -->
+        <div class="add-form" id="role-form" style="display:none;">
+          <div class="add-form-title" id="role-form-title">New Role</div>
+          <input type="hidden" id="rf-id">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Role Name</label>
+              <input type="text" id="rf-name" class="form-input" placeholder="e.g. power-user">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <input type="text" id="rf-desc" class="form-input" placeholder="What can this role do?">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Color</label>
+              <input type="color" id="rf-color" class="form-input" value="#6366f1" style="height:36px;padding:2px 4px;width:80px">
+            </div>
+          </div>
+          <div style="margin-bottom:12px">
+            <div class="form-label" style="margin-bottom:8px">Permissions</div>
+            <div id="rf-perms-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"></div>
+          </div>
+          <div id="role-form-status" style="margin-bottom:8px;font-size:12px;"></div>
+          <div class="row-gap">
+            <button class="btn btn-primary" onclick="saveRole()">Save Role</button>
+            <button class="btn" onclick="closeRoleForm()">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Roles list -->
+        <div class="card">
+          <div class="card-title">
+            Roles
+            <button class="btn btn-sm btn-primary" onclick="openNewRoleForm()">+ New Role</button>
+          </div>
+          <table class="data-table" id="roles-table">
+            <thead><tr><th>Name</th><th>Description</th><th>Permissions</th><th>Type</th><th>Actions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- Assign role to user -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">Assign Role to User</div>
+          <div class="form-row" style="align-items:flex-end">
+            <div class="form-group">
+              <label class="form-label">User</label>
+              <select id="ar-user" class="form-input"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role</label>
+              <select id="ar-role" class="form-input"></select>
+            </div>
+            <div class="form-group" style="flex:0">
+              <button class="btn btn-primary" onclick="assignRole()">Assign</button>
+            </div>
+          </div>
+          <div id="ar-status" style="font-size:12px;margin-top:4px"></div>
+        </div>
+
+        <!-- User → Role matrix -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">User Role Assignments</div>
+          <table class="data-table" id="user-roles-table">
+            <thead><tr><th>User</th><th>Roles</th><th>Effective Permissions</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -519,7 +595,7 @@ function toast(msg, type = 'success', duration = 3500) {
       if (d.require_auth && token === 'noauth') { window.location.href = '/'; return; }
     }
   } catch {}
-  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadConfigToMenu();
+  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadConfigToMenu(); loadRoles();
   const raw = token !== 'noauth' ? token.split('.')[1] : null;
   if (raw) {
     try {
@@ -593,18 +669,195 @@ async function loadUsers() {
     const data = await resp.json();
     const tbody = document.querySelector('#users-table tbody');
     if (!data.users?.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty">No users yet</div></td></tr>'; return; }
-    tbody.innerHTML = data.users.map(u => `
-      <tr>
+    tbody.innerHTML = data.users.map(u => {
+      const roleBadges = (u.roles ?? []).map(r =>
+        `<span class="badge" style="background:var(--surface2)">${escHtml(r)}</span>`
+      ).join(' ') || '<span class="badge badge-muted">user</span>';
+      return `<tr>
         <td class="txt-muted">${u.id}</td>
         <td><strong>${u.username}</strong></td>
-        <td class="txt-muted">${u.email}</td>
-        <td>${u.is_admin ? '<span class="badge badge-accent">Admin</span>' : '<span class="badge badge-muted">User</span>'}</td>
-        <td class="txt-muted">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '\u2014'}</td>
+        <td class="txt-muted">${u.email ?? '—'}</td>
+        <td>${u.is_admin ? '<span class="badge badge-accent">Admin</span>' : ''} ${roleBadges}</td>
+        <td class="txt-muted">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
         <td class="txt-muted">${u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never'}</td>
         <td><div class="actions"><button class="btn btn-sm" onclick="toggleAdmin(${u.id})">Toggle Admin</button><button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">Delete</button></div></td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
   } catch (err) { console.error('loadUsers:', err); }
 }
+
+/* ── Roles & Permissions ─────────────────────────────────────────────────── */
+
+let allPermissions = [];
+let allRoles = [];
+
+async function loadRoles() {
+  try {
+    const [rolesResp, permsResp, usersResp] = await Promise.all([
+      fetch('/api/admin/roles',       { headers: { Authorization: `Bearer ${token}` } }),
+      fetch('/api/admin/permissions', { headers: { Authorization: `Bearer ${token}` } }),
+      fetch('/api/admin/users',       { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    const rolesData = await rolesResp.json();
+    const permsData = await permsResp.json();
+    const usersData = await usersResp.json();
+    allRoles = rolesData.roles ?? [];
+    allPermissions = permsData.permissions ?? [];
+
+    renderRolesTable(allRoles);
+    populateAssignSelects(allRoles, usersData.users ?? []);
+    renderUserRolesMatrix(usersData.users ?? []);
+  } catch (err) { console.error('loadRoles:', err); }
+}
+
+function renderRolesTable(roles) {
+  const tbody = document.querySelector('#roles-table tbody');
+  if (!roles.length) { tbody.innerHTML = '<tr><td colspan="5"><div class="empty">No roles</div></td></tr>'; return; }
+  tbody.innerHTML = roles.map(r => {
+    const permBadges = r.permissions.map(p => {
+      const label = allPermissions.find(x => x.id === p)?.label ?? p;
+      return `<span class="badge" style="font-size:10px;background:var(--surface2)">${escHtml(label)}</span>`;
+    }).join(' ');
+    const dot = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${escHtml(r.color)};margin-right:6px;vertical-align:middle"></span>`;
+    const systemBadge = r.is_system ? '<span class="badge badge-muted" style="font-size:10px">system</span>' : '';
+    const actions = r.is_system
+      ? `<button class="btn btn-sm" onclick="openEditRoleForm(${r.id})" title="Edit permissions of system role">Edit</button>`
+      : `<button class="btn btn-sm" onclick="openEditRoleForm(${r.id})">Edit</button>
+         <button class="btn btn-sm btn-danger" onclick="deleteRole(${r.id},'${escHtml(r.name)}')">Delete</button>`;
+    return `<tr>
+      <td>${dot}<strong>${escHtml(r.name)}</strong></td>
+      <td class="txt-muted">${escHtml(r.description)}</td>
+      <td style="max-width:320px;white-space:normal">${permBadges || '<span class="txt-muted">none</span>'}</td>
+      <td>${systemBadge}</td>
+      <td><div class="actions">${actions}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function populateAssignSelects(roles, users) {
+  const userSel = document.getElementById('ar-user');
+  const roleSel = document.getElementById('ar-role');
+  userSel.innerHTML = users.map(u => `<option value="${u.id}">${escHtml(u.username)}</option>`).join('');
+  roleSel.innerHTML = roles.map(r => `<option value="${r.id}">${escHtml(r.name)}</option>`).join('');
+}
+
+function renderUserRolesMatrix(users) {
+  const tbody = document.querySelector('#user-roles-table tbody');
+  tbody.innerHTML = users.map(u => {
+    const roleBadges = (u.roles ?? []).map(r => {
+      const role = allRoles.find(x => x.name === r);
+      const color = role?.color ?? '#6366f1';
+      return `<span class="badge" style="background:${color}20;color:${color};border:1px solid ${color}40">${escHtml(r)}</span>`;
+    }).join(' ');
+    const permList = (u.permissions ?? []).join(', ') || '—';
+    return `<tr>
+      <td><strong>${escHtml(u.username)}</strong>${u.is_admin ? ' <span class="badge badge-accent" style="font-size:10px">admin</span>' : ''}</td>
+      <td>${roleBadges}</td>
+      <td class="txt-muted" style="font-size:11px">${permList}</td>
+    </tr>`;
+  }).join('');
+}
+
+function buildPermsGrid(checkedPerms) {
+  const grid = document.getElementById('rf-perms-grid');
+  grid.innerHTML = allPermissions.map(p => `
+    <label style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--surface2);border-radius:6px;cursor:pointer;font-size:13px">
+      <input type="checkbox" value="${p.id}" ${checkedPerms.includes(p.id) ? 'checked' : ''} style="accent-color:var(--accent)">
+      <div>
+        <div style="font-weight:500">${escHtml(p.label)}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${escHtml(p.id)}</div>
+      </div>
+    </label>`).join('');
+}
+
+function openNewRoleForm() {
+  document.getElementById('rf-id').value = '';
+  document.getElementById('rf-name').value = '';
+  document.getElementById('rf-desc').value = '';
+  document.getElementById('rf-color').value = '#6366f1';
+  document.getElementById('role-form-title').textContent = 'New Role';
+  document.getElementById('role-form-status').textContent = '';
+  buildPermsGrid([]);
+  document.getElementById('role-form').style.display = '';
+}
+
+function openEditRoleForm(id) {
+  const role = allRoles.find(r => r.id === id);
+  if (!role) return;
+  document.getElementById('rf-id').value = id;
+  document.getElementById('rf-name').value = role.name;
+  document.getElementById('rf-desc').value = role.description;
+  document.getElementById('rf-color').value = role.color;
+  document.getElementById('role-form-title').textContent = `Edit Role: ${role.name}`;
+  document.getElementById('role-form-status').textContent = '';
+  buildPermsGrid(role.permissions ?? []);
+  document.getElementById('role-form').style.display = '';
+}
+
+function closeRoleForm() {
+  document.getElementById('role-form').style.display = 'none';
+}
+
+function getCheckedPerms() {
+  return [...document.querySelectorAll('#rf-perms-grid input[type=checkbox]:checked')].map(el => el.value);
+}
+
+async function saveRole() {
+  const id = document.getElementById('rf-id').value;
+  const name = document.getElementById('rf-name').value.trim();
+  const desc = document.getElementById('rf-desc').value.trim();
+  const color = document.getElementById('rf-color').value;
+  const perms = getCheckedPerms();
+  const status = document.getElementById('role-form-status');
+  if (!name) { status.style.color = 'var(--error)'; status.textContent = 'Role name is required.'; return; }
+  status.style.color = ''; status.textContent = 'Saving…';
+  try {
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `/api/admin/roles/${id}` : '/api/admin/roles';
+    const resp = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description: desc, color, permissions: perms })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed');
+    status.style.color = 'var(--success)'; status.textContent = id ? 'Role updated.' : 'Role created.';
+    setTimeout(() => { closeRoleForm(); loadRoles(); }, 800);
+  } catch (err) { status.style.color = 'var(--error)'; status.textContent = err.message; }
+}
+
+async function deleteRole(id, name) {
+  if (!confirm(`Delete role "${name}"? This cannot be undone.`)) return;
+  try {
+    const resp = await fetch(`/api/admin/roles/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed');
+    toast(`Role "${name}" deleted`, 'success');
+    loadRoles();
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+async function assignRole() {
+  const userId = document.getElementById('ar-user').value;
+  const roleId = document.getElementById('ar-role').value;
+  const status = document.getElementById('ar-status');
+  status.style.color = ''; status.textContent = 'Assigning…';
+  try {
+    const resp = await fetch(`/api/admin/users/${userId}/roles`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role_id: parseInt(roleId) })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed');
+    status.style.color = 'var(--success)'; status.textContent = 'Role assigned.';
+    loadRoles();
+    setTimeout(() => { status.textContent = ''; }, 2000);
+  } catch (err) { status.style.color = 'var(--error)'; status.textContent = err.message; }
+}
+
+function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 
 async function toggleAdmin(userId) {
   if (!confirm('Toggle admin status for this user?')) return;

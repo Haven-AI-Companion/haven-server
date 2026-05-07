@@ -67,8 +67,56 @@ public class Database
                 created_at TEXT    DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS roles (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    UNIQUE NOT NULL,
+                description TEXT    NOT NULL DEFAULT '',
+                color       TEXT    NOT NULL DEFAULT '#6366f1',
+                is_system   INTEGER NOT NULL DEFAULT 0,
+                created_at  TEXT    DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS role_permissions (
+                role_id    INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+                permission TEXT    NOT NULL,
+                PRIMARY KEY (role_id, permission)
+            );
+
+            CREATE TABLE IF NOT EXISTS user_roles (
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+                PRIMARY KEY (user_id, role_id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);
             CREATE INDEX IF NOT EXISTS idx_messages_conv      ON messages(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_user_roles_user    ON user_roles(user_id);
+            """;
+        cmd.ExecuteNonQuery();
+
+        SeedSystemRoles(conn);
+    }
+
+    private static void SeedSystemRoles(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+
+        // Insert system roles (ignore if already exist)
+        cmd.CommandText = """
+            INSERT OR IGNORE INTO roles (id, name, description, color, is_system) VALUES
+                (1, 'user',      'Default role for all users',     '#6366f1', 1),
+                (2, 'moderator', 'Can manage users and content',   '#f59e0b', 1),
+                (3, 'admin',     'Full administrative access',     '#ef4444', 1);
+            """;
+        cmd.ExecuteNonQuery();
+
+        // Seed default permissions per system role
+        cmd.CommandText = """
+            INSERT OR IGNORE INTO role_permissions (role_id, permission) VALUES
+                (1, 'api_access'), (1, 'agent_mode'), (1, 'file_upload'), (1, 'history_export'),
+                (2, 'api_access'), (2, 'agent_mode'), (2, 'file_upload'), (2, 'history_export'), (2, 'manage_users'),
+                (3, 'api_access'), (3, 'agent_mode'), (3, 'file_upload'), (3, 'history_export'),
+                (3, 'system_prompt'), (3, 'manage_users'), (3, 'manage_backends'), (3, 'manage_plugins');
             """;
         cmd.ExecuteNonQuery();
     }
@@ -110,7 +158,17 @@ public class Database
         cmd.Parameters.AddWithValue("$a", isAdmin ? 1 : 0);
         using var r = cmd.ExecuteReader();
         r.Read();
-        return MapUser(r)!;
+        var user = MapUser(r)!;
+        r.Dispose();
+        cmd.Dispose();
+
+        // Auto-assign 'user' system role (id=1) to every new user
+        using var cmd2 = conn.CreateCommand();
+        cmd2.CommandText = "INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES ($u, 1)";
+        cmd2.Parameters.AddWithValue("$u", user.Id);
+        cmd2.ExecuteNonQuery();
+
+        return user;
     });
 
     public Task UpdateUserPassword(int userId, string newHash) => Task.Run(() =>
@@ -354,6 +412,198 @@ public class Database
         cmd.CommandText = "UPDATE ai_backends SET enabled = $e WHERE id = $id";
         cmd.Parameters.AddWithValue("$e", enabled ? 1 : 0);
         cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    // ── Roles ──────────────────────────────────────────────────────────────
+
+    public Task<List<AshServer.Models.RoleWithPermissions>> GetRoles() => Task.Run(() =>
+    {
+        using var conn = Open();
+        var roles = new List<AshServer.Models.RoleWithPermissions>();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, name, description, color, is_system, created_at FROM roles ORDER BY id";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            roles.Add(new AshServer.Models.RoleWithPermissions(
+                r.GetInt32(0), r.GetString(1), r.GetString(2),
+                r.GetString(3), r.GetInt32(4) == 1, r.GetString(5), []));
+        }
+        r.Dispose();
+
+        // Fetch permissions for all roles in one query
+        using var cmd2 = conn.CreateCommand();
+        cmd2.CommandText = "SELECT role_id, permission FROM role_permissions ORDER BY role_id";
+        using var r2 = cmd2.ExecuteReader();
+        var permMap = new Dictionary<int, List<string>>();
+        while (r2.Read())
+        {
+            var rid = r2.GetInt32(0);
+            if (!permMap.TryGetValue(rid, out var list)) { list = []; permMap[rid] = list; }
+            list.Add(r2.GetString(1));
+        }
+
+        return roles.Select(role => role with { Permissions = permMap.GetValueOrDefault(role.Id, []) }).ToList();
+    });
+
+    public Task<AshServer.Models.RoleWithPermissions?> GetRole(int id) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, name, description, color, is_system, created_at FROM roles WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return null;
+        var role = new AshServer.Models.RoleWithPermissions(
+            r.GetInt32(0), r.GetString(1), r.GetString(2),
+            r.GetString(3), r.GetInt32(4) == 1, r.GetString(5), []);
+        r.Dispose();
+
+        using var cmd2 = conn.CreateCommand();
+        cmd2.CommandText = "SELECT permission FROM role_permissions WHERE role_id = $id";
+        cmd2.Parameters.AddWithValue("$id", id);
+        using var r2 = cmd2.ExecuteReader();
+        var perms = new List<string>();
+        while (r2.Read()) perms.Add(r2.GetString(0));
+        return (AshServer.Models.RoleWithPermissions?)(role with { Permissions = perms });
+    });
+
+    public Task<AshServer.Models.RoleWithPermissions> CreateRole(string name, string description, string color, List<string> permissions) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO roles (name, description, color, is_system) VALUES ($n, $d, $c, 0);
+            SELECT id, name, description, color, is_system, created_at FROM roles WHERE id = last_insert_rowid();
+            """;
+        cmd.Parameters.AddWithValue("$n", name);
+        cmd.Parameters.AddWithValue("$d", description);
+        cmd.Parameters.AddWithValue("$c", color);
+        using var r = cmd.ExecuteReader();
+        r.Read();
+        var role = new AshServer.Models.RoleWithPermissions(
+            r.GetInt32(0), r.GetString(1), r.GetString(2),
+            r.GetString(3), r.GetInt32(4) == 1, r.GetString(5), []);
+        r.Dispose();
+        cmd.Dispose();
+
+        SetRolePermissionsSync(conn, role.Id, permissions);
+        return role with { Permissions = permissions };
+    });
+
+    public Task UpdateRole(int id, string? name, string? description, string? color, List<string>? permissions) => Task.Run(() =>
+    {
+        using var conn = Open();
+        var sets = new List<string>();
+        using var cmd = conn.CreateCommand();
+        if (name != null)        { sets.Add("name = $n");        cmd.Parameters.AddWithValue("$n", name); }
+        if (description != null) { sets.Add("description = $d"); cmd.Parameters.AddWithValue("$d", description); }
+        if (color != null)       { sets.Add("color = $c");       cmd.Parameters.AddWithValue("$c", color); }
+        if (sets.Count > 0)
+        {
+            cmd.CommandText = $"UPDATE roles SET {string.Join(", ", sets)} WHERE id = $id";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+        }
+        if (permissions != null)
+            SetRolePermissionsSync(conn, id, permissions);
+    });
+
+    public Task DeleteRole(int id) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        // Prevent deleting system roles
+        cmd.CommandText = "DELETE FROM roles WHERE id = $id AND is_system = 0";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    private static void SetRolePermissionsSync(SqliteConnection conn, int roleId, List<string> permissions)
+    {
+        using var del = conn.CreateCommand();
+        del.CommandText = "DELETE FROM role_permissions WHERE role_id = $rid";
+        del.Parameters.AddWithValue("$rid", roleId);
+        del.ExecuteNonQuery();
+
+        foreach (var perm in permissions.Distinct())
+        {
+            using var ins = conn.CreateCommand();
+            ins.CommandText = "INSERT OR IGNORE INTO role_permissions (role_id, permission) VALUES ($rid, $p)";
+            ins.Parameters.AddWithValue("$rid", roleId);
+            ins.Parameters.AddWithValue("$p", perm);
+            ins.ExecuteNonQuery();
+        }
+    }
+
+    // ── User ↔ Role assignments ────────────────────────────────────────────
+
+    public Task<List<string>> GetUserRoleNames(int userId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT r.name FROM roles r
+            JOIN user_roles ur ON ur.role_id = r.id
+            WHERE ur.user_id = $u ORDER BY r.id
+            """;
+        cmd.Parameters.AddWithValue("$u", userId);
+        using var r = cmd.ExecuteReader();
+        var list = new List<string>();
+        while (r.Read()) list.Add(r.GetString(0));
+        return list;
+    });
+
+    public Task<HashSet<string>> GetUserPermissions(int userId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT DISTINCT rp.permission FROM role_permissions rp
+            JOIN user_roles ur ON ur.role_id = rp.role_id
+            WHERE ur.user_id = $u
+            """;
+        cmd.Parameters.AddWithValue("$u", userId);
+        using var r = cmd.ExecuteReader();
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (r.Read()) set.Add(r.GetString(0));
+        return set;
+    });
+
+    public Task<bool> UserHasPermission(int userId, string permission) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM role_permissions rp
+            JOIN user_roles ur ON ur.role_id = rp.role_id
+            WHERE ur.user_id = $u AND rp.permission = $p
+            """;
+        cmd.Parameters.AddWithValue("$u", userId);
+        cmd.Parameters.AddWithValue("$p", permission);
+        return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+    });
+
+    public Task AssignRole(int userId, int roleId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES ($u, $r)";
+        cmd.Parameters.AddWithValue("$u", userId);
+        cmd.Parameters.AddWithValue("$r", roleId);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task RemoveRole(int userId, int roleId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        // Don't allow removing the default 'user' role (id=1) — keeps the system sane
+        cmd.CommandText = "DELETE FROM user_roles WHERE user_id = $u AND role_id = $r AND $r != 1";
+        cmd.Parameters.AddWithValue("$u", userId);
+        cmd.Parameters.AddWithValue("$r", roleId);
         cmd.ExecuteNonQuery();
     });
 

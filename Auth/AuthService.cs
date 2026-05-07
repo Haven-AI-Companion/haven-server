@@ -68,6 +68,15 @@ public class AuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    public static UserInfo ToInfo(User u) =>
-        new(u.Id, u.Username, u.Email, u.IsAdmin, u.CreatedAt);
+    public static UserInfo ToInfo(User u, List<string>? roles = null, List<string>? permissions = null) =>
+        new(u.Id, u.Username, u.Email, u.IsAdmin, u.CreatedAt, roles ?? [], permissions ?? []);
+
+    public async Task<UserInfo> ToInfoWithPerms(User u)
+    {
+        var roles = await _db.GetUserRoleNames(u.Id);
+        var perms = u.IsAdmin
+            ? new List<string>(AshServer.Auth.Permissions.All)
+            : new List<string>(await _db.GetUserPermissions(u.Id));
+        return ToInfo(u, roles, perms);
+    }
 }

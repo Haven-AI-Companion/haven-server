@@ -37,13 +37,24 @@ public class ChatHandler
         _plugins = plugins;
     }
 
-    public async Task Handle(HttpContext context, WebSocket ws, int userId, string username)
+    public async Task Handle(HttpContext context, WebSocket ws, int userId, string username, bool isAdmin = false, HashSet<string>? permissions = null)
     {
         string? conversationId = null;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
 
+        // Permission helper — admins bypass all checks
+        bool HasPerm(string perm) => isAdmin || (permissions?.Contains(perm) ?? true);
+
         try
         {
+            // Gate: api_access — if user has no chat access, reject immediately
+            if (!HasPerm(AshServer.Auth.Permissions.ApiAccess))
+            {
+                await SendJson(ws, new { type = "error", content = "Your account does not have chat access. Contact an administrator." }, cts.Token);
+                await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "forbidden", cts.Token);
+                return;
+            }
+
             await SendJson(ws, new { type = "auth_ok", user = username }, cts.Token);
 
             var buf = new byte[64 * 1024];
@@ -69,7 +80,14 @@ public class ChatHandler
                     if (root.TryGetProperty("content", out var c)) userMessage = c.GetString()?.Trim() ?? "";
                     else if (root.TryGetProperty("message", out var mg)) userMessage = mg.GetString()?.Trim() ?? "";
                     var modelId = (root.TryGetProperty("model", out var m) ? m.GetString() : null) ?? _config["DefaultModel"] ?? "";
+
+                    // Gate: agent_mode
                     var agentMode = root.TryGetProperty("agent_mode", out var am) && am.GetBoolean();
+                    if (agentMode && !HasPerm(AshServer.Auth.Permissions.AgentMode))
+                    {
+                        agentMode = false;
+                        await SendJson(ws, new { type = "warning", content = "Agent mode is not available for your account." }, cts.Token);
+                    }
 
                     // Images: base64 strings for vision models
                     List<string>? images = null;

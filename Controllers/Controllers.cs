@@ -39,7 +39,7 @@ public class AuthController : ControllerBase
         if (error != null) return BadRequest(new { error });
 
         var token = _auth.GenerateToken(user!);
-        return Ok(new LoginResponse(token, AuthService.ToInfo(user!)));
+        return Ok(new LoginResponse(token, await _auth.ToInfoWithPerms(user!)));
     }
 
     [HttpPost("login")]
@@ -49,7 +49,7 @@ public class AuthController : ControllerBase
         if (error != null) return Unauthorized(new { error });
 
         var token = _auth.GenerateToken(user!);
-        return Ok(new LoginResponse(token, AuthService.ToInfo(user!)));
+        return Ok(new LoginResponse(token, await _auth.ToInfoWithPerms(user!)));
     }
 
     [HttpGet("me")]
@@ -59,7 +59,21 @@ public class AuthController : ControllerBase
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var user = await _db.GetUserById(userId);
         if (user == null) return Unauthorized();
-        return Ok(new { user = AuthService.ToInfo(user) });
+        return Ok(new { user = await _auth.ToInfoWithPerms(user) });
+    }
+
+    [HttpGet("me/permissions")]
+    [Authorize]
+    public async Task<IActionResult> MyPermissions()
+    {
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var user = await _db.GetUserById(userId);
+        if (user == null) return Unauthorized();
+        var perms = user.IsAdmin
+            ? AshServer.Auth.Permissions.All.ToList()
+            : [.. (await _db.GetUserPermissions(userId))];
+        var roles = await _db.GetUserRoleNames(userId);
+        return Ok(new { permissions = perms, roles, is_admin = user.IsAdmin });
     }
 
     [HttpPatch("me/email")]
@@ -148,13 +162,18 @@ public class ModelsController : ControllerBase
     private readonly AshServer.AI.BackendManager _backends;
     private readonly IConfiguration _config;
     private readonly IWebHostEnvironment _env;
+    private readonly Database _db;
 
-    public ModelsController(AshServer.AI.BackendManager backends, IConfiguration config, IWebHostEnvironment env)
+    public ModelsController(AshServer.AI.BackendManager backends, IConfiguration config, IWebHostEnvironment env, Database db)
     {
         _backends = backends;
         _config = config;
         _env = env;
+        _db = db;
     }
+
+    private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
 
     [HttpGet("models")]
     public async Task<IActionResult> ListModels() =>
@@ -174,6 +193,10 @@ public class ModelsController : ControllerBase
     [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB
     public async Task<IActionResult> Upload(IFormFile file)
     {
+        // Permission gate — admins always bypass
+        if (!IsAdmin && !await _db.UserHasPermission(UserId, AshServer.Auth.Permissions.FileUpload))
+            return StatusCode(403, new { error = "You do not have permission to upload files." });
+
         if (file == null || file.Length == 0)
             return BadRequest(new { error = "No file provided" });
 
@@ -291,7 +314,14 @@ public class AdminController : ControllerBase
     {
         if (!IsAdmin) return Forbid();
         var users = await _db.GetAllUsers();
-        return Ok(new { users = users.Select(AuthService.ToInfo) });
+        var result = new List<object>();
+        foreach (var u in users)
+        {
+            var roles = await _db.GetUserRoleNames(u.Id);
+            var perms = u.IsAdmin ? new List<string>(AshServer.Auth.Permissions.All) : new List<string>(await _db.GetUserPermissions(u.Id));
+            result.Add(new { user = AuthService.ToInfo(u, roles, perms.ToList()) });
+        }
+        return Ok(new { users = result.Select(x => ((dynamic)x).user) });
     }
 
     [HttpDelete("users/{userId}")]
@@ -516,5 +546,94 @@ public class AdminController : ControllerBase
         var backupPath = Path.Combine(Path.GetDirectoryName(fullPath)!, backupName);
         System.IO.File.Copy(fullPath, backupPath);
         return Ok(new { ok = true, file = backupName });
+    }
+
+    // ── Roles CRUD ──────────────────────────────────────────────────────────
+
+    [HttpGet("roles")]
+    public async Task<IActionResult> GetRoles()
+    {
+        if (!IsAdmin) return Forbid();
+        var roles = await _db.GetRoles();
+        return Ok(new { roles });
+    }
+
+    [HttpGet("roles/{id:int}")]
+    public async Task<IActionResult> GetRole(int id)
+    {
+        if (!IsAdmin) return Forbid();
+        var role = await _db.GetRole(id);
+        return role == null ? NotFound() : Ok(role);
+    }
+
+    [HttpPost("roles")]
+    public async Task<IActionResult> CreateRole([FromBody] RoleCreateRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Name))
+            return BadRequest(new { error = "Role name is required" });
+
+        // Validate permissions
+        var validPerms = req.Permissions?.Where(p => AshServer.Auth.Permissions.All.Contains(p)).ToList() ?? [];
+        var role = await _db.CreateRole(req.Name.Trim(), req.Description ?? "", req.Color ?? "#6366f1", validPerms);
+        return Ok(new { ok = true, role });
+    }
+
+    [HttpPut("roles/{id:int}")]
+    public async Task<IActionResult> UpdateRole(int id, [FromBody] RoleUpdateRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+        var existing = await _db.GetRole(id);
+        if (existing == null) return NotFound();
+
+        var validPerms = req.Permissions?.Where(p => AshServer.Auth.Permissions.All.Contains(p)).ToList();
+        await _db.UpdateRole(id, req.Name, req.Description, req.Color, validPerms);
+        return Ok(new { ok = true });
+    }
+
+    [HttpDelete("roles/{id:int}")]
+    public async Task<IActionResult> DeleteRole(int id)
+    {
+        if (!IsAdmin) return Forbid();
+        var existing = await _db.GetRole(id);
+        if (existing == null) return NotFound();
+        if (existing.IsSystem) return BadRequest(new { error = "System roles cannot be deleted" });
+        await _db.DeleteRole(id);
+        return Ok(new { ok = true });
+    }
+
+    [HttpGet("permissions")]
+    public IActionResult ListPermissions()
+    {
+        if (!IsAdmin) return Forbid();
+        var perms = AshServer.Auth.Permissions.All.Select(p => new
+        {
+            id = p,
+            label = AshServer.Auth.Permissions.Labels.GetValueOrDefault(p, p)
+        });
+        return Ok(new { permissions = perms });
+    }
+
+    // ── User ↔ Role assignment ───────────────────────────────────────────────
+
+    [HttpPost("users/{userId:int}/roles")]
+    public async Task<IActionResult> AssignRole(int userId, [FromBody] Dictionary<string, int> body)
+    {
+        if (!IsAdmin) return Forbid();
+        if (!body.TryGetValue("role_id", out var roleId))
+            return BadRequest(new { error = "role_id required" });
+        var role = await _db.GetRole(roleId);
+        if (role == null) return NotFound(new { error = "Role not found" });
+        await _db.AssignRole(userId, roleId);
+        return Ok(new { ok = true });
+    }
+
+    [HttpDelete("users/{userId:int}/roles/{roleId:int}")]
+    public async Task<IActionResult> RemoveRole(int userId, int roleId)
+    {
+        if (!IsAdmin) return Forbid();
+        if (roleId == 1) return BadRequest(new { error = "Cannot remove the default 'user' role" });
+        await _db.RemoveRole(userId, roleId);
+        return Ok(new { ok = true });
     }
 }
