@@ -91,6 +91,18 @@ public class Database
             CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);
             CREATE INDEX IF NOT EXISTS idx_messages_conv      ON messages(conversation_id);
             CREATE INDEX IF NOT EXISTS idx_user_roles_user    ON user_roles(user_id);
+
+            CREATE TABLE IF NOT EXISTS mcp_servers (
+                id         TEXT    PRIMARY KEY,
+                name       TEXT    NOT NULL,
+                type       TEXT    NOT NULL DEFAULT 'stdio',
+                command    TEXT    NOT NULL DEFAULT '',
+                args       TEXT    NOT NULL DEFAULT '[]',
+                env        TEXT    NOT NULL DEFAULT '{}',
+                url        TEXT    NOT NULL DEFAULT '',
+                enabled    INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT    DEFAULT (datetime('now'))
+            );
             """;
         cmd.ExecuteNonQuery();
 
@@ -432,6 +444,99 @@ public class Database
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "UPDATE ai_backends SET enabled = $e WHERE id = $id";
         cmd.Parameters.AddWithValue("$e", enabled ? 1 : 0);
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    // ── MCP Servers ──────────────────────────────────────────────────────────
+
+    private static AshServer.Models.McpServerConfig MapMcpRow(SqliteDataReader r) => new()
+    {
+        Id      = r.GetString(0),
+        Name    = r.GetString(1),
+        Type    = r.GetString(2),
+        Command = r.GetString(3),
+        Args    = System.Text.Json.JsonSerializer.Deserialize<List<string>>(r.GetString(4)) ?? [],
+        Env     = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string,string>>(r.GetString(5)) ?? new(),
+        Url     = r.GetString(6),
+        Enabled = r.GetInt32(7) == 1,
+    };
+
+    public Task<List<AshServer.Models.McpServerConfig>> GetMcpServers() => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, name, type, command, args, env, url, enabled FROM mcp_servers ORDER BY created_at";
+        using var r = cmd.ExecuteReader();
+        var list = new List<AshServer.Models.McpServerConfig>();
+        while (r.Read()) list.Add(MapMcpRow(r));
+        return list;
+    });
+
+    public Task<AshServer.Models.McpServerConfig?> GetMcpServer(string id) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, name, type, command, args, env, url, enabled FROM mcp_servers WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? MapMcpRow(r) : (AshServer.Models.McpServerConfig?)null;
+    });
+
+    public Task CreateMcpServer(AshServer.Models.McpServerConfig s) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO mcp_servers (id, name, type, command, args, env, url, enabled)
+            VALUES ($id, $name, $type, $cmd, $args, $env, $url, $enabled)
+            """;
+        cmd.Parameters.AddWithValue("$id",      s.Id);
+        cmd.Parameters.AddWithValue("$name",    s.Name);
+        cmd.Parameters.AddWithValue("$type",    s.Type);
+        cmd.Parameters.AddWithValue("$cmd",     s.Command ?? "");
+        cmd.Parameters.AddWithValue("$args",    System.Text.Json.JsonSerializer.Serialize(s.Args));
+        cmd.Parameters.AddWithValue("$env",     System.Text.Json.JsonSerializer.Serialize(s.Env));
+        cmd.Parameters.AddWithValue("$url",     s.Url ?? "");
+        cmd.Parameters.AddWithValue("$enabled", s.Enabled ? 1 : 0);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task UpdateMcpServer(AshServer.Models.McpServerConfig s) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE mcp_servers
+            SET name=$name, type=$type, command=$cmd, args=$args, env=$env, url=$url, enabled=$enabled
+            WHERE id=$id
+            """;
+        cmd.Parameters.AddWithValue("$id",      s.Id);
+        cmd.Parameters.AddWithValue("$name",    s.Name);
+        cmd.Parameters.AddWithValue("$type",    s.Type);
+        cmd.Parameters.AddWithValue("$cmd",     s.Command ?? "");
+        cmd.Parameters.AddWithValue("$args",    System.Text.Json.JsonSerializer.Serialize(s.Args));
+        cmd.Parameters.AddWithValue("$env",     System.Text.Json.JsonSerializer.Serialize(s.Env));
+        cmd.Parameters.AddWithValue("$url",     s.Url ?? "");
+        cmd.Parameters.AddWithValue("$enabled", s.Enabled ? 1 : 0);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task DeleteMcpServer(string id) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM mcp_servers WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task ToggleMcpServer(string id, bool enabled) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "UPDATE mcp_servers SET enabled = $e WHERE id = $id";
+        cmd.Parameters.AddWithValue("$e",  enabled ? 1 : 0);
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
     });

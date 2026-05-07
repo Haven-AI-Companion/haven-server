@@ -655,8 +655,11 @@ public class AdminController : ControllerBase
 public class McpController : ControllerBase
 {
     private readonly McpManager _mcp;
+    private readonly Database   _db;
 
-    public McpController(McpManager mcp) => _mcp = mcp;
+    public McpController(McpManager mcp, Database db) { _mcp = mcp; _db = db; }
+
+    private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
 
     /// <summary>Lists all configured MCP servers and their connection status/tools.</summary>
     [HttpGet("servers")]
@@ -671,4 +674,81 @@ public class McpController : ControllerBase
             total_tools = servers.Sum(s => s.ToolCount)
         });
     }
+
+    [HttpPost("servers")]
+    public async Task<IActionResult> CreateServer([FromBody] McpServerCreateRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { error = "Name is required" });
+
+        var id = string.IsNullOrWhiteSpace(req.Id)
+            ? Guid.NewGuid().ToString("N")[..8]
+            : req.Id.Trim().ToLower().Replace(' ', '-');
+
+        var config = new McpServerConfig
+        {
+            Id      = id,
+            Name    = req.Name.Trim(),
+            Type    = req.Type is "http" or "stdio" ? req.Type : "stdio",
+            Command = req.Command?.Trim() ?? "",
+            Args    = req.Args ?? [],
+            Env     = req.Env ?? new(),
+            Url     = req.Url?.Trim() ?? "",
+            Enabled = req.Enabled,
+        };
+
+        var connected = await _mcp.AddServerAsync(config);
+        return Ok(new { ok = true, id, connected });
+    }
+
+    [HttpPut("servers/{id}")]
+    public async Task<IActionResult> UpdateServer(string id, [FromBody] McpServerCreateRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+        var existing = await _db.GetMcpServer(id);
+        if (existing is null) return NotFound();
+
+        var config = new McpServerConfig
+        {
+            Id      = id,
+            Name    = req.Name?.Trim() ?? existing.Name,
+            Type    = req.Type is "http" or "stdio" ? req.Type : existing.Type,
+            Command = req.Command?.Trim() ?? existing.Command,
+            Args    = req.Args ?? existing.Args,
+            Env     = req.Env ?? existing.Env,
+            Url     = req.Url?.Trim() ?? existing.Url,
+            Enabled = req.Enabled,
+        };
+
+        var connected = await _mcp.UpdateServerAsync(config);
+        return Ok(new { ok = true, connected });
+    }
+
+    [HttpDelete("servers/{id}")]
+    public async Task<IActionResult> DeleteServer(string id)
+    {
+        if (!IsAdmin) return Forbid();
+        var existing = await _db.GetMcpServer(id);
+        if (existing is null) return NotFound();
+        await _mcp.DeleteServerAsync(id);
+        return Ok(new { ok = true });
+    }
+
+    [HttpPost("servers/{id}/toggle")]
+    public async Task<IActionResult> ToggleServer(string id, [FromBody] McpToggleRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+        var connected = await _mcp.ToggleServerAsync(id, req.Enabled);
+        return Ok(new { ok = true, enabled = req.Enabled, connected });
+    }
+
+    [HttpPost("servers/{id}/reconnect")]
+    public async Task<IActionResult> ReconnectServer(string id)
+    {
+        if (!IsAdmin) return Forbid();
+        var connected = await _mcp.ReconnectAsync(id);
+        return Ok(new { ok = true, connected });
+    }
 }
+
+public record McpToggleRequest(bool Enabled);

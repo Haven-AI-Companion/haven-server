@@ -114,3 +114,13 @@ public record McpServerInfo(
     string? LastError
 );
 
+public record McpServerCreateRequest(
+    string? Id,
+    string Name,
+    string Type,
+    string? Command,
+    List<string>? Args,
+    Dictionary<string,string>? Env,
+    string? Url,
+    bool Enabled = true
+);
