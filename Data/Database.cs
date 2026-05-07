@@ -341,6 +341,27 @@ public class Database
         return Convert.ToInt32(cmd.ExecuteScalar());
     });
 
+    public Task<int> CountMessagesToday() => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM messages WHERE created_at >= date('now')";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    });
+
+    public Task<int> CountActiveUsersInDays(int days) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(DISTINCT c.user_id) FROM messages m
+            JOIN conversations c ON m.conversation_id = c.id
+            WHERE m.created_at >= datetime('now', $d) AND m.role = 'user'
+            """;
+        cmd.Parameters.AddWithValue("$d", $"-{days} days");
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    });
+
     // ── AI Backends ────────────────────────────────────────────────────────
 
     public Task<List<AiBackend>> GetEnabledBackends() => Task.Run(() =>

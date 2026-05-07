@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using AshServer.Agent;
 using AshServer.AI;
 using AshServer.Auth;
@@ -18,7 +19,7 @@ namespace AshServer.Chat;
 /// </summary>
 public class ChatHandler
 {
-    private static readonly ConcurrentDictionary<string, List<ChatMessage>> ConvCache = new();
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(2);
     private const int MaxHistoryMessages = 40;
 
     private readonly Database _db;
@@ -26,15 +27,17 @@ public class ChatHandler
     private readonly PersonalityLoader _personality;
     private readonly IConfiguration _config;
     private readonly PluginManager _plugins;
+    private readonly IMemoryCache _convCache;
 
     public ChatHandler(Database db, BackendManager backends, PersonalityLoader personality,
-        IConfiguration config, PluginManager plugins)
+        IConfiguration config, PluginManager plugins, IMemoryCache convCache)
     {
         _db = db;
         _backends = backends;
         _personality = personality;
         _config = config;
         _plugins = plugins;
+        _convCache = convCache;
     }
 
     public async Task Handle(HttpContext context, WebSocket ws, int userId, string username, bool isAdmin = false, HashSet<string>? permissions = null)
@@ -108,7 +111,7 @@ public class ChatHandler
                             if (conv != null)
                             {
                                 conversationId = reqId;
-                                if (!ConvCache.ContainsKey(conversationId))
+                                if (!_convCache.TryGetValue(conversationId, out List<ChatMessage>? _))
                                     await LoadConvToCache(conversationId);
                             }
                         }
@@ -119,13 +122,17 @@ public class ChatHandler
                     if (conversationId == null)
                     {
                         conversationId = await _db.CreateConversation(userId);
-                        ConvCache[conversationId] = [];
+                        _convCache.Set(conversationId, new List<ChatMessage>(), CacheTtl);
                         await SendJson(ws, new { type = "conversation_id", content = conversationId }, cts.Token);
                     }
 
                     await _db.AddMessage(conversationId, "user", userMessage);
 
-                    var history = ConvCache.GetOrAdd(conversationId, _ => []);
+                    var history = _convCache.GetOrCreate(conversationId, e =>
+                    {
+                        e.SlidingExpiration = CacheTtl;
+                        return new List<ChatMessage>();
+                    })!;
                     lock (history)
                     {
                         history.Add(new ChatMessage("user", userMessage, images));
@@ -155,6 +162,10 @@ public class ChatHandler
                             {
                                 switch (evt.Type)
                                 {
+                                    case "stream_token":
+                                        responseText += evt.Content ?? "";
+                                        await SendJson(ws, new { type = "token", content = evt.Content }, cts.Token);
+                                        break;
                                     case "tool_call":
                                         await SendJson(ws, new { type = "agent_tool_call", tool = evt.ToolName, args = evt.ToolArgs, iteration = evt.Iteration }, cts.Token);
                                         break;
@@ -162,8 +173,7 @@ public class ChatHandler
                                         await SendJson(ws, new { type = "agent_tool_result", tool = evt.ToolName, result = evt.ToolResult, iteration = evt.Iteration }, cts.Token);
                                         break;
                                     case "final":
-                                        responseText = evt.Content ?? "";
-                                        await SendJson(ws, new { type = "token", content = responseText }, cts.Token);
+                                        // responseText already accumulated from stream_token events
                                         break;
                                     case "error":
                                         await SendJson(ws, new { type = "error", content = evt.Content }, cts.Token);
@@ -210,10 +220,11 @@ public class ChatHandler
     private async Task LoadConvToCache(string conversationId)
     {
         var msgs = await _db.GetMessages(conversationId);
-        ConvCache[conversationId] = msgs
+        var history = msgs
             .Select(m => new ChatMessage(m.Role, m.Content))
             .TakeLast(MaxHistoryMessages)
             .ToList();
+        _convCache.Set(conversationId, history, CacheTtl);
     }
 
     internal static async Task SendJson(WebSocket ws, object data, CancellationToken ct = default)

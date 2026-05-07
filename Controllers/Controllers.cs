@@ -163,13 +163,15 @@ public class ModelsController : ControllerBase
     private readonly IConfiguration _config;
     private readonly IWebHostEnvironment _env;
     private readonly Database _db;
+    private readonly AshServer.Plugins.PluginManager _plugins;
 
-    public ModelsController(AshServer.AI.BackendManager backends, IConfiguration config, IWebHostEnvironment env, Database db)
+    public ModelsController(AshServer.AI.BackendManager backends, IConfiguration config, IWebHostEnvironment env, Database db, AshServer.Plugins.PluginManager plugins)
     {
         _backends = backends;
         _config = config;
         _env = env;
         _db = db;
+        _plugins = plugins;
     }
 
     private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -186,7 +188,13 @@ public class ModelsController : ControllerBase
     });
 
     [HttpGet("plugins")]
-    public IActionResult ListPlugins() => Ok(new { plugins = Array.Empty<object>() });
+    [Authorize]
+    public IActionResult ListPlugins() => Ok(new
+    {
+        plugins = _plugins.Plugins
+            .Where(p => p.Enabled)
+            .Select(p => new { p.Id, p.Name, p.Description, tool_count = p.Tools.Count })
+    });
 
     [HttpPost("upload")]
     [Authorize]
@@ -252,6 +260,7 @@ public class ModelsController : ControllerBase
 }
 
 
+[ApiController]
 [Route("api/admin")]
 [Authorize]
 public class AdminController : ControllerBase
@@ -333,20 +342,19 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("users")]
-    public async Task<IActionResult> CreateUser([FromForm] string username, [FromForm] string email,
-        [FromForm] string password, [FromForm] bool is_admin = false)
+    public async Task<IActionResult> CreateUser([FromBody] AdminCreateUserRequest req)
     {
         if (!IsAdmin) return Forbid();
-        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
             return BadRequest(new { error = "username, email, and password are required" });
 
-        var existing = await _db.GetUserByUsername(username);
+        var existing = await _db.GetUserByUsername(req.Username);
         if (existing != null)
-            return Conflict(new { error = $"Username '{username}' is already taken" });
+            return Conflict(new { error = $"Username '{req.Username}' is already taken" });
 
-        var hash = BCrypt.Net.BCrypt.HashPassword(password);
-        var user = await _db.CreateUser(username, hash, email, is_admin);
-        return Ok(new { ok = true, id = user.Id, username });
+        var hash = BCrypt.Net.BCrypt.HashPassword(req.Password);
+        var user = await _db.CreateUser(req.Username, hash, req.Email, req.IsAdmin);
+        return Ok(new { ok = true, id = user.Id, username = req.Username });
     }
 
     [HttpPost("users/{userId}/toggle-admin")]
@@ -430,8 +438,8 @@ public class AdminController : ControllerBase
             total_messages = await _db.CountMessages(),
             total_conversations = await _db.CountConversations(),
             total_users = await _db.CountUsers(),
-            messages_today = 0,
-            active_users_week = await _db.CountUsers()
+            messages_today = await _db.CountMessagesToday(),
+            active_users_week = await _db.CountActiveUsersInDays(7)
         });
     }
 

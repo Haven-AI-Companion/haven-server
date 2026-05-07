@@ -84,4 +84,5 @@ public record ChatMessage(string Role, string Content, List<string>? Images = nu
 
 public record BackendCreateRequest(string Name, string Type, string BaseUrl, string? ApiKey);
 public record BackendUpdateRequest(string? Name, string? BaseUrl, string? ApiKey);
+public record AdminCreateUserRequest(string Username, string Email, string Password, bool IsAdmin = false);
 

@@ -7,7 +7,7 @@ using AshServer.Plugins;
 namespace AshServer.Agent;
 
 public record AgentEvent(
-    string Type,            // tool_call | tool_result | final | error
+    string Type,            // tool_call | tool_result | stream_token | final | error
     string? ToolName = null,
     JsonElement? ToolArgs = null,
     string? ToolResult = null,
@@ -102,7 +102,10 @@ public class AgentRunner
 
             if (!hasToolCalls)
             {
-                yield return new AgentEvent("final", Content: content, Iteration: iteration);
+                // Stream the final answer token-by-token for better UX
+                await foreach (var token in _backend.StreamChat(_model, working, ct))
+                    yield return new AgentEvent("stream_token", Content: token, Iteration: iteration);
+                yield return new AgentEvent("final", Iteration: iteration);
                 yield break;
             }
 
@@ -144,15 +147,16 @@ public class AgentRunner
             }
         }
 
-        // Hit cap — force final answer without tools
+        // Hit cap — collect tokens first (can't yield inside try/catch), then stream
         working.Add(new ChatMessage("user",
             "[System: You have reached the maximum tool calls. Please give your best answer now.]"));
 
-        JsonElement finalResponse = default;
+        var capTokens = new List<string>();
         string? capError = null;
         try
         {
-            finalResponse = await _backend.ChatWithTools(_model, working, JsonSerializer.Deserialize<JsonElement>("[]"));
+            await foreach (var token in _backend.StreamChat(_model, working, ct))
+                capTokens.Add(token);
         }
         catch (Exception ex) { capError = ex.Message; }
 
@@ -162,8 +166,10 @@ public class AgentRunner
             yield break;
         }
 
-        var finalContent = finalResponse.TryGetProperty("content", out var fc) ? fc.GetString()?.Trim() ?? "" : "";
-        yield return new AgentEvent("final", Content: finalContent, Iteration: MaxIterations);
+        foreach (var token in capTokens)
+            yield return new AgentEvent("stream_token", Content: token, Iteration: MaxIterations);
+
+        yield return new AgentEvent("final", Iteration: MaxIterations);
     }
 }
 

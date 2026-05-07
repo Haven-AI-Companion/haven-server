@@ -44,6 +44,7 @@ public class Program
 
         builder.Services.AddSingleton<AshServer.Plugins.PluginManager>();
         builder.Services.AddSingleton<AuthService>();
+        builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<ChatHandler>();
 
         builder.Services.AddControllers()
