@@ -124,3 +124,78 @@ public record McpServerCreateRequest(
     string? Url,
     bool Enabled = true
 );
+
+// ── External Identity / Channel ────────────────────────────────────────────
+
+public record ExternalIdentity(
+    int Id,
+    int UserId,
+    string Provider,
+    string ExternalId,
+    string? ExternalUsername,
+    string LinkedAt
+);
+
+public record ChannelConfig(
+    int Id,
+    string Provider,
+    string? GuildId,
+    string ChannelId,
+    string? Label,
+    bool Enabled,
+    bool AllowUnlinked,
+    int? UnlinkedRoleId,
+    bool AgentEnabled,
+    int MaxTurns,
+    List<string> ToolAllowlist,
+    string CreatedAt
+);
+
+public record AuditEntry(
+    int Id,
+    string Provider,
+    string ChannelId,
+    string ExternalId,
+    string? ExternalUsername,
+    int? UserId,
+    string Action,
+    string? Detail,
+    string CreatedAt
+);
+
+// ── Identity DTOs ──────────────────────────────────────────────────────────
+
+public record AdminLinkRequest(string Provider, string ExternalId, string? ExternalUsername);
+
+public record LinkCodeRequest(string Provider);
+public record LinkCodeResponse(string Code, string ExpiresAt, string Instructions);
+public record LinkConfirmRequest(string Code, string ExternalId, string? ExternalUsername);
+
+public record ChannelConfigRequest(
+    string Provider,
+    string ChannelId,
+    string? GuildId,
+    string? Label,
+    bool Enabled = true,
+    bool AllowUnlinked = false,
+    int? UnlinkedRoleId = null,
+    bool AgentEnabled = true,
+    int MaxTurns = 10,
+    List<string>? ToolAllowlist = null
+);
+
+// ── Resolved identity for chat handlers ───────────────────────────────────
+
+public record ResolvedIdentity(
+    int? UserId,
+    string? Username,
+    List<string> Permissions,
+    bool IsLinked,
+    bool AgentAllowed,
+    int MaxTurns,
+    string DenyReason   // empty = allowed
+)
+{
+    public bool IsAllowed => string.IsNullOrEmpty(DenyReason);
+}
+

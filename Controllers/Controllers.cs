@@ -752,3 +752,180 @@ public class McpController : ControllerBase
 }
 
 public record McpToggleRequest(bool Enabled);
+
+// ── Identity Controller ─────────────────────────────────────────────────────
+
+[ApiController]
+[Route("api/admin")]
+[Authorize]
+public class IdentityController : ControllerBase
+{
+    private readonly Database _db;
+    private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
+
+    public IdentityController(Database db) => _db = db;
+
+    // ── External identity management ─────────────────────────────────────
+
+    [HttpGet("users/{userId:int}/identities")]
+    public async Task<IActionResult> GetIdentities(int userId)
+    {
+        if (!IsAdmin) return Forbid();
+        var identities = await _db.GetIdentitiesForUser(userId);
+        return Ok(new { identities });
+    }
+
+    [HttpPost("users/{userId:int}/identities")]
+    public async Task<IActionResult> LinkIdentity(int userId, [FromBody] AdminLinkRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Provider) || string.IsNullOrWhiteSpace(req.ExternalId))
+            return BadRequest(new { error = "provider and external_id are required" });
+
+        var identity = await _db.AddIdentity(userId, req.Provider.Trim().ToLower(), req.ExternalId.Trim(), req.ExternalUsername?.Trim());
+        return Ok(new { ok = true, identity });
+    }
+
+    [HttpDelete("identities/{id:int}")]
+    public async Task<IActionResult> UnlinkIdentity(int id)
+    {
+        if (!IsAdmin) return Forbid();
+        await _db.RemoveIdentity(id);
+        return Ok(new { ok = true });
+    }
+
+    // ── Channel configs ───────────────────────────────────────────────────
+
+    [HttpGet("channels")]
+    public async Task<IActionResult> GetChannels()
+    {
+        if (!IsAdmin) return Forbid();
+        var channels = await _db.GetChannelConfigs();
+        var roles    = await _db.GetRoles();
+        return Ok(new { channels, roles });
+    }
+
+    [HttpPost("channels")]
+    public async Task<IActionResult> UpsertChannel([FromBody] ChannelConfigRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Provider) || string.IsNullOrWhiteSpace(req.ChannelId))
+            return BadRequest(new { error = "provider and channel_id are required" });
+
+        var cfg = new ChannelConfig(0, req.Provider.Trim().ToLower(), req.GuildId?.Trim(),
+            req.ChannelId.Trim(), req.Label?.Trim(), req.Enabled, req.AllowUnlinked,
+            req.UnlinkedRoleId, req.AgentEnabled, req.MaxTurns,
+            req.ToolAllowlist ?? [], "");
+        var saved = await _db.UpsertChannelConfig(cfg);
+        return Ok(new { ok = true, channel = saved });
+    }
+
+    [HttpDelete("channels/{id:int}")]
+    public async Task<IActionResult> DeleteChannel(int id)
+    {
+        if (!IsAdmin) return Forbid();
+        await _db.DeleteChannelConfig(id);
+        return Ok(new { ok = true });
+    }
+
+    // ── Audit log ─────────────────────────────────────────────────────────
+
+    [HttpGet("audit")]
+    public async Task<IActionResult> GetAudit([FromQuery] string? provider, [FromQuery] string? channel_id, [FromQuery] int limit = 100)
+    {
+        if (!IsAdmin) return Forbid();
+        var entries = await _db.GetAuditLog(provider, channel_id, Math.Min(limit, 500));
+        return Ok(new { entries });
+    }
+}
+
+// ── Self-Link Controller (authenticated users) ──────────────────────────────
+
+[ApiController]
+[Route("api/auth")]
+[Authorize]
+public class LinkController : ControllerBase
+{
+    private readonly Database _db;
+    private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    public LinkController(Database db) => _db = db;
+
+    [HttpPost("link/request")]
+    public async Task<IActionResult> RequestLinkCode([FromBody] LinkCodeRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Provider))
+            return BadRequest(new { error = "provider is required" });
+
+        var provider   = req.Provider.Trim().ToLower();
+        var code       = Guid.NewGuid().ToString("N")[..12].ToUpper();
+        var expiresAt  = DateTime.UtcNow.AddMinutes(10);
+        await _db.SaveLinkCode(code, UserId, provider, expiresAt);
+
+        var instructions = provider switch {
+            "discord" => $"In Discord, run: /link {code}",
+            "slack"   => $"In Slack, run: /ash-link {code}",
+            _         => $"Send this code to the bot: {code}"
+        };
+
+        return Ok(new LinkCodeResponse(code, expiresAt.ToString("o"), instructions));
+    }
+
+    [HttpGet("identities")]
+    public async Task<IActionResult> MyIdentities()
+    {
+        var identities = await _db.GetIdentitiesForUser(UserId);
+        return Ok(new { identities });
+    }
+
+    [HttpDelete("identities/{id:int}")]
+    public async Task<IActionResult> UnlinkSelf(int id)
+    {
+        var identities = await _db.GetIdentitiesForUser(UserId);
+        if (!identities.Any(i => i.Id == id))
+            return NotFound(new { error = "Identity not found or not yours" });
+        await _db.RemoveIdentity(id);
+        return Ok(new { ok = true });
+    }
+}
+
+// ── Bot Link Confirm (called by external bots, no user auth) ───────────────
+
+[ApiController]
+[Route("api/bot")]
+public class BotController : ControllerBase
+{
+    private readonly Database _db;
+    private readonly IConfiguration _config;
+
+    public BotController(Database db, IConfiguration config) { _db = db; _config = config; }
+
+    // Bot authenticates with a shared secret from appsettings
+    private bool IsBotAuthorized()
+    {
+        var secret = _config["Bot:Secret"];
+        if (string.IsNullOrWhiteSpace(secret)) return false;
+        Request.Headers.TryGetValue("X-Bot-Secret", out var provided);
+        return provided == secret;
+    }
+
+    /// <summary>
+    /// Called by the Discord/Slack bot when a user submits their link code.
+    /// Confirms identity link: code + external_id → links to the user who generated the code.
+    /// </summary>
+    [HttpPost("link/confirm")]
+    public async Task<IActionResult> ConfirmLink([FromBody] LinkConfirmRequest req)
+    {
+        if (!IsBotAuthorized()) return Unauthorized(new { error = "Invalid bot secret" });
+        if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.ExternalId))
+            return BadRequest(new { error = "code and external_id are required" });
+
+        var result = await _db.ConsumeLinkCode(req.Code.Trim().ToUpper());
+        if (result is null)
+            return BadRequest(new { error = "Code is invalid, expired, or already used" });
+
+        var (userId, provider) = result.Value;
+        var identity = await _db.AddIdentity(userId, provider, req.ExternalId.Trim(), req.ExternalUsername?.Trim());
+        return Ok(new { ok = true, user_id = userId, provider, identity });
+    }
+}

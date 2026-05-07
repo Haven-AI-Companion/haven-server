@@ -229,6 +229,14 @@ select.form-input{cursor:pointer}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
         MCP Servers
       </button>
+      <button class="nav-item" data-tab="channels" data-title="Chat Channels" data-sub="External chat channel permissions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Chat Channels
+      </button>
+      <button class="nav-item" data-tab="audit" data-title="Audit Log" data-sub="External chat activity log">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Audit Log
+      </button>
       <div class="nav-section">System</div>
       <button class="nav-item" data-tab="config" data-title="Configuration" data-sub="Server settings and AI defaults">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
@@ -404,6 +412,51 @@ select.form-input{cursor:pointer}
             <tbody></tbody>
           </table>
         </div>
+
+        <!-- External Identity Links -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">External Identity Links
+            <button class="btn btn-sm btn-primary" onclick="toggleLinkForm()">+ Link Account</button>
+          </div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:12px">
+            Link external chat accounts (Discord, Slack, etc.) to ash-server users so chat permissions follow their assigned roles.
+          </p>
+          <div id="link-add-form" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:16px">
+            <div style="font-weight:600;font-size:14px;margin-bottom:12px">Link External Account</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">User</label>
+                <select id="link-user-id" class="form-input"></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Provider</label>
+                <select id="link-provider" class="form-input">
+                  <option value="discord">Discord</option>
+                  <option value="slack">Slack</option>
+                  <option value="telegram">Telegram</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">External ID</label>
+                <input type="text" id="link-external-id" class="form-input" placeholder="e.g. 123456789012345678">
+              </div>
+              <div class="form-group">
+                <label class="form-label">External Username <span class="txt-muted">(optional)</span></label>
+                <input type="text" id="link-external-username" class="form-input" placeholder="e.g. username#1234">
+              </div>
+            </div>
+            <div id="link-form-status" style="font-size:12px;margin-top:4px;min-height:16px"></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-primary" onclick="saveLinkIdentity()">Link Account</button>
+              <button class="btn" onclick="closeLinkForm()">Cancel</button>
+            </div>
+          </div>
+          <table class="data-table" id="identities-table">
+            <thead><tr><th>User</th><th>Provider</th><th>External ID</th><th>External Username</th><th>Linked</th><th></th></tr></thead>
+            <tbody><tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading...</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- AI Backends -->
@@ -555,6 +608,107 @@ select.form-input{cursor:pointer}
       </div>
 
       <!-- Configuration -->
+      <div class="tab-content" id="channels">
+        <div class="card">
+          <div class="card-title">Chat Channel Configurations
+            <button class="btn btn-sm btn-primary" onclick="toggleChannelForm()">+ Add Channel</button>
+          </div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:12px">
+            Configure which external chat channels (Discord, Slack, etc.) can interact with Ash, and what permissions unlinked users get.
+          </p>
+
+          <!-- Add/Edit form -->
+          <div id="channel-add-form" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:16px">
+            <div id="channel-form-title" style="font-weight:600;font-size:14px;margin-bottom:12px">New Channel Config</div>
+            <input type="hidden" id="channel-edit-id" value="">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Provider</label>
+                <select id="channel-provider" class="form-input">
+                  <option value="discord">Discord</option>
+                  <option value="slack">Slack</option>
+                  <option value="telegram">Telegram</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Channel ID</label>
+                <input type="text" id="channel-channel-id" class="form-input" placeholder="e.g. 1234567890">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Guild / Server ID <span class="txt-muted">(optional)</span></label>
+                <input type="text" id="channel-guild-id" class="form-input" placeholder="e.g. 9876543210">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Label <span class="txt-muted">(optional)</span></label>
+                <input type="text" id="channel-label" class="form-input" placeholder="e.g. #ash-chat">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Enabled</label>
+                <select id="channel-enabled" class="form-input">
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Allow Unlinked Users</label>
+                <select id="channel-allow-unlinked" class="form-input">
+                  <option value="false">No — must link account</option>
+                  <option value="true">Yes — use fallback role</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Unlinked User Role</label>
+                <select id="channel-unlinked-role" class="form-input">
+                  <option value="">None (no permissions)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Agent / Tool-Calling Enabled</label>
+                <select id="channel-agent-enabled" class="form-input">
+                  <option value="true">Yes</option>
+                  <option value="false">No — chat only</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Max Agent Turns</label>
+                <input type="number" id="channel-max-turns" class="form-input" value="5" min="1" max="50">
+              </div>
+            </div>
+            <div id="channel-form-status" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-primary" onclick="saveChannelConfig()">Save Channel</button>
+              <button class="btn" onclick="closeChannelForm()">Cancel</button>
+            </div>
+          </div>
+
+          <div id="channel-list"><div class="empty"><div class="empty-icon">💬</div>No channel configs. Add one to enable external chat integrations.</div></div>
+        </div>
+      </div>
+
+      <!-- Audit Log -->
+      <div class="tab-content" id="audit">
+        <div class="card">
+          <div class="card-title">Chat Audit Log
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="audit-provider-filter" class="form-input" style="width:140px;padding:4px 8px;font-size:12px" onchange="loadAudit()">
+                <option value="">All providers</option>
+                <option value="discord">Discord</option>
+                <option value="slack">Slack</option>
+              </select>
+              <button class="btn btn-sm" onclick="loadAudit()">Refresh</button>
+            </div>
+          </div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:12px">All external chat interactions are logged here for security review.</p>
+          <div id="audit-list"><div class="empty"><div class="empty-icon">📋</div>No audit log entries yet.</div></div>
+        </div>
+      </div>
+
+      <!-- Configuration -->
       <div class="tab-content" id="config">
         <div class="card">
           <div class="card-title">Available Models <button class="btn btn-sm" onclick="loadOllamaModels()">Refresh</button></div>
@@ -664,7 +818,7 @@ function toast(msg, type = 'success', duration = 3500) {
       if (d.require_auth && token === 'noauth') { window.location.href = '/'; return; }
     }
   } catch {}
-  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles();
+  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles(); loadAllIdentities(); loadChannels();
   const raw = token !== 'noauth' ? token.split('.')[1] : null;
   if (raw) {
     try {
@@ -687,6 +841,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     document.getElementById(tab).classList.add('active');
     document.getElementById('page-title').textContent = btn.dataset.title || tab;
     document.getElementById('page-sub').textContent   = btn.dataset.sub  || '';
+    if (tab === 'audit') loadAudit();
   });
 });
 
@@ -1510,6 +1665,258 @@ async function deleteBackend(id) {
     await fetch(`/api/admin/backends/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
     toast('Backend deleted'); loadBackends();
   } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+/* ── External Identity Links ─────────────────────────────────────────────── */
+
+let allUsers = [];
+
+async function loadAllIdentities() {
+  try {
+    const [usersResp] = await Promise.all([
+      fetch('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    const usersData = await usersResp.json();
+    allUsers = usersData.users ?? [];
+
+    // Populate user dropdowns
+    const sel = document.getElementById('link-user-id');
+    if (sel) sel.innerHTML = allUsers.map(u => `<option value="${u.id}">${escHtml(u.username)} (#${u.id})</option>`).join('');
+
+    // Fetch and render identities for all users
+    const allIdentities = [];
+    for (const u of allUsers) {
+      const r = await fetch(`/api/admin/users/${u.id}/identities`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) {
+        const d = await r.json();
+        (d.identities ?? []).forEach(i => allIdentities.push({ ...i, _username: u.username }));
+      }
+    }
+    renderIdentitiesTable(allIdentities);
+  } catch (err) { console.error('loadAllIdentities:', err); }
+}
+
+function renderIdentitiesTable(identities) {
+  const tbody = document.querySelector('#identities-table tbody');
+  if (!tbody) return;
+  if (!identities.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No linked identities. Link an external account above.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = identities.map(i => `<tr>
+    <td>${escHtml(i._username ?? String(i.user_id))}</td>
+    <td><span class="badge">${escHtml(i.provider)}</span></td>
+    <td class="mono txt-muted" style="font-size:12px">${escHtml(i.external_id)}</td>
+    <td class="txt-muted">${escHtml(i.external_username ?? '—')}</td>
+    <td class="txt-muted">${i.linked_at ? new Date(i.linked_at).toLocaleDateString() : '—'}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="unlinkIdentity(${i.id})">Unlink</button></td>
+  </tr>`).join('');
+}
+
+function toggleLinkForm() {
+  const f = document.getElementById('link-add-form');
+  f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+function closeLinkForm() { document.getElementById('link-add-form').style.display = 'none'; }
+
+async function saveLinkIdentity() {
+  const userId   = document.getElementById('link-user-id').value;
+  const provider = document.getElementById('link-provider').value;
+  const extId    = document.getElementById('link-external-id').value.trim();
+  const extUser  = document.getElementById('link-external-username').value.trim();
+  const status   = document.getElementById('link-form-status');
+
+  if (!extId) { status.textContent = 'External ID is required.'; status.style.color = 'var(--error)'; return; }
+  status.textContent = 'Linking…'; status.style.color = '';
+
+  try {
+    const resp = await fetch(`/api/admin/users/${userId}/identities`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, external_id: extId, external_username: extUser || null }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { status.textContent = data.error ?? 'Failed'; status.style.color = 'var(--error)'; return; }
+    toast('Identity linked');
+    closeLinkForm();
+    document.getElementById('link-external-id').value = '';
+    document.getElementById('link-external-username').value = '';
+    loadAllIdentities();
+  } catch (err) { status.textContent = err.message; status.style.color = 'var(--error)'; }
+}
+
+async function unlinkIdentity(id) {
+  if (!confirm('Remove this identity link?')) return;
+  try {
+    await fetch(`/api/admin/identities/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    toast('Identity unlinked');
+    loadAllIdentities();
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+/* ── Chat Channels ───────────────────────────────────────────────────────── */
+
+let channelRoles = [];
+
+async function loadChannels() {
+  try {
+    const resp = await fetch('/api/admin/channels', { headers: { Authorization: `Bearer ${token}` } });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    channelRoles = data.roles ?? [];
+
+    // Populate unlinked role dropdown
+    const sel = document.getElementById('channel-unlinked-role');
+    if (sel) {
+      sel.innerHTML = '<option value="">None (no permissions)</option>' +
+        channelRoles.map(r => `<option value="${r.id}">${escHtml(r.name)}</option>`).join('');
+    }
+
+    renderChannelList(data.channels ?? []);
+  } catch (err) { console.error('loadChannels:', err); }
+}
+
+function renderChannelList(channels) {
+  const el = document.getElementById('channel-list');
+  if (!channels.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">💬</div>No channel configs. Add one to enable external chat integrations.</div>';
+    return;
+  }
+  el.innerHTML = channels.map(c => {
+    const roleName = channelRoles.find(r => r.id === c.unlinked_role_id)?.name ?? 'None';
+    return `<div class="card" style="margin-bottom:8px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:600;font-size:14px">${escHtml(c.label || c.channel_id)}</div>
+          <div class="txt-muted" style="font-size:12px;margin-top:2px">
+            <span class="badge">${escHtml(c.provider)}</span>
+            Channel: <code class="mono">${escHtml(c.channel_id)}</code>
+            ${c.guild_id ? ` · Guild: <code class="mono">${escHtml(c.guild_id)}</code>` : ''}
+          </div>
+          <div style="font-size:12px;margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
+            <span>${c.enabled ? '✅ Enabled' : '❌ Disabled'}</span>
+            <span>${c.allow_unlinked ? `🔓 Unlinked: ${escHtml(roleName)}` : '🔒 Must link account'}</span>
+            <span>${c.agent_enabled ? `🤖 Agent (max ${c.max_turns} turns)` : '💬 Chat only'}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-sm" onclick="editChannel(${JSON.stringify(c).replace(/"/g, '&quot;')})">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteChannel(${c.id})">Delete</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleChannelForm() {
+  const f = document.getElementById('channel-add-form');
+  if (f.style.display === 'none') {
+    f.style.display = '';
+    document.getElementById('channel-form-title').textContent = 'New Channel Config';
+    document.getElementById('channel-edit-id').value = '';
+    document.getElementById('channel-provider').value = 'discord';
+    document.getElementById('channel-channel-id').value = '';
+    document.getElementById('channel-guild-id').value = '';
+    document.getElementById('channel-label').value = '';
+    document.getElementById('channel-enabled').value = 'true';
+    document.getElementById('channel-allow-unlinked').value = 'false';
+    document.getElementById('channel-unlinked-role').value = '';
+    document.getElementById('channel-agent-enabled').value = 'true';
+    document.getElementById('channel-max-turns').value = '5';
+    document.getElementById('channel-form-status').textContent = '';
+  } else {
+    f.style.display = 'none';
+  }
+}
+
+function closeChannelForm() { document.getElementById('channel-add-form').style.display = 'none'; }
+
+function editChannel(c) {
+  document.getElementById('channel-add-form').style.display = '';
+  document.getElementById('channel-form-title').textContent = 'Edit Channel Config';
+  document.getElementById('channel-edit-id').value = c.id;
+  document.getElementById('channel-provider').value = c.provider;
+  document.getElementById('channel-channel-id').value = c.channel_id;
+  document.getElementById('channel-guild-id').value = c.guild_id ?? '';
+  document.getElementById('channel-label').value = c.label ?? '';
+  document.getElementById('channel-enabled').value = String(c.enabled);
+  document.getElementById('channel-allow-unlinked').value = String(c.allow_unlinked);
+  document.getElementById('channel-unlinked-role').value = c.unlinked_role_id ?? '';
+  document.getElementById('channel-agent-enabled').value = String(c.agent_enabled);
+  document.getElementById('channel-max-turns').value = c.max_turns;
+  document.getElementById('channel-form-status').textContent = '';
+  document.getElementById('channel-add-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function saveChannelConfig() {
+  const editId = document.getElementById('channel-edit-id').value;
+  const status = document.getElementById('channel-form-status');
+  const body = {
+    provider:         document.getElementById('channel-provider').value,
+    channel_id:       document.getElementById('channel-channel-id').value.trim(),
+    guild_id:         document.getElementById('channel-guild-id').value.trim() || null,
+    label:            document.getElementById('channel-label').value.trim() || null,
+    enabled:          document.getElementById('channel-enabled').value === 'true',
+    allow_unlinked:   document.getElementById('channel-allow-unlinked').value === 'true',
+    unlinked_role_id: document.getElementById('channel-unlinked-role').value ? parseInt(document.getElementById('channel-unlinked-role').value) : null,
+    agent_enabled:    document.getElementById('channel-agent-enabled').value === 'true',
+    max_turns:        parseInt(document.getElementById('channel-max-turns').value) || 5,
+  };
+  if (!body.channel_id) { status.textContent = 'Channel ID is required.'; status.style.color = 'var(--error)'; return; }
+  if (editId) body.id = parseInt(editId);
+
+  status.textContent = 'Saving…'; status.style.color = '';
+  try {
+    const resp = await fetch('/api/admin/channels', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { status.textContent = data.error ?? 'Failed'; status.style.color = 'var(--error)'; return; }
+    toast(editId ? 'Channel updated' : 'Channel added');
+    closeChannelForm();
+    loadChannels();
+  } catch (err) { status.textContent = err.message; status.style.color = 'var(--error)'; }
+}
+
+async function deleteChannel(id) {
+  if (!confirm('Delete this channel config?')) return;
+  try {
+    await fetch(`/api/admin/channels/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    toast('Channel deleted');
+    loadChannels();
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+/* ── Audit Log ───────────────────────────────────────────────────────────── */
+
+async function loadAudit() {
+  try {
+    const provider = document.getElementById('audit-provider-filter')?.value ?? '';
+    const url = '/api/admin/audit?limit=200' + (provider ? `&provider=${encodeURIComponent(provider)}` : '');
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const entries = data.entries ?? [];
+    const el = document.getElementById('audit-list');
+    if (!entries.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>No audit log entries yet.</div>';
+      return;
+    }
+    el.innerHTML = `<table class="data-table">
+      <thead><tr><th>Time</th><th>Provider</th><th>Channel</th><th>External User</th><th>Ash User</th><th>Action</th><th>Detail</th></tr></thead>
+      <tbody>${entries.map(e => `<tr>
+        <td class="txt-muted" style="font-size:11px;white-space:nowrap">${new Date(e.timestamp).toLocaleString()}</td>
+        <td><span class="badge">${escHtml(e.provider)}</span></td>
+        <td class="mono txt-muted" style="font-size:11px">${escHtml(e.channel_id)}</td>
+        <td class="txt-muted" style="font-size:12px">${escHtml(e.external_username ?? e.external_id)}</td>
+        <td class="txt-muted" style="font-size:12px">${e.user_id ? `#${e.user_id}` : '<em>unlinked</em>'}</td>
+        <td><span class="badge badge-muted">${escHtml(e.action)}</span></td>
+        <td class="txt-muted" style="font-size:11px">${escHtml(e.detail ?? '')}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch (err) { console.error('loadAudit:', err); }
 }
 </script>
 </body>

@@ -103,7 +103,59 @@ public class Database
                 enabled    INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT    DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS external_identities (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                provider          TEXT    NOT NULL,
+                external_id       TEXT    NOT NULL,
+                external_username TEXT,
+                linked_at         TEXT    DEFAULT (datetime('now')),
+                UNIQUE(provider, external_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS channel_configs (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider         TEXT    NOT NULL,
+                guild_id         TEXT,
+                channel_id       TEXT    NOT NULL,
+                label            TEXT,
+                enabled          INTEGER NOT NULL DEFAULT 1,
+                allow_unlinked   INTEGER NOT NULL DEFAULT 0,
+                unlinked_role_id INTEGER REFERENCES roles(id) ON DELETE SET NULL,
+                agent_enabled    INTEGER NOT NULL DEFAULT 1,
+                max_turns        INTEGER NOT NULL DEFAULT 10,
+                tool_allowlist   TEXT    NOT NULL DEFAULT '[]',
+                created_at       TEXT    DEFAULT (datetime('now')),
+                UNIQUE(provider, channel_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_audit_log (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider        TEXT    NOT NULL,
+                channel_id      TEXT    NOT NULL,
+                external_id     TEXT    NOT NULL,
+                external_username TEXT,
+                user_id         INTEGER,
+                action          TEXT    NOT NULL,
+                detail          TEXT,
+                created_at      TEXT    DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS link_codes (
+                code       TEXT    PRIMARY KEY,
+                user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                provider   TEXT    NOT NULL,
+                expires_at TEXT    NOT NULL,
+                used       INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_ext_identities_user     ON external_identities(user_id);
+            CREATE INDEX IF NOT EXISTS idx_ext_identities_provider ON external_identities(provider, external_id);
+            CREATE INDEX IF NOT EXISTS idx_channel_configs_provider ON channel_configs(provider, channel_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_log_channel        ON chat_audit_log(provider, channel_id, created_at);
             """;
+
         cmd.ExecuteNonQuery();
 
         SeedSystemRoles(conn);
@@ -750,4 +802,205 @@ public class Database
         r.GetInt32(0), r.GetString(1), r.GetString(2), r.GetString(3),
         r.IsDBNull(4) ? null : r.GetString(4),
         r.GetInt32(5) == 1, r.GetString(6));
+
+    // ── External Identities ────────────────────────────────────────────────
+
+    private static AshServer.Models.ExternalIdentity MapIdentity(SqliteDataReader r) => new(
+        r.GetInt32(0), r.GetInt32(1), r.GetString(2), r.GetString(3),
+        r.IsDBNull(4) ? null : r.GetString(4), r.GetString(5));
+
+    public Task<List<AshServer.Models.ExternalIdentity>> GetIdentitiesForUser(int userId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, user_id, provider, external_id, external_username, linked_at FROM external_identities WHERE user_id = $uid ORDER BY linked_at";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        using var r = cmd.ExecuteReader();
+        var list = new List<AshServer.Models.ExternalIdentity>();
+        while (r.Read()) list.Add(MapIdentity(r));
+        return list;
+    });
+
+    public Task<AshServer.Models.ExternalIdentity?> GetIdentityByExternal(string provider, string externalId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, user_id, provider, external_id, external_username, linked_at FROM external_identities WHERE provider = $p AND external_id = $e";
+        cmd.Parameters.AddWithValue("$p", provider);
+        cmd.Parameters.AddWithValue("$e", externalId);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? MapIdentity(r) : (AshServer.Models.ExternalIdentity?)null;
+    });
+
+    public Task<AshServer.Models.ExternalIdentity> AddIdentity(int userId, string provider, string externalId, string? externalUsername) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO external_identities (user_id, provider, external_id, external_username)
+            VALUES ($uid, $p, $e, $un)
+            ON CONFLICT(provider, external_id) DO UPDATE SET user_id=$uid, external_username=$un
+            RETURNING id, user_id, provider, external_id, external_username, linked_at
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$p",   provider);
+        cmd.Parameters.AddWithValue("$e",   externalId);
+        cmd.Parameters.AddWithValue("$un",  (object?)externalUsername ?? DBNull.Value);
+        using var r = cmd.ExecuteReader();
+        r.Read();
+        return MapIdentity(r);
+    });
+
+    public Task RemoveIdentity(int id) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM external_identities WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    // ── Channel Configs ────────────────────────────────────────────────────
+
+    private static AshServer.Models.ChannelConfig MapChannelConfig(SqliteDataReader r) => new(
+        r.GetInt32(0), r.GetString(1),
+        r.IsDBNull(2) ? null : r.GetString(2),
+        r.GetString(3),
+        r.IsDBNull(4) ? null : r.GetString(4),
+        r.GetInt32(5) == 1, r.GetInt32(6) == 1,
+        r.IsDBNull(7) ? null : r.GetInt32(7),
+        r.GetInt32(8) == 1, r.GetInt32(9),
+        System.Text.Json.JsonSerializer.Deserialize<List<string>>(r.GetString(10)) ?? [],
+        r.GetString(11));
+
+    public Task<List<AshServer.Models.ChannelConfig>> GetChannelConfigs() => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, provider, guild_id, channel_id, label, enabled, allow_unlinked, unlinked_role_id, agent_enabled, max_turns, tool_allowlist, created_at FROM channel_configs ORDER BY provider, channel_id";
+        using var r = cmd.ExecuteReader();
+        var list = new List<AshServer.Models.ChannelConfig>();
+        while (r.Read()) list.Add(MapChannelConfig(r));
+        return list;
+    });
+
+    public Task<AshServer.Models.ChannelConfig?> GetChannelConfig(string provider, string channelId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, provider, guild_id, channel_id, label, enabled, allow_unlinked, unlinked_role_id, agent_enabled, max_turns, tool_allowlist, created_at FROM channel_configs WHERE provider = $p AND channel_id = $c";
+        cmd.Parameters.AddWithValue("$p", provider);
+        cmd.Parameters.AddWithValue("$c", channelId);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? MapChannelConfig(r) : (AshServer.Models.ChannelConfig?)null;
+    });
+
+    public Task<AshServer.Models.ChannelConfig> UpsertChannelConfig(AshServer.Models.ChannelConfig cfg) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO channel_configs (provider, guild_id, channel_id, label, enabled, allow_unlinked, unlinked_role_id, agent_enabled, max_turns, tool_allowlist)
+            VALUES ($p, $g, $c, $lbl, $en, $au, $ur, $ae, $mt, $ta)
+            ON CONFLICT(provider, channel_id) DO UPDATE SET
+                guild_id=$g, label=$lbl, enabled=$en, allow_unlinked=$au,
+                unlinked_role_id=$ur, agent_enabled=$ae, max_turns=$mt, tool_allowlist=$ta
+            RETURNING id, provider, guild_id, channel_id, label, enabled, allow_unlinked, unlinked_role_id, agent_enabled, max_turns, tool_allowlist, created_at
+            """;
+        cmd.Parameters.AddWithValue("$p",   cfg.Provider);
+        cmd.Parameters.AddWithValue("$g",   (object?)cfg.GuildId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$c",   cfg.ChannelId);
+        cmd.Parameters.AddWithValue("$lbl", (object?)cfg.Label ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$en",  cfg.Enabled ? 1 : 0);
+        cmd.Parameters.AddWithValue("$au",  cfg.AllowUnlinked ? 1 : 0);
+        cmd.Parameters.AddWithValue("$ur",  (object?)cfg.UnlinkedRoleId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$ae",  cfg.AgentEnabled ? 1 : 0);
+        cmd.Parameters.AddWithValue("$mt",  cfg.MaxTurns);
+        cmd.Parameters.AddWithValue("$ta",  System.Text.Json.JsonSerializer.Serialize(cfg.ToolAllowlist));
+        using var r = cmd.ExecuteReader();
+        r.Read();
+        return MapChannelConfig(r);
+    });
+
+    public Task DeleteChannelConfig(int id) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM channel_configs WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    // ── Audit Log ──────────────────────────────────────────────────────────
+
+    public Task AddAuditEntry(string provider, string channelId, string externalId, string? externalUsername, int? userId, string action, string? detail = null) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO chat_audit_log (provider, channel_id, external_id, external_username, user_id, action, detail)
+            VALUES ($p, $c, $e, $un, $uid, $act, $det)
+            """;
+        cmd.Parameters.AddWithValue("$p",   provider);
+        cmd.Parameters.AddWithValue("$c",   channelId);
+        cmd.Parameters.AddWithValue("$e",   externalId);
+        cmd.Parameters.AddWithValue("$un",  (object?)externalUsername ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$uid", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$act", action);
+        cmd.Parameters.AddWithValue("$det", (object?)detail ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<List<AshServer.Models.AuditEntry>> GetAuditLog(string? provider = null, string? channelId = null, int limit = 100) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        var where = new List<string>();
+        if (provider  != null) { where.Add("provider = $p");    cmd.Parameters.AddWithValue("$p", provider); }
+        if (channelId != null) { where.Add("channel_id = $c");  cmd.Parameters.AddWithValue("$c", channelId); }
+        cmd.CommandText = $"SELECT id, provider, channel_id, external_id, external_username, user_id, action, detail, created_at FROM chat_audit_log{(where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : "")} ORDER BY created_at DESC LIMIT $lim";
+        cmd.Parameters.AddWithValue("$lim", limit);
+        using var r = cmd.ExecuteReader();
+        var list = new List<AshServer.Models.AuditEntry>();
+        while (r.Read()) list.Add(new AshServer.Models.AuditEntry(
+            r.GetInt32(0), r.GetString(1), r.GetString(2), r.GetString(3),
+            r.IsDBNull(4) ? null : r.GetString(4),
+            r.IsDBNull(5) ? null : r.GetInt32(5),
+            r.GetString(6), r.IsDBNull(7) ? null : r.GetString(7), r.GetString(8)));
+        return list;
+    });
+
+    // ── Link Codes ─────────────────────────────────────────────────────────
+
+    public Task SaveLinkCode(string code, int userId, string provider, DateTime expiresAt) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "INSERT OR REPLACE INTO link_codes (code, user_id, provider, expires_at) VALUES ($code, $uid, $p, $exp)";
+        cmd.Parameters.AddWithValue("$code", code);
+        cmd.Parameters.AddWithValue("$uid",  userId);
+        cmd.Parameters.AddWithValue("$p",    provider);
+        cmd.Parameters.AddWithValue("$exp",  expiresAt.ToString("o"));
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<(int UserId, string Provider)?> ConsumeLinkCode(string code) => Task.Run<(int, string)?>(() =>
+    {
+        using var conn = Open();
+        using var sel  = conn.CreateCommand();
+        sel.CommandText = "SELECT user_id, provider, expires_at, used FROM link_codes WHERE code = $code";
+        sel.Parameters.AddWithValue("$code", code);
+        using var r = sel.ExecuteReader();
+        if (!r.Read()) return null;
+        if (r.GetInt32(3) == 1) return null;
+        if (DateTime.Parse(r.GetString(2)) < DateTime.UtcNow) return null;
+        var uid = r.GetInt32(0);
+        var prov = r.GetString(1);
+        r.Close();
+        using var upd = conn.CreateCommand();
+        upd.CommandText = "UPDATE link_codes SET used = 1 WHERE code = $code";
+        upd.Parameters.AddWithValue("$code", code);
+        upd.ExecuteNonQuery();
+        return (uid, prov);
+    });
 }
