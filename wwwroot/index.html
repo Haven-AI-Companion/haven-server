@@ -795,14 +795,26 @@ function connectWebSocket() {
 }
 
 // ── Sending ────────────────────────────────────────────────────────────────
+function buildFileContext(attachments) {
+  const textFiles = attachments.filter(a => !a.isImage && a.textContent);
+  if (!textFiles.length) return '';
+  return '\n\n' + textFiles.map(a => {
+    const ext = a.name.split('.').pop().toLowerCase();
+    const lang = { py:'python', js:'javascript', ts:'typescript', cs:'csharp', json:'json', html:'html', css:'css', sql:'sql', md:'markdown', sh:'bash', ps1:'powershell' }[ext] || ext;
+    return `<file name="${a.name}">\n\`\`\`${lang}\n${a.textContent}\n\`\`\`\n</file>`;
+  }).join('\n\n');
+}
+
 function sendMessage() {
   const field = document.getElementById('input-field');
   const text = field.value.trim();
   if ((!text && pendingAttachments.length === 0) || isStreaming || !ws || ws.readyState !== WebSocket.OPEN) return;
   hideWelcome();
 
-  // Build user display (images + text)
   const imageBase64List = pendingAttachments.filter(a => a.isImage).map(a => a.base64);
+  const fileContext = buildFileContext(pendingAttachments);
+
+  // Display: show user's typed text + image previews (not raw file context)
   appendMessage('user', text, false, imageBase64List);
 
   field.value = ''; autoResize(field);
@@ -814,8 +826,11 @@ function sendMessage() {
   agentStepsEl = null;
   updateSendBtn();
   scrollBottom();
+
+  // Send: include file content appended to message for AI context
+  const fullContent = fileContext ? (text + fileContext) : text;
   const agentMode = document.getElementById('agent-mode-toggle')?.checked || false;
-  const payload = { content: text, model: selectedModel, conversation_id: activeConvId, agent_mode: agentMode };
+  const payload = { content: fullContent, model: selectedModel, conversation_id: activeConvId, agent_mode: agentMode };
   if (imageBase64List.length > 0) payload.images = imageBase64List;
   ws.send(JSON.stringify(payload));
 }
@@ -1112,9 +1127,28 @@ async function addAttachment(file) {
   toast('Uploading ' + file.name + '…', '');
   const result = await uploadFile(file);
   if (!result) return;
-  pendingAttachments.push({ base64: result.base64, url: result.url, isImage: result.is_image, name: file.name });
+  pendingAttachments.push({
+    base64: result.base64,
+    textContent: result.text_content ?? null,
+    url: result.url,
+    isImage: result.is_image,
+    name: file.name,
+    size: result.size
+  });
   renderPreview();
   updateSendBtn();
+}
+
+function fileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const icons = { py:'🐍', js:'🟨', ts:'🔷', cs:'🔷', json:'📋', md:'📝', csv:'📊', html:'🌐', css:'🎨', sql:'🗄️' };
+  return icons[ext] || '📄';
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
 }
 
 function renderPreview() {
@@ -1131,7 +1165,13 @@ function renderPreview() {
     `<div class="preview-item">
       ${a.isImage
         ? `<img class="preview-thumb" src="data:image/jpeg;base64,${a.base64}" title="${escHtml(a.name)}">`
-        : `<div class="preview-file"><span>📄</span><span title="${escHtml(a.name)}">${escHtml(a.name)}</span></div>`
+        : `<div class="preview-file">
+            <span style="font-size:18px">${fileIcon(a.name)}</span>
+            <div style="min-width:0">
+              <div style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px" title="${escHtml(a.name)}">${escHtml(a.name)}</div>
+              <div style="font-size:10px;color:var(--text-muted)">${formatBytes(a.size)}${a.textContent ? '' : ' · no preview'}</div>
+            </div>
+          </div>`
       }
       <button class="preview-remove" onclick="removeAttachment(${i})">×</button>
     </div>`

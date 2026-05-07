@@ -190,12 +190,23 @@ public class ModelsController : ControllerBase
         var isImage = ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp";
         var url = $"/uploads/{safeName}";
 
-        // For images, also return base64 for vision models
         string? base64 = null;
+        string? textContent = null;
+
         if (isImage)
         {
             var bytes = await System.IO.File.ReadAllBytesAsync(fullPath);
             base64 = Convert.ToBase64String(bytes);
+        }
+        else if (IsTextFile(ext))
+        {
+            const int maxTextBytes = 100 * 1024;
+            using var fs = System.IO.File.OpenRead(fullPath);
+            var buffer = new byte[Math.Min(maxTextBytes, (int)fs.Length)];
+            var read = await fs.ReadAsync(buffer);
+            textContent = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
+            if (fs.Length > maxTextBytes)
+                textContent += $"\n\n[... file truncated at 100 KB, {fs.Length:N0} bytes total ...]";
         }
 
         return Ok(new
@@ -204,12 +215,20 @@ public class ModelsController : ControllerBase
             filename = file.FileName,
             size = file.Length,
             is_image = isImage,
-            base64
+            base64,
+            text_content = textContent
         });
     }
+
+    private static bool IsTextFile(string ext) =>
+        ext is ".txt" or ".md" or ".csv" or ".json" or ".yaml" or ".yml"
+            or ".py" or ".js" or ".ts" or ".jsx" or ".tsx"
+            or ".cs" or ".java" or ".go" or ".rs" or ".cpp" or ".c" or ".h"
+            or ".html" or ".css" or ".scss" or ".xml" or ".toml" or ".ini"
+            or ".sh" or ".bat" or ".ps1" or ".sql" or ".log" or ".env";
 }
 
-[ApiController]
+
 [Route("api/admin")]
 [Authorize]
 public class AdminController : ControllerBase
