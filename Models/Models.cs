@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace AshServer.Models;
 
 public record User(
@@ -85,4 +87,30 @@ public record ChatMessage(string Role, string Content, List<string>? Images = nu
 public record BackendCreateRequest(string Name, string Type, string BaseUrl, string? ApiKey);
 public record BackendUpdateRequest(string? Name, string? BaseUrl, string? ApiKey);
 public record AdminCreateUserRequest(string Username, string Email, string Password, bool IsAdmin = false);
+
+// ── MCP ────────────────────────────────────────────────────────────────────
+
+public class McpServerConfig
+{
+    public string Id      { get; init; } = "";
+    public string Name    { get; init; } = "";
+    public string Type    { get; init; } = "stdio"; // "stdio" | "http"
+    public string Command { get; init; } = "";
+    public List<string> Args { get; init; } = [];
+    public Dictionary<string, string> Env { get; init; } = new();
+    public string Url     { get; init; } = "";
+    public bool   Enabled { get; init; } = true;
+}
+
+public record McpTool(string Name, string Description, JsonElement InputSchema);
+
+public record McpServerInfo(
+    string Id,
+    string Name,
+    string Type,
+    bool Connected,
+    int ToolCount,
+    List<string> Tools,
+    string? LastError
+);
 

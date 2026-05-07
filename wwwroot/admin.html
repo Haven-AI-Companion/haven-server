@@ -225,6 +225,10 @@ select.form-input{cursor:pointer}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
         Plugins
       </button>
+      <button class="nav-item" data-tab="mcp" data-title="MCP Servers" data-sub="Model Context Protocol tool servers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+        MCP Servers
+      </button>
       <div class="nav-section">System</div>
       <button class="nav-item" data-tab="config" data-title="Configuration" data-sub="Server settings and AI defaults">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
@@ -485,6 +489,42 @@ select.form-input{cursor:pointer}
         </div>
       </div>
 
+      <!-- MCP Servers -->
+      <div class="tab-content" id="mcp">
+        <div class="card">
+          <div class="card-title">
+            MCP Servers
+            <button class="btn btn-sm" onclick="loadMcp()">↻ Refresh</button>
+          </div>
+          <div id="mcp-summary" style="margin-bottom:14px;font-size:13px;color:var(--text-muted)">Loading...</div>
+          <div id="mcp-list"><div class="empty"><div class="empty-icon">🔗</div>Loading...</div></div>
+          <div style="margin-top:14px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text-muted);line-height:1.7">
+            <strong style="color:var(--text)">How to add MCP servers</strong><br>
+            Edit <code>appsettings.json</code> (or <code>config.json</code>) and add entries to <code>Mcp.Servers</code>:<br><br>
+            <code style="display:block;white-space:pre;font-size:11px;color:var(--accent)">"Mcp": {
+  "Servers": [
+    {
+      "Id": "filesystem",
+      "Name": "Filesystem",
+      "Type": "stdio",
+      "Command": "npx",
+      "Args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allow"],
+      "Enabled": true
+    },
+    {
+      "Id": "my-http-server",
+      "Name": "My HTTP MCP Server",
+      "Type": "http",
+      "Url": "http://localhost:3000/mcp",
+      "Enabled": true
+    }
+  ]
+}</code><br>
+            Restart the server after editing to connect new MCP servers.
+          </div>
+        </div>
+      </div>
+
       <!-- Configuration -->
       <div class="tab-content" id="config">
         <div class="card">
@@ -595,7 +635,7 @@ function toast(msg, type = 'success', duration = 3500) {
       if (d.require_auth && token === 'noauth') { window.location.href = '/'; return; }
     }
   } catch {}
-  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadConfigToMenu(); loadRoles();
+  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles();
   const raw = token !== 'noauth' ? token.split('.')[1] : null;
   if (raw) {
     try {
@@ -968,7 +1008,39 @@ async function togglePlugin(id, currentlyEnabled) {
   } catch (err) { console.error('togglePlugin:', err); }
 }
 
-async function reloadPlugins() {
+async function loadMcp() {
+  const list    = document.getElementById('mcp-list');
+  const summary = document.getElementById('mcp-summary');
+  try {
+    const resp = await fetch('/api/mcp/servers', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await resp.json();
+    const servers = data.servers || [];
+    summary.innerHTML = servers.length
+      ? `<strong>${data.connected}</strong> of <strong>${data.total}</strong> server(s) connected &mdash; <strong>${data.total_tools}</strong> tool(s) available`
+      : 'No MCP servers configured. See instructions below.';
+    if (!servers.length) {
+      list.innerHTML = '<div class="empty"><div class="empty-icon">🔗</div>No MCP servers configured.</div>';
+      return;
+    }
+    list.innerHTML = servers.map(s => `
+      <div class="backend-card">
+        <div class="backend-info">
+          <div class="backend-name">${esc(s.name || s.id)}
+            <span class="badge ${s.connected ? 'badge-success' : 'badge-muted'}" style="margin-left:8px">${s.connected ? 'Connected' : 'Disconnected'}</span>
+            <span class="badge badge-muted" style="margin-left:4px">${esc(s.type)}</span>
+          </div>
+          <div class="backend-meta" style="margin-top:4px">
+            ${s.tool_count} tool(s)${s.tools?.length ? ': ' + s.tools.map(t => `<code style="font-size:10px">${esc(t)}</code>`).join(', ') : ''}
+          </div>
+          ${s.last_error ? `<div class="backend-meta" style="color:var(--error);margin-top:3px">✕ ${esc(s.last_error)}</div>` : ''}
+        </div>
+      </div>`).join('');
+  } catch (err) {
+    list.innerHTML = `<div class="empty txt-error">Failed to load: ${err.message}</div>`;
+  }
+}
+
+
   try {
     await fetch('/api/admin/plugins/reload', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     await loadPlugins();

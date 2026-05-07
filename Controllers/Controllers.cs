@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using AshServer.Auth;
 using AshServer.Data;
+using AshServer.Mcp;
 using AshServer.Models;
 using System.Security.Claims;
 
@@ -643,5 +644,31 @@ public class AdminController : ControllerBase
         if (roleId == 1) return BadRequest(new { error = "Cannot remove the default 'user' role" });
         await _db.RemoveRole(userId, roleId);
         return Ok(new { ok = true });
+    }
+}
+
+// ── MCP Controller ─────────────────────────────────────────────────────────
+
+[ApiController]
+[Route("api/mcp")]
+[Authorize]
+public class McpController : ControllerBase
+{
+    private readonly McpManager _mcp;
+
+    public McpController(McpManager mcp) => _mcp = mcp;
+
+    /// <summary>Lists all configured MCP servers and their connection status/tools.</summary>
+    [HttpGet("servers")]
+    public IActionResult ListServers()
+    {
+        var servers = _mcp.GetServerInfos();
+        return Ok(new
+        {
+            servers,
+            total       = servers.Count,
+            connected   = servers.Count(s => s.Connected),
+            total_tools = servers.Sum(s => s.ToolCount)
+        });
     }
 }

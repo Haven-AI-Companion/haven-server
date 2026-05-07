@@ -7,6 +7,7 @@ using AshServer.Agent;
 using AshServer.AI;
 using AshServer.Auth;
 using AshServer.Data;
+using AshServer.Mcp;
 using AshServer.Models;
 using AshServer.Personality;
 using AshServer.Plugins;
@@ -27,16 +28,18 @@ public class ChatHandler
     private readonly PersonalityLoader _personality;
     private readonly IConfiguration _config;
     private readonly PluginManager _plugins;
-    private readonly IMemoryCache _convCache;
+    private readonly McpManager    _mcp;
+    private readonly IMemoryCache  _convCache;
 
     public ChatHandler(Database db, BackendManager backends, PersonalityLoader personality,
-        IConfiguration config, PluginManager plugins, IMemoryCache convCache)
+        IConfiguration config, PluginManager plugins, McpManager mcp, IMemoryCache convCache)
     {
         _db = db;
         _backends = backends;
         _personality = personality;
         _config = config;
         _plugins = plugins;
+        _mcp = mcp;
         _convCache = convCache;
     }
 
@@ -157,7 +160,7 @@ public class ChatHandler
                         if (agentMode)
                         {
                             var (backend, modelName) = await _backends.Resolve(modelId);
-                            var runner = new AgentRunner(backend, modelName, _plugins);
+                            var runner = new AgentRunner(backend, modelName, _plugins, _mcp);
                             await foreach (var evt in runner.Run(messages).WithCancellation(cts.Token))
                             {
                                 switch (evt.Type)

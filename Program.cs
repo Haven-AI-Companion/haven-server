@@ -8,6 +8,7 @@ using AshServer.AI;
 using AshServer.Auth;
 using AshServer.Chat;
 using AshServer.Data;
+using AshServer.Mcp;
 using AshServer.Personality;
 using AshServer.Plugins;
 
@@ -15,7 +16,7 @@ namespace AshServer;
 
 public class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +44,7 @@ public class Program
         builder.Services.AddSingleton(backendManager);
 
         builder.Services.AddSingleton<AshServer.Plugins.PluginManager>();
+        builder.Services.AddSingleton<McpManager>();
         builder.Services.AddSingleton<AuthService>();
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<ChatHandler>();
@@ -86,6 +88,10 @@ public class Program
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+
+        // Initialize MCP servers (non-fatal — server starts even if MCP servers fail)
+        var mcpManager = app.Services.GetRequiredService<McpManager>();
+        await mcpManager.InitializeAsync();
 
         // ── WebSocket endpoint ──────────────────────────────────────────────
         app.Map("/ws/{sessionId}", async (HttpContext ctx, string sessionId, ChatHandler chat, Database dbSvc) =>

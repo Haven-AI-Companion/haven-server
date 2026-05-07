@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AshServer.AI;
+using AshServer.Mcp;
 using AshServer.Models;
 using AshServer.Plugins;
 
@@ -22,15 +23,17 @@ public class AgentRunner
     private readonly IAiBackend _backend;
     private readonly string _model;
     private readonly PluginManager? _plugins;
+    private readonly McpManager?    _mcp;
 
-    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null)
+    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null)
     {
         _backend = backend;
         _model   = model;
         _plugins = plugins;
+        _mcp     = mcp;
     }
 
-    /// Merge built-in tool definitions with enabled plugin tools.
+    /// Merge built-in tool definitions with enabled plugin tools and MCP tools.
     private JsonElement BuildToolDefinitions()
     {
         var builtins = JsonSerializer.Deserialize<List<JsonElement>>(
@@ -54,11 +57,35 @@ public class AgentRunner
             }
         }
 
+        if (_mcp != null)
+        {
+            var mcpTools = _mcp.GetToolDefinitions();
+            if (mcpTools.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in mcpTools.EnumerateArray())
+                {
+                    var name = t.TryGetProperty("function", out var f) &&
+                               f.TryGetProperty("name", out var n) ? n.GetString() : null;
+                    // MCP tools take precedence over builtins only if names collide;
+                    // add if not already present
+                    if (name != null && !builtins.Any(b =>
+                        b.TryGetProperty("function", out var bf) &&
+                        bf.TryGetProperty("name", out var bn) &&
+                        bn.GetString() == name))
+                        builtins.Add(t);
+                }
+            }
+        }
+
         return JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(builtins));
     }
 
     private async Task<string> DispatchTool(string name, JsonElement args)
     {
+        // MCP tools first (external protocol servers)
+        if (_mcp != null && _mcp.IsMcpTool(name))
+            return await _mcp.ExecuteToolAsync(name, args);
+
         // Plugin tools (non-builtin) take priority if PluginManager knows them
         if (_plugins != null && _plugins.IsPluginTool(name))
             return await _plugins.ExecuteTool(name, args);
