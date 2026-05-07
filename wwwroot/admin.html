@@ -816,7 +816,11 @@ function renderUserRolesMatrix(users) {
     const roleBadges = (u.roles ?? []).map(r => {
       const role = allRoles.find(x => x.name === r);
       const color = role?.color ?? '#6366f1';
-      return `<span class="badge" style="background:${color}20;color:${color};border:1px solid ${color}40">${escHtml(r)}</span>`;
+      const canRevoke = role && !role.is_system;
+      const revokeBtn = canRevoke
+        ? ` <button onclick="removeUserRole(${u.id},${role.id},'${escHtml(r)}')" style="background:none;border:none;color:${color};cursor:pointer;font-size:11px;padding:0 2px;line-height:1;opacity:0.7" title="Remove role">✕</button>`
+        : '';
+      return `<span class="badge" style="background:${color}20;color:${color};border:1px solid ${color}40;display:inline-flex;align-items:center;gap:2px">${escHtml(r)}${revokeBtn}</span>`;
     }).join(' ');
     const permList = (u.permissions ?? []).join(', ') || '—';
     return `<tr>
@@ -923,6 +927,20 @@ async function assignRole() {
     loadRoles();
     setTimeout(() => { status.textContent = ''; }, 2000);
   } catch (err) { status.style.color = 'var(--error)'; status.textContent = err.message; }
+}
+
+async function removeUserRole(userId, roleId, roleName) {
+  if (!confirm(`Remove role "${roleName}" from this user?`)) return;
+  try {
+    const resp = await fetch(`/api/admin/users/${userId}/roles/${roleId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed');
+    toast(`Role "${roleName}" removed`, 'success');
+    loadRoles();
+  } catch (err) { toast('Failed: ' + err.message, 'error'); }
 }
 
 function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
