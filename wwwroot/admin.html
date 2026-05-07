@@ -1230,7 +1230,7 @@ async function reconnectMcp(id, btn) {
   }
 }
 
-
+async function reloadPlugins() {
   try {
     await fetch('/api/admin/plugins/reload', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     await loadPlugins();
