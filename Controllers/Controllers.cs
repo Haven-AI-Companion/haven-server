@@ -929,3 +929,127 @@ public class BotController : ControllerBase
         return Ok(new { ok = true, user_id = userId, provider, identity });
     }
 }
+
+// ── Chat Providers Controller ───────────────────────────────────────────────
+
+[ApiController]
+[Route("api/admin/chat-providers")]
+[Authorize]
+public class ChatProvidersController : ControllerBase
+{
+    private readonly IConfiguration _config;
+    private readonly IWebHostEnvironment _env;
+    private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
+
+    private static readonly string MaskPlaceholder = "••••";
+
+    public ChatProvidersController(IConfiguration config, IWebHostEnvironment env)
+    {
+        _config = config;
+        _env = env;
+    }
+
+    private string AppSettingsPath =>
+        Path.Combine(_env.ContentRootPath, "appsettings.json");
+
+    private static string MaskToken(string? val) =>
+        string.IsNullOrEmpty(val) ? "" : MaskPlaceholder + val[^Math.Min(4, val.Length)..];
+
+    private static bool IsMasked(string? val) =>
+        val != null && val.StartsWith(MaskPlaceholder);
+
+    [HttpGet]
+    public IActionResult GetProviders()
+    {
+        if (!IsAdmin) return Forbid();
+
+        var s = _config.GetSection("ThirdPartyChat");
+        return Ok(new
+        {
+            bot_link_secret   = MaskToken(s["BotLinkSecret"] ?? _config["Bot:Secret"]),
+            discord = new {
+                enabled         = s.GetValue("Discord:Enabled", false),
+                bot_token       = MaskToken(s["Discord:BotToken"]),
+                application_id  = s["Discord:ApplicationId"] ?? "",
+                command_prefix  = s["Discord:CommandPrefix"] ?? "!",
+                status_text     = s["Discord:StatusText"] ?? "",
+            },
+            slack = new {
+                enabled         = s.GetValue("Slack:Enabled", false),
+                bot_token       = MaskToken(s["Slack:BotToken"]),
+                app_token       = MaskToken(s["Slack:AppToken"]),
+                signing_secret  = MaskToken(s["Slack:SigningSecret"]),
+            },
+            telegram = new {
+                enabled         = s.GetValue("Telegram:Enabled", false),
+                bot_token       = MaskToken(s["Telegram:BotToken"]),
+                webhook_url     = s["Telegram:WebhookUrl"] ?? "",
+            },
+        });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveProviders([FromBody] SaveThirdPartyChatRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var path = AppSettingsPath;
+        if (!System.IO.File.Exists(path))
+            return StatusCode(500, new { error = "appsettings.json not found" });
+
+        // Read current file as JsonNode so we can merge without losing other keys
+        var raw  = await System.IO.File.ReadAllTextAsync(path);
+        var root = System.Text.Json.Nodes.JsonNode.Parse(raw)!.AsObject();
+
+        if (!root.ContainsKey("ThirdPartyChat"))
+            root["ThirdPartyChat"] = new System.Text.Json.Nodes.JsonObject();
+
+        var tpc = root["ThirdPartyChat"]!.AsObject();
+
+        // Bot link secret (also keep Bot:Secret in sync for BotController)
+        if (!string.IsNullOrEmpty(req.BotLinkSecret) && !IsMasked(req.BotLinkSecret))
+        {
+            tpc["BotLinkSecret"] = req.BotLinkSecret;
+            if (root.ContainsKey("Bot"))
+                root["Bot"]!.AsObject()["Secret"] = req.BotLinkSecret;
+        }
+
+        // Discord
+        if (req.Discord is { } d)
+        {
+            if (!tpc.ContainsKey("Discord")) tpc["Discord"] = new System.Text.Json.Nodes.JsonObject();
+            var disc = tpc["Discord"]!.AsObject();
+            disc["Enabled"]       = d.Enabled;
+            if (!IsMasked(d.BotToken))      disc["BotToken"]      = d.BotToken ?? "";
+            if (!string.IsNullOrEmpty(d.ApplicationId)) disc["ApplicationId"] = d.ApplicationId;
+            disc["CommandPrefix"] = d.CommandPrefix ?? "!";
+            disc["StatusText"]    = d.StatusText ?? "";
+        }
+
+        // Slack
+        if (req.Slack is { } sl)
+        {
+            if (!tpc.ContainsKey("Slack")) tpc["Slack"] = new System.Text.Json.Nodes.JsonObject();
+            var slack = tpc["Slack"]!.AsObject();
+            slack["Enabled"]       = sl.Enabled;
+            if (!IsMasked(sl.BotToken))      slack["BotToken"]      = sl.BotToken ?? "";
+            if (!IsMasked(sl.AppToken))      slack["AppToken"]      = sl.AppToken ?? "";
+            if (!IsMasked(sl.SigningSecret)) slack["SigningSecret"] = sl.SigningSecret ?? "";
+        }
+
+        // Telegram
+        if (req.Telegram is { } tg)
+        {
+            if (!tpc.ContainsKey("Telegram")) tpc["Telegram"] = new System.Text.Json.Nodes.JsonObject();
+            var tel = tpc["Telegram"]!.AsObject();
+            tel["Enabled"]    = tg.Enabled;
+            if (!IsMasked(tg.BotToken)) tel["BotToken"]   = tg.BotToken ?? "";
+            tel["WebhookUrl"] = tg.WebhookUrl ?? "";
+        }
+
+        var opts = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+        await System.IO.File.WriteAllTextAsync(path, root.ToJsonString(opts));
+
+        return Ok(new { ok = true, note = "Saved to appsettings.json. Restart server to apply connection changes." });
+    }
+}

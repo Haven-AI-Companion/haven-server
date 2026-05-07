@@ -216,6 +216,10 @@ select.form-input{cursor:pointer}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
         AI Backends
       </button>
+      <button class="nav-item" data-tab="chat-providers" data-title="Third-Party Chat" data-sub="Discord, Slack, Telegram connection settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        Third-Party Chat
+      </button>
       <div class="nav-section">Monitor</div>
       <button class="nav-item" data-tab="analytics" data-title="Analytics" data-sub="Usage patterns and activity">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -509,6 +513,114 @@ select.form-input{cursor:pointer}
         <div class="card">
           <div class="card-title">Connected Backends <button class="btn btn-sm btn-primary" onclick="toggleAddForm()">+ Add Backend</button></div>
           <div id="backends-list"><div class="empty"><div class="empty-icon">🤖</div><p class="txt-muted">No backends configured yet. Add one above, or <a href="https://ollama.com/download" target="_blank" style="color:var(--accent);">install Ollama</a> and it will be detected automatically.</p></div></div>
+        </div>
+      </div>
+
+      <!-- Analytics -->
+      <div class="tab-content" id="chat-providers">
+        <p class="txt-muted" style="font-size:12px;margin-bottom:16px">
+          Connection credentials for external chat integrations. Saved directly to <code class="mono">appsettings.json</code> — a server restart is needed to apply connection changes. Tokens are masked after saving.
+        </p>
+
+        <!-- Bot Link Secret -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">Shared Bot Secret</div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:12px">
+            Used by external bots to authenticate the <code class="mono">POST /api/bot/link/confirm</code> endpoint when confirming identity links. Set to a strong random string and configure the same value in your bot.
+          </p>
+          <div class="form-row" style="max-width:480px">
+            <div class="form-group" style="flex:1">
+              <label class="form-label">Bot Link Secret</label>
+              <input type="password" id="cp-bot-secret" class="form-input mono" placeholder="Leave blank to keep current" autocomplete="new-password">
+            </div>
+          </div>
+        </div>
+
+        <!-- Discord -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">
+            <span>Discord</span>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:normal;cursor:pointer">
+              <input type="checkbox" id="cp-discord-enabled"> Enable
+            </label>
+          </div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:12px">
+            Connect a Discord bot. Create one at <a href="https://discord.com/developers/applications" target="_blank" style="color:var(--accent)">discord.com/developers</a> and enable the Message Content Intent.
+          </p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Bot Token</label>
+              <input type="password" id="cp-discord-token" class="form-input mono" placeholder="Leave blank to keep current" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Application ID</label>
+              <input type="text" id="cp-discord-app-id" class="form-input mono" placeholder="e.g. 123456789012345678">
+            </div>
+            <div class="form-group" style="max-width:160px">
+              <label class="form-label">Command Prefix</label>
+              <input type="text" id="cp-discord-prefix" class="form-input" placeholder="!" maxlength="5">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Bot Status Text <span class="txt-muted">(optional)</span></label>
+              <input type="text" id="cp-discord-status" class="form-input" placeholder="e.g. Helping humans">
+            </div>
+          </div>
+        </div>
+
+        <!-- Slack -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">
+            <span>Slack</span>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:normal;cursor:pointer">
+              <input type="checkbox" id="cp-slack-enabled"> Enable
+            </label>
+          </div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:12px">
+            Connect a Slack app using Socket Mode. Create one at <a href="https://api.slack.com/apps" target="_blank" style="color:var(--accent)">api.slack.com/apps</a> with the <code class="mono">app_mentions:read</code> and <code class="mono">chat:write</code> scopes.
+          </p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Bot Token <span class="txt-muted">(xoxb-…)</span></label>
+              <input type="password" id="cp-slack-bot-token" class="form-input mono" placeholder="Leave blank to keep current" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+              <label class="form-label">App-Level Token <span class="txt-muted">(xapp-…)</span></label>
+              <input type="password" id="cp-slack-app-token" class="form-input mono" placeholder="Leave blank to keep current" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Signing Secret</label>
+              <input type="password" id="cp-slack-signing" class="form-input mono" placeholder="Leave blank to keep current" autocomplete="new-password">
+            </div>
+          </div>
+        </div>
+
+        <!-- Telegram -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">
+            <span>Telegram</span>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:normal;cursor:pointer">
+              <input type="checkbox" id="cp-telegram-enabled"> Enable
+            </label>
+          </div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:12px">
+            Connect a Telegram bot via BotFather. Optionally set a webhook URL for production; leave blank to use polling.
+          </p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Bot Token</label>
+              <input type="password" id="cp-telegram-token" class="form-input mono" placeholder="Leave blank to keep current" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Webhook URL <span class="txt-muted">(optional — leave blank for polling)</span></label>
+              <input type="text" id="cp-telegram-webhook" class="form-input" placeholder="https://yourserver.example.com/webhooks/telegram">
+            </div>
+          </div>
+        </div>
+
+        <div id="cp-save-status" style="font-size:12px;min-height:16px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="saveChatProviders(event)">Save to appsettings.json</button>
+          <button class="btn" onclick="loadChatProviders()">↺ Reload</button>
         </div>
       </div>
 
@@ -818,7 +930,7 @@ function toast(msg, type = 'success', duration = 3500) {
       if (d.require_auth && token === 'noauth') { window.location.href = '/'; return; }
     }
   } catch {}
-  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles(); loadAllIdentities(); loadChannels();
+  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles(); loadAllIdentities(); loadChannels(); loadChatProviders();
   const raw = token !== 'noauth' ? token.split('.')[1] : null;
   if (raw) {
     try {
@@ -1917,6 +2029,90 @@ async function loadAudit() {
       </tr>`).join('')}</tbody>
     </table>`;
   } catch (err) { console.error('loadAudit:', err); }
+}
+/* ── Third-Party Chat Providers ─────────────────────────────────────────── */
+
+async function loadChatProviders() {
+  try {
+    const resp = await fetch('/api/admin/chat-providers', { headers: { Authorization: `Bearer ${token}` } });
+    if (!resp.ok) return;
+    const d = await resp.json();
+
+    document.getElementById('cp-bot-secret').value        = '';   // never pre-fill password fields
+    document.getElementById('cp-discord-enabled').checked  = !!d.discord?.enabled;
+    document.getElementById('cp-discord-app-id').value     = d.discord?.application_id ?? '';
+    document.getElementById('cp-discord-prefix').value     = d.discord?.command_prefix ?? '!';
+    document.getElementById('cp-discord-status').value     = d.discord?.status_text ?? '';
+    document.getElementById('cp-discord-token').value      = '';  // password — blank on load
+
+    document.getElementById('cp-slack-enabled').checked    = !!d.slack?.enabled;
+    document.getElementById('cp-slack-bot-token').value    = '';
+    document.getElementById('cp-slack-app-token').value    = '';
+    document.getElementById('cp-slack-signing').value      = '';
+
+    document.getElementById('cp-telegram-enabled').checked = !!d.telegram?.enabled;
+    document.getElementById('cp-telegram-token').value     = '';
+    document.getElementById('cp-telegram-webhook').value   = d.telegram?.webhook_url ?? '';
+
+    // Show token-set indicators
+    setTokenHint('cp-discord-token', d.discord?.bot_token);
+    setTokenHint('cp-slack-bot-token', d.slack?.bot_token);
+    setTokenHint('cp-slack-app-token', d.slack?.app_token);
+    setTokenHint('cp-slack-signing', d.slack?.signing_secret);
+    setTokenHint('cp-telegram-token', d.telegram?.bot_token);
+    setTokenHint('cp-bot-secret', d.bot_link_secret);
+  } catch (err) { console.error('loadChatProviders:', err); }
+}
+
+function setTokenHint(inputId, maskedVal) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.placeholder = maskedVal ? '(set — leave blank to keep)' : 'Not set';
+}
+
+async function saveChatProviders(event) {
+  const btn    = event.currentTarget;
+  const orig   = btn.textContent;
+  const status = document.getElementById('cp-save-status');
+  btn.disabled = true; btn.textContent = 'Saving…'; status.textContent = '';
+
+  const body = {
+    bot_link_secret: document.getElementById('cp-bot-secret').value || null,
+    discord: {
+      enabled:        document.getElementById('cp-discord-enabled').checked,
+      bot_token:      document.getElementById('cp-discord-token').value || null,
+      application_id: document.getElementById('cp-discord-app-id').value || null,
+      command_prefix: document.getElementById('cp-discord-prefix').value || '!',
+      status_text:    document.getElementById('cp-discord-status').value || null,
+    },
+    slack: {
+      enabled:        document.getElementById('cp-slack-enabled').checked,
+      bot_token:      document.getElementById('cp-slack-bot-token').value || null,
+      app_token:      document.getElementById('cp-slack-app-token').value || null,
+      signing_secret: document.getElementById('cp-slack-signing').value || null,
+    },
+    telegram: {
+      enabled:     document.getElementById('cp-telegram-enabled').checked,
+      bot_token:   document.getElementById('cp-telegram-token').value || null,
+      webhook_url: document.getElementById('cp-telegram-webhook').value || null,
+    },
+  };
+
+  try {
+    const resp = await fetch('/api/admin/chat-providers', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { status.textContent = data.error ?? 'Save failed'; status.style.color = 'var(--error)'; }
+    else {
+      status.textContent = data.note ?? 'Saved!'; status.style.color = 'var(--success, #4ade80)';
+      toast('Chat provider settings saved');
+      loadChatProviders();
+    }
+  } catch (err) { status.textContent = err.message; status.style.color = 'var(--error)'; }
+  btn.disabled = false; btn.textContent = orig;
 }
 </script>
 </body>

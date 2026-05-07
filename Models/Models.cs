@@ -199,3 +199,43 @@ public record ResolvedIdentity(
     public bool IsAllowed => string.IsNullOrEmpty(DenyReason);
 }
 
+// ── Third-Party Chat Provider Config ────────────────────────────────────────
+
+public record DiscordProviderConfig(
+    bool Enabled,
+    string BotToken,
+    string ApplicationId,
+    string CommandPrefix,
+    string? StatusText
+);
+
+public record SlackProviderConfig(
+    bool Enabled,
+    string BotToken,
+    string AppToken,
+    string SigningSecret
+);
+
+public record TelegramProviderConfig(
+    bool Enabled,
+    string BotToken,
+    string? WebhookUrl
+);
+
+public record ThirdPartyChatConfig(
+    string BotLinkSecret,
+    DiscordProviderConfig Discord,
+    SlackProviderConfig Slack,
+    TelegramProviderConfig Telegram
+);
+
+// DTOs for saving (tokens may be masked — only update if not a mask placeholder)
+public record SaveDiscordProviderRequest(bool Enabled, string? BotToken, string? ApplicationId, string? CommandPrefix, string? StatusText);
+public record SaveSlackProviderRequest(bool Enabled, string? BotToken, string? AppToken, string? SigningSecret);
+public record SaveTelegramProviderRequest(bool Enabled, string? BotToken, string? WebhookUrl);
+public record SaveThirdPartyChatRequest(
+    string? BotLinkSecret,
+    SaveDiscordProviderRequest? Discord,
+    SaveSlackProviderRequest? Slack,
+    SaveTelegramProviderRequest? Telegram
+);
