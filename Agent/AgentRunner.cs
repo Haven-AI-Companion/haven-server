@@ -24,13 +24,15 @@ public class AgentRunner
     private readonly string _model;
     private readonly PluginManager? _plugins;
     private readonly McpManager?    _mcp;
+    private readonly int _maxIterations;
 
-    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null)
+    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null, int maxIterations = MaxIterations)
     {
         _backend = backend;
         _model   = model;
         _plugins = plugins;
         _mcp     = mcp;
+        _maxIterations = Math.Max(1, maxIterations);
     }
 
     /// Merge built-in tool definitions with enabled plugin tools and MCP tools.
@@ -99,7 +101,7 @@ public class AgentRunner
     {
         var working = new List<ChatMessage>(messages);
 
-        for (int iteration = 1; iteration <= MaxIterations; iteration++)
+        for (int iteration = 1; iteration <= _maxIterations; iteration++)
         {
             // Separate the AI call so we can yield inside the error path
             JsonElement response = default;

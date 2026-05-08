@@ -47,8 +47,10 @@ public class Program
         builder.Services.AddSingleton<McpManager>();
         builder.Services.AddSingleton<AuthService>();
         builder.Services.AddSingleton<AshServer.Chat.IdentityResolver>();
+        builder.Services.AddSingleton<AshServer.Chat.Discord.DiscordMessageRouter>();
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<ChatHandler>();
+        builder.Services.AddHostedService<AshServer.Chat.Discord.DiscordBot>();
 
         builder.Services.AddControllers()
             .AddJsonOptions(opts =>
