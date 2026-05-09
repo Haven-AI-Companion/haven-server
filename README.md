@@ -46,7 +46,7 @@ Ash Server ships with first-class support for [`ssfdre38/gemma4-turbo`](https://
 ollama run ssfdre38/gemma4-turbo   # pull and run e4b (recommended)
 ```
 
-> 📊 **16,700+ downloads** on Ollama Hub. The most downloaded custom Gemma 4 quantization.
+**16,700+ downloads** on Ollama Hub as of submission date — the **#2 most downloaded Gemma 4 model in the world**, behind only Google's official release, with 6.8x more downloads than the next community model.
 
 ---
 

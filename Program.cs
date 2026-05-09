@@ -80,7 +80,10 @@ public class Program
         builder.Services.AddSingleton<ChatHandler>();
         builder.Services.AddHostedService<AshServer.Chat.Discord.DiscordBot>();
         builder.Services.AddHostedService<AshServer.Chat.Telegram.TelegramBot>();
-        builder.Services.AddHostedService<AshServer.Chat.Slack.SlackBot>();
+        // SlackBot registered as singleton so SlackEventsController can inject it
+        builder.Services.AddSingleton<AshServer.Chat.Slack.SlackBot>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<AshServer.Chat.Slack.SlackBot>());
+        builder.Services.AddHttpClient();
 
         // ── HTTP API rate limiting ───────────────────────────────────────────
         builder.Services.AddRateLimiter(opts =>
