@@ -12,6 +12,7 @@ using AshServer.Data;
 using AshServer.Mcp;
 using AshServer.Personality;
 using AshServer.Plugins;
+using AshServer.Service;
 
 namespace AshServer;
 
@@ -19,7 +20,31 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
+        // ── Service management commands ─────────────────────────────────────
+        if (args.Length > 0)
+        {
+            switch (args[0].ToLowerInvariant())
+            {
+                case "--install-service":
+                case "install-service":
+                    ServiceInstaller.Install();
+                    return;
+                case "--uninstall-service":
+                case "uninstall-service":
+                    ServiceInstaller.Uninstall();
+                    return;
+                case "--service-status":
+                case "service-status":
+                    ServiceInstaller.Status();
+                    return;
+            }
+        }
+
         var builder = WebApplication.CreateBuilder(args);
+
+        // ── Native service hosting (auto-detects OS) ─────────────────────────
+        builder.Host.UseWindowsService(opts => opts.ServiceName = "ash-server");
+        builder.Host.UseSystemd();
 
         // ── Config ──────────────────────────────────────────────────────────
         // Merge appsettings.json with optional config.json beside the exe
