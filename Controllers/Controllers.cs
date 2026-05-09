@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using AshServer.AI;
 using AshServer.Auth;
 using AshServer.Data;
 using AshServer.Mcp;
 using AshServer.Models;
+using System.Diagnostics;
 using System.Security.Claims;
 
 namespace AshServer.Controllers;
@@ -1051,5 +1053,66 @@ public class ChatProvidersController : ControllerBase
         await System.IO.File.WriteAllTextAsync(path, root.ToJsonString(opts));
 
         return Ok(new { ok = true, note = "Saved to appsettings.json. Restart server to apply connection changes." });
+    }
+}
+
+// ── Health endpoint (public — no auth required) ────────────────────────────
+
+[ApiController]
+[Route("health")]
+public class HealthController : ControllerBase
+{
+    private static readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;
+
+    private readonly Database _db;
+    private readonly BackendManager _backends;
+    private readonly IConfiguration _config;
+
+    public HealthController(Database db, BackendManager backends, IConfiguration config)
+    {
+        _db = db; _backends = backends; _config = config;
+    }
+
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> Get()
+    {
+        var uptime = (DateTimeOffset.UtcNow - _startTime).TotalSeconds;
+
+        // DB check
+        bool dbOk;
+        try { await _db.GetUserById(0); dbOk = true; }
+        catch { dbOk = false; }
+
+        // Backend summary
+        var allBackends = await _db.GetAllBackends();
+        var backendList = allBackends.Select(b => (object)new
+        {
+            name = b.Name,
+            type = b.Type,
+            url  = b.BaseUrl
+        }).ToList();
+
+        // Discord status
+        var discordEnabled = _config.GetValue("ThirdPartyChat:Discord:Enabled", false);
+
+        var status = dbOk ? "ok" : "degraded";
+
+        return Ok(new
+        {
+            status,
+            uptime_seconds = (int)uptime,
+            database = dbOk ? "ok" : "error",
+            backends = new { count = allBackends.Count, items = backendList },
+            integrations = new
+            {
+                discord = new { enabled = discordEnabled }
+            },
+            process = new
+            {
+                ram_mb       = (int)(Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024),
+                thread_count = Process.GetCurrentProcess().Threads.Count
+            }
+        });
     }
 }

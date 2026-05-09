@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
@@ -48,9 +49,24 @@ public class Program
         builder.Services.AddSingleton<AuthService>();
         builder.Services.AddSingleton<AshServer.Chat.IdentityResolver>();
         builder.Services.AddSingleton<AshServer.Chat.Discord.DiscordMessageRouter>();
+        builder.Services.AddSingleton<AshServer.Middleware.ExternalRateLimiter>();
+        builder.Services.AddSingleton<AshServer.Chat.PromptGuard>();
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<ChatHandler>();
         builder.Services.AddHostedService<AshServer.Chat.Discord.DiscordBot>();
+
+        // ── HTTP API rate limiting ───────────────────────────────────────────
+        builder.Services.AddRateLimiter(opts =>
+        {
+            opts.RejectionStatusCode = 429;
+            opts.AddFixedWindowLimiter("api", policy =>
+            {
+                policy.PermitLimit = builder.Configuration.GetValue("RateLimit:Http:PermitLimit", 60);
+                policy.Window = TimeSpan.FromSeconds(
+                    builder.Configuration.GetValue("RateLimit:Http:WindowSeconds", 60));
+                policy.QueueLimit = 0;
+            });
+        });
 
         builder.Services.AddControllers()
             .AddJsonOptions(opts =>
@@ -90,6 +106,7 @@ public class Program
         app.UseStaticFiles();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
         app.MapControllers();
 
         // Initialize MCP servers (non-fatal — server starts even if MCP servers fail)

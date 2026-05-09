@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Discord;
 using Discord.WebSocket;
 using AshServer.Data;
+using AshServer.Middleware;
 using Microsoft.Extensions.Logging;
 
 namespace AshServer.Chat.Discord;
@@ -27,6 +28,8 @@ public sealed class DiscordBot : IHostedService, IAsyncDisposable
     private readonly DiscordMessageRouter _router;
     private readonly IdentityResolver     _identity;
     private readonly Database             _db;
+    private readonly ExternalRateLimiter  _rateLimiter;
+    private readonly AshServer.Chat.PromptGuard _guard;
     private readonly ILogger<DiscordBot>  _logger;
 
     private DiscordSocketClient? _client;
@@ -34,22 +37,22 @@ public sealed class DiscordBot : IHostedService, IAsyncDisposable
     // (channelId:externalUserId) → DB conversationId
     private readonly ConcurrentDictionary<string, string> _conversations = new();
 
-    // Simple per-user rate limit: externalUserId → time next message is allowed
-    private readonly ConcurrentDictionary<string, DateTimeOffset> _rateLimits = new();
-    private static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(5);
-
     public DiscordBot(
         IConfiguration config,
         DiscordMessageRouter router,
         IdentityResolver identity,
         Database db,
+        ExternalRateLimiter rateLimiter,
+        AshServer.Chat.PromptGuard guard,
         ILogger<DiscordBot> logger)
     {
-        _config   = config;
-        _router   = router;
-        _identity = identity;
-        _db       = db;
-        _logger   = logger;
+        _config      = config;
+        _router      = router;
+        _identity    = identity;
+        _db          = db;
+        _rateLimiter = rateLimiter;
+        _guard       = guard;
+        _logger      = logger;
     }
 
     // ── IHostedService ────────────────────────────────────────────────────────
@@ -175,14 +178,23 @@ public sealed class DiscordBot : IHostedService, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(userMessage)) return;
 
         // ── Rate limit ───────────────────────────────────────────────────────
-        if (_rateLimits.TryGetValue(externalId, out var nextAllowed)
-            && DateTimeOffset.UtcNow < nextAllowed)
+        if (!_rateLimiter.TryAcquire($"discord:{externalId}"))
         {
+            var wait = _rateLimiter.SecondsUntilReset($"discord:{externalId}");
             await msg.Channel.SendMessageAsync(
-                "⏱️ Please wait a moment before sending another message.");
+                $"⏱️ Please wait {(int)wait}s before sending another message.");
             return;
         }
-        _rateLimits[externalId] = DateTimeOffset.UtcNow.Add(RateWindow);
+
+        // ── Prompt injection guard ───────────────────────────────────────────
+        var guardResult = _guard.Check(userMessage, $"discord:{externalId}");
+        if (!guardResult.Safe)
+        {
+            await _db.AddAuditEntry("discord", channelId, externalId, externalUser,
+                null, "prompt_blocked", guardResult.Reason);
+            await msg.Channel.SendMessageAsync($"🚫 {guardResult.Reason}");
+            return;
+        }
 
         // ── Identity / permission resolution ────────────────────────────────
         var resolved = await _identity.ResolveAsync("discord", channelId, externalId, externalUser);
