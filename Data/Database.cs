@@ -154,6 +154,27 @@ public class Database
             CREATE INDEX IF NOT EXISTS idx_ext_identities_provider ON external_identities(provider, external_id);
             CREATE INDEX IF NOT EXISTS idx_channel_configs_provider ON channel_configs(provider, channel_id);
             CREATE INDEX IF NOT EXISTS idx_audit_log_channel        ON chat_audit_log(provider, channel_id, created_at);
+
+            CREATE TABLE IF NOT EXISTS external_conversations (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider    TEXT NOT NULL,
+                channel_key TEXT NOT NULL,
+                conv_id     TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                UNIQUE(provider, channel_key)
+            );
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                content,
+                conversation_id UNINDEXED,
+                content='messages',
+                content_rowid='id'
+            );
+            CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+                INSERT INTO messages_fts(rowid, content, conversation_id) VALUES (new.id, new.content, new.conversation_id);
+            END;
+            CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, content, conversation_id) VALUES('delete', old.id, old.content, old.conversation_id);
+            END;
             """;
 
         cmd.ExecuteNonQuery();
@@ -358,6 +379,71 @@ public class Database
         cmd.Parameters.AddWithValue("$t", title);
         cmd.Parameters.AddWithValue("$id", id);
         cmd.Parameters.AddWithValue("$u", userId);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<List<(Conversation Conv, Message Msg)>> SearchConversations(int userId, string query, int limit = 20)
+        => Task.Run(() =>
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at,
+                       m.id as msg_id, m.conversation_id, m.role, m.content, m.created_at as msg_at
+                FROM messages_fts f
+                JOIN messages m ON m.id = f.rowid
+                JOIN conversations c ON c.id = m.conversation_id
+                WHERE messages_fts MATCH @q
+                  AND c.user_id = @uid
+                ORDER BY rank
+                LIMIT @limit
+                """;
+            cmd.Parameters.AddWithValue("@q", query + "*");
+            cmd.Parameters.AddWithValue("@uid", userId);
+            cmd.Parameters.AddWithValue("@limit", limit);
+            var results = new List<(Conversation, Message)>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var conv = new Conversation(
+                    reader.GetString(0), reader.GetInt32(1), reader.GetString(2),
+                    reader.GetString(3), reader.GetString(4));
+                var msg = new Message(
+                    reader.GetInt32(5), reader.GetString(6), reader.GetString(7),
+                    reader.GetString(8), reader.GetString(9));
+                results.Add((conv, msg));
+            }
+            return results;
+        });
+
+    public Task<List<Conversation>> GetConversationsForExternalChannel(string provider, string channelKey)
+        => Task.Run(() =>
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at
+                FROM external_conversations ec
+                JOIN conversations c ON c.id = ec.conv_id
+                WHERE ec.provider = $p AND ec.channel_key = $k
+                LIMIT 1
+                """;
+            cmd.Parameters.AddWithValue("$p", provider);
+            cmd.Parameters.AddWithValue("$k", channelKey);
+            using var r = cmd.ExecuteReader();
+            var list = new List<Conversation>();
+            while (r.Read()) list.Add(MapConversation(r));
+            return list;
+        });
+
+    public Task CreateExternalConversation(string provider, string channelKey, string convId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT OR IGNORE INTO external_conversations (provider, channel_key, conv_id) VALUES ($p, $k, $c)";
+        cmd.Parameters.AddWithValue("$p", provider);
+        cmd.Parameters.AddWithValue("$k", channelKey);
+        cmd.Parameters.AddWithValue("$c", convId);
         cmd.ExecuteNonQuery();
     });
 

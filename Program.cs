@@ -79,6 +79,8 @@ public class Program
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<ChatHandler>();
         builder.Services.AddHostedService<AshServer.Chat.Discord.DiscordBot>();
+        builder.Services.AddHostedService<AshServer.Chat.Telegram.TelegramBot>();
+        builder.Services.AddHostedService<AshServer.Chat.Slack.SlackBot>();
 
         // ── HTTP API rate limiting ───────────────────────────────────────────
         builder.Services.AddRateLimiter(opts =>

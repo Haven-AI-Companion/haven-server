@@ -14,7 +14,9 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.7" />
+    <PackageReference Include="SlackNet" Version="0.17.10" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.18.0" />
+    <PackageReference Include="Telegram.Bot" Version="22.4.0" />
   </ItemGroup>
 
   <!-- Exclude plugin-sdk subdirectories from compilation -->

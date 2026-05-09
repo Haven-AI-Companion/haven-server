@@ -156,6 +156,67 @@ public class ConversationsController : ControllerBase
         await _db.RenameConversation(id, UserId, title);
         return Ok(new { ok = true });
     }
+
+    [HttpGet("{id}/export")]
+    public async Task<IActionResult> Export(string id, [FromQuery] string format = "json")
+    {
+        var conv = await _db.GetConversation(id, UserId);
+        if (conv == null) return NotFound();
+        var messages = await _db.GetMessages(id);
+        var safeTitle = string.Join("_", (conv.Title ?? "conversation").Split(System.IO.Path.GetInvalidFileNameChars()));
+
+        return format.ToLower() switch
+        {
+            "md" => File(System.Text.Encoding.UTF8.GetBytes(ToMarkdown(conv, messages)), "text/markdown", $"{safeTitle}.md"),
+            "txt" => File(System.Text.Encoding.UTF8.GetBytes(ToPlainText(conv, messages)), "text/plain", $"{safeTitle}.txt"),
+            _ => File(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(
+                    new { conversation = conv, messages },
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true })),
+                "application/json", $"{safeTitle}.json")
+        };
+    }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] string q, [FromQuery] int limit = 20)
+    {
+        if (string.IsNullOrWhiteSpace(q)) return BadRequest(new { error = "q required" });
+        var results = await _db.SearchConversations(UserId, q, Math.Min(limit, 100));
+        return Ok(results.Select(r => new
+        {
+            conversation = r.Conv,
+            match = new { r.Msg.Role, r.Msg.Content, r.Msg.CreatedAt }
+        }));
+    }
+
+    private static string ToMarkdown(Conversation conv, List<Message> messages)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# {conv.Title}");
+        sb.AppendLine($"> Exported from Ash Server — {conv.CreatedAt}");
+        sb.AppendLine();
+        foreach (var m in messages)
+        {
+            sb.AppendLine(m.Role == "user" ? "**You:**" : "**Ash:**");
+            sb.AppendLine();
+            sb.AppendLine(m.Content);
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
+
+    private static string ToPlainText(Conversation conv, List<Message> messages)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(conv.Title);
+        sb.AppendLine(new string('-', (conv.Title ?? "").Length));
+        sb.AppendLine();
+        foreach (var m in messages)
+        {
+            sb.AppendLine($"{(m.Role == "user" ? "You" : "Ash")}: {m.Content}");
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
 }
 
 [ApiController]
