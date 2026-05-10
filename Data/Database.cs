@@ -398,7 +398,11 @@ public class Database
                 ORDER BY rank
                 LIMIT @limit
                 """;
-            cmd.Parameters.AddWithValue("@q", query + "*");
+            // Sanitize FTS5 query: escape special characters then wrap in double-quotes
+            // for phrase search, then add * for prefix matching.
+            // FTS5 special chars: " ( ) * ^ - OR AND NOT
+            var sanitizedQuery = "\"" + query.Replace("\"", "\"\"") + "\"*";
+            cmd.Parameters.AddWithValue("@q", sanitizedQuery);
             cmd.Parameters.AddWithValue("@uid", userId);
             cmd.Parameters.AddWithValue("@limit", limit);
             var results = new List<(Conversation, Message)>();

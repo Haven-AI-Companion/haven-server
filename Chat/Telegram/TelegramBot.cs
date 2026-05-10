@@ -6,6 +6,8 @@ using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using AshServer.Auth;
+using AshServer.Chat;
 using AshServer.Chat.Discord;
 using AshServer.Data;
 using AshServer.Middleware;
@@ -20,12 +22,14 @@ public sealed class TelegramBot : BackgroundService
     private readonly ExternalRateLimiter _rateLimiter;
     private readonly PromptGuard _guard;
     private readonly ILogger<TelegramBot> _log;
+    private readonly IdentityResolver _identityResolver;
 
     // (telegramChatId) → DB conversationId
     private readonly ConcurrentDictionary<string, string> _conversations = new();
 
     public TelegramBot(IConfiguration config, DiscordMessageRouter router, Database db,
-        ExternalRateLimiter rateLimiter, PromptGuard guard, ILogger<TelegramBot> log)
+        ExternalRateLimiter rateLimiter, PromptGuard guard, ILogger<TelegramBot> log,
+        IdentityResolver identityResolver)
     {
         _config = config;
         _router = router;
@@ -33,6 +37,7 @@ public sealed class TelegramBot : BackgroundService
         _rateLimiter = rateLimiter;
         _guard = guard;
         _log = log;
+        _identityResolver = identityResolver;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -70,40 +75,55 @@ public sealed class TelegramBot : BackgroundService
         var chatId = msg.Chat.Id.ToString();
         var userId = msg.From.Id.ToString();
         var username = msg.From.Username ?? msg.From.FirstName ?? "user";
-        var externalId = $"telegram:{userId}";
+        var rateLimitKey = $"telegram:{userId}";
 
         try
         {
-            if (!_rateLimiter.TryAcquire(externalId))
+            if (!_rateLimiter.TryAcquire(rateLimitKey))
             {
-                var wait = (int)_rateLimiter.SecondsUntilReset(externalId);
+                var wait = (int)_rateLimiter.SecondsUntilReset(rateLimitKey);
                 await bot.SendMessage(msg.Chat.Id, $"⏱ Slow down — try again in {wait}s.", cancellationToken: ct);
                 return;
             }
 
-            var guard = _guard.Check(text, externalId);
+            var guard = _guard.Check(text, rateLimitKey);
             if (!guard.Safe)
             {
-                _log.LogWarning("[telegram] Prompt blocked from {Id}: {Reason}", externalId, guard.Reason);
+                _log.LogWarning("[telegram] Prompt blocked from {Id}: {Reason}", rateLimitKey, guard.Reason);
                 await bot.SendMessage(msg.Chat.Id, "⚠️ That message was blocked by safety filters.", cancellationToken: ct);
                 return;
             }
 
+            // Resolve identity via IdentityResolver
+            var identity = await _identityResolver.ResolveAsync("telegram", chatId, userId, username, ct);
+            if (!identity.IsAllowed)
+            {
+                await bot.SendMessage(msg.Chat.Id, $"🔒 {identity.DenyReason}", cancellationToken: ct);
+                return;
+            }
+
+            var permissions = new HashSet<string>(identity.Permissions);
+            if (!permissions.Contains(Permissions.ApiAccess))
+            {
+                await bot.SendMessage(msg.Chat.Id, "🔒 Your account does not have chat access.", cancellationToken: ct);
+                return;
+            }
+
             var convKey = $"telegram:{chatId}";
-            var conversationId = await GetOrCreateConversationId(convKey, username);
+            var conversationId = await GetOrCreateConversationId(convKey, identity.Username ?? username, identity.UserId);
 
             await bot.SendChatAction(msg.Chat.Id, ChatAction.Typing, cancellationToken: ct);
 
             var response = await _router.RouteAsync(
-                userId: 0,
-                username: username,
-                isAdmin: false,
-                permissions: ["api_access"],
-                message: text,
+                userId:         identity.UserId ?? 0,
+                username:       identity.Username ?? username,
+                isAdmin:        false,
+                permissions:    permissions,
+                message:        text,
                 conversationId: conversationId,
-                agentEnabled: false,
-                maxTurns: 5,
-                ct: ct);
+                agentEnabled:   identity.AgentAllowed,
+                maxTurns:       identity.MaxTurns,
+                ct:             ct);
 
             if (string.IsNullOrWhiteSpace(response)) response = "…";
 
@@ -113,7 +133,7 @@ public sealed class TelegramBot : BackgroundService
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _log.LogError(ex, "[telegram] Error handling message from {Id}", externalId);
+            _log.LogError(ex, "[telegram] Error handling message from {Id}", rateLimitKey);
             try { await bot.SendMessage(msg.Chat.Id, "⚠️ Something went wrong. Please try again.", cancellationToken: ct); } catch { }
         }
     }
@@ -124,7 +144,7 @@ public sealed class TelegramBot : BackgroundService
         return Task.CompletedTask;
     }
 
-    private async Task<string> GetOrCreateConversationId(string convKey, string username)
+    private async Task<string> GetOrCreateConversationId(string convKey, string username, int? linkedUserId)
     {
         if (_conversations.TryGetValue(convKey, out var existing)) return existing;
 
@@ -135,7 +155,7 @@ public sealed class TelegramBot : BackgroundService
             return convs[0].Id;
         }
 
-        var convId = await _db.CreateConversation(0, $"Telegram: {username}");
+        var convId = await _db.CreateConversation(linkedUserId ?? 0, $"Telegram: {username}");
         await _db.CreateExternalConversation("telegram", convKey, convId);
         _conversations[convKey] = convId;
         return convId;

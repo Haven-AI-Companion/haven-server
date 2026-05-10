@@ -52,33 +52,73 @@ ollama run ssfdre38/gemma4-turbo   # pull and run e4b (recommended)
 
 ## Quick Start
 
-### Prerequisites
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Ollama](https://ollama.ai) — pull the model first:
-  ```bash
-  ollama pull ssfdre38/gemma4-turbo
-  ```
+### Option A — Pre-built binary (recommended)
 
-### Run
+Download from the [latest release](https://github.com/ssfdre38/ash-server/releases/latest):
 
+| Platform | Download |
+|----------|----------|
+| **Windows (x64)** | `ash-server-*-windows-x64-setup.exe` |
+| **Linux (x64)**   | `ash-server-*-linux-x64.zip` |
+| **Linux (arm64)** | `ash-server-*-linux-arm64.zip` |
+| **macOS (Apple Silicon)** | `ash-server-*-osx-arm64.zip` |
+| **macOS (Intel)** | `ash-server-*-osx-x64.zip` |
+
+**Windows** — run the `.exe` installer as Administrator. Done.
+
+**Linux / macOS** — unzip and run the bundled install script:
+```bash
+unzip ash-server-*-linux-x64.zip -d ash-server
+sudo bash ash-server/build/linux/install.sh ash-server/ash-server
+```
+
+---
+
+### Option B — Install from source (git clone)
+
+Requires [.NET 10 SDK](https://dotnet.microsoft.com/download) and [Ollama](https://ollama.ai).
+
+**Linux / macOS:**
 ```bash
 git clone https://github.com/ssfdre38/ash-server
+sudo bash ash-server/install.sh          # build + install as system service
+# — or —
+bash ash-server/install.sh --run         # build + run in foreground (no root needed)
+```
+
+**Windows** (PowerShell as Administrator):
+```powershell
+git clone https://github.com/ssfdre38/ash-server
 cd ash-server
-dotnet run
+.\install.ps1           # build + install as Windows Service
+# — or —
+.\install.ps1 -Run      # build + run in foreground (no admin needed)
+```
+
+**Pull the recommended model first:**
+```bash
+ollama pull ssfdre38/gemma4-turbo
 ```
 
 Open **http://localhost:18799** — the first registered user becomes admin automatically.
 
-### Install as a System Service
+### Uninstall
+
+```bash
+# Linux / macOS:
+sudo bash ash-server/install.sh --uninstall
+
+# Windows (Administrator PowerShell):
+.\install.ps1 -Uninstall
+```
+
+### Install as a System Service (from an already-built binary)
 
 ```bash
 # Windows (run as Administrator):
-ash-server install-service
+ash-server.exe install-service
 
-# Linux (run as root):
-sudo ash-server install-service
-
-# macOS (run as root):
+# Linux / macOS (run as root):
 sudo ash-server install-service
 ```
 
@@ -215,7 +255,7 @@ ash-server/
 ├── Auth/            # JWT + BCrypt + permission evaluation
 ├── Chat/
 │   ├── Discord/     # Discord.Net gateway bot + message router
-│   ├── Slack/       # Slack Socket Mode bot
+│   ├── Slack/       # Slack Events API bot (HMAC verified)
 │   ├── Telegram/    # Telegram polling bot
 │   ├── ChatHandler.cs      # Core WebSocket/streaming handler
 │   ├── IdentityResolver.cs # Provider → RBAC resolution
@@ -224,12 +264,25 @@ ash-server/
 ├── Data/            # SQLite + FTS5 database layer
 ├── Middleware/      # ExternalRateLimiter
 ├── Models/          # Records + DTOs
-├── Personality/     # soul.json loader
+├── Personality/     # soul.json loader + default personality/
 ├── Plugins/         # Plugin manifest + manager
 ├── Service/         # Cross-platform service installer
+├── build/
+│   ├── publish-all.ps1     # Build all 5 platform targets
+│   ├── publish-all.sh
+│   ├── windows/
+│   │   └── installer.nsi   # NSIS Windows installer script
+│   ├── linux/
+│   │   └── install.sh      # Linux systemd installer
+│   └── macos/
+│       └── install.sh      # macOS launchd installer
+├── .github/workflows/
+│   └── release.yml         # CI: build all targets + GitHub Release on tag push
 ├── wwwroot/
 │   ├── index.html   # Chat UI (vanilla JS SPA)
 │   └── admin.html   # Admin panel
+├── install.sh       # One-liner: git clone + build + install (Linux/macOS)
+├── install.ps1      # One-liner: git clone + build + install (Windows)
 ├── Program.cs       # Entry point, DI, service hosting
 └── appsettings.json
 ```

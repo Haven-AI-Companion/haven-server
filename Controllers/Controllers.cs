@@ -334,16 +334,23 @@ public class AdminController : ControllerBase
     private readonly IConfiguration _config;
     private readonly AshServer.Personality.PersonalityLoader _personality;
     private readonly AshServer.Plugins.PluginManager _plugins;
+    private readonly ILogger<AdminController> _log;
+    private readonly IWebHostEnvironment _env;
 
     public AdminController(Database db, AshServer.AI.BackendManager backends, IConfiguration config,
-        AshServer.Personality.PersonalityLoader personality, AshServer.Plugins.PluginManager plugins)
+        AshServer.Personality.PersonalityLoader personality, AshServer.Plugins.PluginManager plugins,
+        ILogger<AdminController> log, IWebHostEnvironment env)
     {
         _db = db;
         _backends = backends;
         _config = config;
         _personality = personality;
         _plugins = plugins;
+        _log = log;
+        _env = env;
     }
+
+    private string ConfigPath => Path.Combine(_env.ContentRootPath, "config.json");
 
     private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
 
@@ -489,7 +496,8 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            return Ok(new { ok = false, error = ex.Message });
+            _log.LogWarning(ex, "[backend-test] Connection test failed for backend {Id}", id);
+            return Ok(new { ok = false, error = "Backend connection failed — check URL and API key." });
         }
     }
 
@@ -520,11 +528,25 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("config")]
-    public IActionResult SaveAdminConfig([FromBody] object body)
+    public async Task<IActionResult> SaveAdminConfig([FromBody] System.Text.Json.Nodes.JsonObject body)
     {
         if (!IsAdmin) return Forbid();
-        // Runtime config changes not persisted in this version
-        return Ok(new { ok = true, note = "Config changes require restart to take effect. Edit appsettings.json directly." });
+        var path = ConfigPath;
+        System.Text.Json.Nodes.JsonObject cfgRoot;
+        if (System.IO.File.Exists(path))
+        {
+            try { cfgRoot = System.Text.Json.Nodes.JsonNode.Parse(await System.IO.File.ReadAllTextAsync(path))!.AsObject(); }
+            catch { cfgRoot = new System.Text.Json.Nodes.JsonObject(); }
+        }
+        else { cfgRoot = new System.Text.Json.Nodes.JsonObject(); }
+
+        // Merge the submitted keys into the config overlay
+        foreach (var kvp in body)
+            cfgRoot[kvp.Key] = kvp.Value?.DeepClone();
+
+        await System.IO.File.WriteAllTextAsync(path,
+            cfgRoot.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        return Ok(new { ok = true, note = "Saved to config.json — some changes require restart." });
     }
 
     [HttpGet("backends/detect")]
@@ -1012,8 +1034,8 @@ public class ChatProvidersController : ControllerBase
         _env = env;
     }
 
-    private string AppSettingsPath =>
-        Path.Combine(_env.ContentRootPath, "appsettings.json");
+    private string ConfigPath =>
+        Path.Combine(_env.ContentRootPath, "config.json");
 
     private static string MaskToken(string? val) =>
         string.IsNullOrEmpty(val) ? "" : MaskPlaceholder + val[^Math.Min(4, val.Length)..];
@@ -1056,9 +1078,16 @@ public class ChatProvidersController : ControllerBase
     {
         if (!IsAdmin) return Forbid();
 
-        var path = AppSettingsPath;
+        var path = ConfigPath;
+        // Bootstrap config.json from appsettings.json if it doesn't exist yet
         if (!System.IO.File.Exists(path))
-            return StatusCode(500, new { error = "appsettings.json not found" });
+        {
+            var appSettingsPath = Path.Combine(_env.ContentRootPath, "appsettings.json");
+            if (System.IO.File.Exists(appSettingsPath))
+                System.IO.File.Copy(appSettingsPath, path);
+            else
+                await System.IO.File.WriteAllTextAsync(path, "{}");
+        }
 
         // Read current file as JsonNode so we can merge without losing other keys
         var raw  = await System.IO.File.ReadAllTextAsync(path);
@@ -1145,13 +1174,13 @@ public class HealthController : ControllerBase
         try { await _db.GetUserById(0); dbOk = true; }
         catch { dbOk = false; }
 
-        // Backend summary
+        // Backend summary — only expose count and status, not URLs or keys
         var allBackends = await _db.GetAllBackends();
         var backendList = allBackends.Select(b => (object)new
         {
             name = b.Name,
-            type = b.Type,
-            url  = b.BaseUrl
+            type = b.Type
+            // url intentionally omitted — do not expose in public health endpoint
         }).ToList();
 
         // Discord status

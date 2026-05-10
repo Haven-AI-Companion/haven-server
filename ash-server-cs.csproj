@@ -5,6 +5,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ash_server_cs</RootNamespace>
+    <AssemblyName>ash-server</AssemblyName>
+    <!-- Single-file publish defaults (overridable per publish profile) -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Keep pdb separate so crash reports work -->
+    <DebugType>pdbonly</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,5 +32,25 @@
     <EmbeddedResource Remove="plugin-sdk/**" />
     <None Remove="plugin-sdk/**" />
   </ItemGroup>
+
+  <!-- Copy personality starter files to personality/ in the publish output -->
+  <Target Name="CopyPersonalityToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <_PersonalityFiles Include="Personality\personality\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PersonalityFiles)"
+          DestinationFiles="@(_PersonalityFiles->'$(PublishDir)personality\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Same copy for local build output (dotnet run / debug) -->
+  <Target Name="CopyPersonalityToOutput" AfterTargets="Build">
+    <ItemGroup>
+      <_PersonalityFilesOut Include="Personality\personality\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PersonalityFilesOut)"
+          DestinationFiles="@(_PersonalityFilesOut->'$(OutputPath)personality\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

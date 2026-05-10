@@ -11,3 +11,4 @@ appsettings.Development.json
 run_err.txt
 run_out.txt
 wwwroot/uploads/
+build/dist/

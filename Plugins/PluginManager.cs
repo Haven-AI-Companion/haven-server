@@ -100,8 +100,34 @@ public class PluginManager
         };
     }
 
+    private static readonly HashSet<string> _blockedHosts = new(StringComparer.OrdinalIgnoreCase)
+        { "169.254.169.254", "metadata.google.internal" };
+
+    private static bool IsPrivateUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return true;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return true;
+        if (uri.Scheme != "http" && uri.Scheme != "https") return true;
+        if (_blockedHosts.Contains(uri.Host)) return true;
+        if (uri.HostNameType == UriHostNameType.IPv4)
+        {
+            var parts = uri.Host.Split('.');
+            if (parts.Length == 4 && byte.TryParse(parts[0], out var a))
+            {
+                // Block 10.x, 172.16-31.x, 192.168.x, 127.x
+                if (a == 10 || a == 127) return true;
+                if (a == 172 && byte.TryParse(parts[1], out var b) && b >= 16 && b <= 31) return true;
+                if (a == 192 && parts[1] == "168") return true;
+            }
+        }
+        if (uri.IsLoopback) return true;
+        return false;
+    }
+
     private async Task<string> ExecuteHttp(PluginTool tool, JsonElement args)
     {
+        if (IsPrivateUrl(tool.Handler.Url))
+            return $"HTTP plugin tool '{tool.Name}' rejected: URL targets a private/loopback address.";
         try
         {
             var body = JsonSerializer.Serialize(new { tool = tool.Name, args });
@@ -116,7 +142,20 @@ public class PluginManager
     {
         try
         {
-            var psi = new ProcessStartInfo(tool.Handler.Command,
+            // Security: command must be a relative path and must resolve inside the plugin directory.
+            var command = tool.Handler.Command;
+            if (Path.IsPathRooted(command))
+                return $"Plugin tool '{tool.Name}' rejected: command must be a relative path, not absolute.";
+
+            var resolvedCommand = Path.GetFullPath(Path.Combine(plugin.DirectoryPath, command));
+            if (!resolvedCommand.StartsWith(Path.GetFullPath(plugin.DirectoryPath) + Path.DirectorySeparatorChar) &&
+                resolvedCommand != Path.GetFullPath(plugin.DirectoryPath))
+                return $"Plugin tool '{tool.Name}' rejected: command path escapes plugin directory.";
+
+            if (!File.Exists(resolvedCommand))
+                return $"Plugin tool '{tool.Name}' error: executable not found at '{resolvedCommand}'.";
+
+            var psi = new ProcessStartInfo(resolvedCommand,
                 string.Join(" ", tool.Handler.Args))
             {
                 WorkingDirectory       = plugin.DirectoryPath,

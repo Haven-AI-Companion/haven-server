@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using AshServer.Agent;
 using AshServer.AI;
 using AshServer.Auth;
@@ -30,9 +31,11 @@ public class ChatHandler
     private readonly PluginManager _plugins;
     private readonly McpManager    _mcp;
     private readonly IMemoryCache  _convCache;
+    private readonly ILogger<ChatHandler> _log;
 
     public ChatHandler(Database db, BackendManager backends, PersonalityLoader personality,
-        IConfiguration config, PluginManager plugins, McpManager mcp, IMemoryCache convCache)
+        IConfiguration config, PluginManager plugins, McpManager mcp, IMemoryCache convCache,
+        ILogger<ChatHandler> log)
     {
         _db = db;
         _backends = backends;
@@ -41,6 +44,7 @@ public class ChatHandler
         _plugins = plugins;
         _mcp = mcp;
         _convCache = convCache;
+        _log = log;
     }
 
     public async Task Handle(HttpContext context, WebSocket ws, int userId, string username, bool isAdmin = false, HashSet<string>? permissions = null)
@@ -48,8 +52,8 @@ public class ChatHandler
         string? conversationId = null;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
 
-        // Permission helper — admins bypass all checks
-        bool HasPerm(string perm) => isAdmin || (permissions?.Contains(perm) ?? true);
+        // Permission helper — admins bypass all checks; deny-by-default when permissions unknown
+        bool HasPerm(string perm) => isAdmin || (permissions?.Contains(perm) ?? false);
 
         try
         {
@@ -205,7 +209,8 @@ public class ChatHandler
                     catch (OperationCanceledException) { break; }
                     catch (Exception ex)
                     {
-                        await SendJson(ws, new { type = "error", content = ex.Message }, cts.Token);
+                        _log.LogError(ex, "[chat] Error processing message for user {User}", username);
+                        await SendJson(ws, new { type = "error", content = "An error occurred while processing your message." }, cts.Token);
                         await SendJson(ws, new { type = "typing", content = false }, cts.Token);
                     }
                 }

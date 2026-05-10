@@ -52,8 +52,28 @@ public class Program
         if (File.Exists(configPath))
             builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: true);
 
-        var jwtSecret = builder.Configuration["Jwt:Secret"]
-            ?? throw new InvalidOperationException("Jwt:Secret must be set in appsettings.json or config.json");
+        // Auto-generate a secure JWT secret on first run and persist it to config.json
+        // so it survives restarts without requiring manual configuration.
+        const string defaultSecretPlaceholder = "CHANGE_THIS_TO_A_RANDOM_SECRET_AT_LEAST_32_CHARS_LONG";
+        var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "";
+        if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret == defaultSecretPlaceholder || jwtSecret.Length < 32)
+        {
+            jwtSecret = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+            // Persist to config.json so it is stable across restarts
+            var genConfigPath = Path.Combine(AppContext.BaseDirectory, "config.json");
+            System.Text.Json.Nodes.JsonObject cfgRoot;
+            if (File.Exists(genConfigPath))
+            {
+                try { cfgRoot = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(genConfigPath))!.AsObject(); }
+                catch { cfgRoot = new System.Text.Json.Nodes.JsonObject(); }
+            }
+            else { cfgRoot = new System.Text.Json.Nodes.JsonObject(); }
+
+            if (!cfgRoot.ContainsKey("Jwt")) cfgRoot["Jwt"] = new System.Text.Json.Nodes.JsonObject();
+            cfgRoot["Jwt"]!.AsObject()["Secret"] = jwtSecret;
+            File.WriteAllText(genConfigPath, cfgRoot.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine("[startup] Generated new JWT secret and saved to config.json");
+        }
 
         // ── Services ────────────────────────────────────────────────────────
         var dbPath = builder.Configuration["DatabasePath"] ?? "ash_server.db";
@@ -205,7 +225,13 @@ public class Program
             // Load user permissions for this session
             bool isAdmin = false;
             HashSet<string>? permissions = null;
-            if (userId > 0)
+            if (!requireAuth)
+            {
+                // No-auth mode: treat the local connection as having full access
+                isAdmin = true;
+                permissions = [.. AshServer.Auth.Permissions.All];
+            }
+            else if (userId > 0)
             {
                 var user = await dbSvc.GetUserById(userId);
                 isAdmin = user?.IsAdmin ?? false;

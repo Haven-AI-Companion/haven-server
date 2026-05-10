@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # needed to create releases and upload assets
+
+jobs:
+  # ── Build self-contained binaries for every target ─────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            binary: ash-server.exe
+          - rid: linux-x64
+            os: ubuntu-latest
+            binary: ash-server
+          - rid: linux-arm64
+            os: ubuntu-latest
+            binary: ash-server
+          - rid: osx-x64
+            os: macos-latest
+            binary: ash-server
+          - rid: osx-arm64
+            os: macos-latest
+            binary: ash-server
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore
+        run: dotnet restore ash-server-cs.csproj
+
+      - name: Publish (${{ matrix.rid }})
+        run: |
+          dotnet publish ash-server-cs.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:AssemblyVersion=${{ github.ref_name }} \
+            -p:FileVersion=${{ github.ref_name }} \
+            -p:InformationalVersion=${{ github.ref_name }} \
+            -o build/dist/${{ matrix.rid }}
+        shell: bash
+
+      - name: Verify binary
+        run: |
+          ls -lh build/dist/${{ matrix.rid }}/
+        shell: bash
+
+      - name: Package (zip)
+        run: |
+          version="${{ github.ref_name }}"
+          rid="${{ matrix.rid }}"
+          zipname="ash-server-${version}-${rid}.zip"
+          cd build/dist/${{ matrix.rid }}
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            powershell Compress-Archive -Path * -DestinationPath "../$zipname"
+          else
+            zip -r "../$zipname" .
+          fi
+          echo "ASSET_PATH=build/dist/$zipname" >> "$GITHUB_ENV"
+          echo "ASSET_NAME=$zipname" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: ${{ env.ASSET_PATH }}
+          retention-days: 1
+
+  # ── Build Windows NSIS installer (depends on win-x64 build) ───────────────
+  windows-installer:
+    needs: build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download win-x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: win-x64
+          path: build/dist/
+
+      - name: Extract win-x64 zip
+        run: |
+          $version = "${{ github.ref_name }}"
+          $zip = "build\dist\ash-server-${version}-win-x64.zip"
+          Expand-Archive -Path $zip -DestinationPath "build\dist\win-x64" -Force
+        shell: powershell
+
+      - name: Update version in NSIS script
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          (Get-Content build\windows\installer.nsi) `
+            -replace '!define PRODUCT_VERSION.*', "!define PRODUCT_VERSION `"$version`"" |
+            Set-Content build\windows\installer.nsi
+        shell: powershell
+
+      - name: Build NSIS installer
+        run: makensis build\windows\installer.nsi
+        shell: cmd
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: build/dist/ash-server-*-windows-x64-setup.exe
+          retention-days: 1
+
+  # ── Create GitHub Release and attach all assets ────────────────────────────
+  release:
+    needs: [build, windows-installer]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -lh release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Ash Server ${{ github.ref_name }}"
+          body: |
+            ## Ash Server ${{ github.ref_name }}
+
+            ### Downloads
+
+            | Platform | File |
+            |----------|------|
+            | Windows (x64) installer | `ash-server-*-windows-x64-setup.exe` |
+            | Windows (x64) zip       | `ash-server-*-win-x64.zip` |
+            | Linux (x64)             | `ash-server-*-linux-x64.zip` |
+            | Linux (arm64)           | `ash-server-*-linux-arm64.zip` |
+            | macOS (Apple Silicon)   | `ash-server-*-osx-arm64.zip` |
+            | macOS (Intel)           | `ash-server-*-osx-x64.zip` |
+
+            ### Quick install
+
+            **Windows** — Run the `.exe` installer as Administrator.
+
+            **Linux**
+            ```bash
+            unzip ash-server-*-linux-x64.zip -d ash-server
+            sudo bash ash-server/build/linux/install.sh ash-server/ash-server
+            ```
+
+            **macOS**
+            ```bash
+            unzip ash-server-*-osx-arm64.zip -d ash-server
+            sudo bash ash-server/build/macos/install.sh ash-server/ash-server
+            ```
+
+            After install, open **http://localhost:18799/admin.html** to configure.
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
