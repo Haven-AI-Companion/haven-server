@@ -31,8 +31,8 @@ Unicode True
 !include "LogicLib.nsh"
 
 !define MUI_ABORTWARNING
-!define MUI_ICON          "${NSISDIR}\Contrib\Graphics\Icons\orange-install.ico"
-!define MUI_UNICON        "${NSISDIR}\Contrib\Graphics\Icons\orange-uninstall.ico"
+!define MUI_ICON          "ash-server.ico"
+!define MUI_UNICON        "ash-server.ico"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"

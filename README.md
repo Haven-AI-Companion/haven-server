@@ -1,5 +1,9 @@
 # 🌸 Ash Server
 
+<p align="center">
+  <img src="docs/logo.png" alt="Ash Server — Secure AI Orchestrator" width="600">
+</p>
+
 > **Security-first, privacy-first, locally-running AI backend** — built as a hardened alternative to OpenClaw, powered by [gemma4-turbo](https://ollama.com/ssfdre38/gemma4-turbo).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

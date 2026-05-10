@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ash Admin</title>
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<link rel="apple-touch-icon" href="/static/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -42,7 +44,7 @@ html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:
 .sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}
 .sidebar-head{padding:16px 14px 14px;border-bottom:1px solid var(--border)}
 .logo{display:flex;align-items:center;gap:10px}
-.logo-icon{width:30px;height:30px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.logo-icon{width:30px;height:30px;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .logo-name{font-size:14px;font-weight:600}
 .logo-badge{font-size:10px;color:var(--text-muted);background:var(--surface2);border:1px solid var(--border);padding:1px 6px;border-radius:8px;margin-left:auto}
 .sidebar-nav{flex:1;overflow-y:auto;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
@@ -192,7 +194,7 @@ select.form-input{cursor:pointer}
   <aside class="sidebar">
     <div class="sidebar-head">
       <div class="logo">
-        <div class="logo-icon">🦞</div>
+        <div class="logo-icon"><img src="/static/icon.png" alt="Ash" style="width:100%;height:100%;object-fit:contain;"></div>
         <span class="logo-name">Ash Admin</span>
         <span class="logo-badge">v2</span>
       </div>
