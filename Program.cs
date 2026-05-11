@@ -72,6 +72,7 @@ public class Program
             if (!cfgRoot.ContainsKey("Jwt")) cfgRoot["Jwt"] = new System.Text.Json.Nodes.JsonObject();
             cfgRoot["Jwt"]!.AsObject()["Secret"] = jwtSecret;
             File.WriteAllText(genConfigPath, cfgRoot.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            builder.Configuration["Jwt:Secret"] = jwtSecret; // sync in-memory config so AuthService uses same key
             Console.WriteLine("[startup] Generated new JWT secret and saved to config.json");
         }
 
