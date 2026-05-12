@@ -133,7 +133,19 @@ public class ChatHandler
                         await SendJson(ws, new { type = "conversation_id", content = conversationId }, cts.Token);
                     }
 
-                    await _db.AddMessage(conversationId, "user", userMessage);
+                    try
+                    {
+                        await _db.AddMessage(conversationId, "user", userMessage);
+                    }
+                    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 19)
+                    {
+                        // Conversation was deleted mid-session — create a fresh one and retry
+                        conversationId = await _db.CreateConversation(userId);
+                        _convCache.Remove(conversationId);
+                        _convCache.Set(conversationId, new List<ChatMessage>(), CacheTtl);
+                        await SendJson(ws, new { type = "conversation_id", content = conversationId }, cts.Token);
+                        await _db.AddMessage(conversationId, "user", userMessage);
+                    }
 
                     var history = _convCache.GetOrCreate(conversationId, e =>
                     {
