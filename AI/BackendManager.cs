@@ -430,18 +430,8 @@ public class BackendManager
             }
         }
 
-        // Zero-config fallback
-        if (results.Count == 0)
-        {
-            try
-            {
-                var fallback = new OllamaBackend("http://localhost:11434");
-                var names = await fallback.ListModels();
-                results.AddRange(names.Select(n => new ModelDescriptor(n, n, -1, "Local (auto)", "ollama")));
-            }
-            catch { }
-        }
-
+        // No backends configured — return empty list instead of silently using localhost.
+        // Callers should prompt the user to configure a backend via the admin panel.
         return results;
     }
 
@@ -463,8 +453,8 @@ public class BackendManager
         // Any backend
         if (_cache!.Count > 0) return (_cache![0].Instance, modelId);
 
-        // Absolute fallback
-        return (new OllamaBackend("http://localhost:11434"), modelId);
+        throw new InvalidOperationException(
+            "No AI backends are configured. Add a backend via the admin panel (/admin/backends).");
     }
 
     public async IAsyncEnumerable<string> StreamChat(
