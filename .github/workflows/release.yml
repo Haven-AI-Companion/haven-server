@@ -105,14 +105,9 @@ jobs:
 
       - name: Extract win-x64 zip
         run: |
-          Write-Host "Contents of build\dist\:"
-          Get-ChildItem "build\dist\" -ErrorAction SilentlyContinue
           $zip = Get-ChildItem "build\dist\*.zip" | Select-Object -First 1 -ExpandProperty FullName
           if (-not $zip) { Write-Error "No zip found in build\dist\"; exit 1 }
-          Write-Host "Extracting: $zip"
           Expand-Archive -Path $zip -DestinationPath "build\dist\win-x64" -Force
-          Write-Host "Contents of build\dist\win-x64\:"
-          Get-ChildItem "build\dist\win-x64"
         shell: powershell
 
       - name: Update version in NSIS script
@@ -126,10 +121,6 @@ jobs:
       - name: Build NSIS installer
         run: |
           choco install nsis --no-progress -y
-          Set-Location "${{ github.workspace }}"
-          Write-Host "CWD: $(Get-Location)"
-          Write-Host "win-x64 dir contents:"
-          Get-ChildItem "build\dist\win-x64" -ErrorAction SilentlyContinue
           & "C:\Program Files (x86)\NSIS\makensis.exe" build\windows\installer.nsi
         shell: powershell
 
