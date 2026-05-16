@@ -97,10 +97,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install NSIS
-        run: choco install nsis --no-progress -y
-        shell: cmd
-
       - name: Download win-x64 artifact
         uses: actions/download-artifact@v4
         with:
@@ -123,7 +119,9 @@ jobs:
         shell: powershell
 
       - name: Build NSIS installer
-        run: makensis build\windows\installer.nsi
+        run: |
+          choco install nsis --no-progress -y
+          "C:\Program Files (x86)\NSIS\makensis.exe" build\windows\installer.nsi
         shell: cmd
 
       - name: Upload installer artifact
