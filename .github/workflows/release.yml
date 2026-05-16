@@ -73,7 +73,7 @@ jobs:
           zipname="ash-server-${version}-${rid}.zip"
           cd build/dist/${{ matrix.rid }}
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            powershell Compress-Archive -Path * -DestinationPath "../$zipname"
+            powershell -Command "Compress-Archive -Path './*' -DestinationPath '../${zipname}'"
           else
             zip -r "../$zipname" .
           fi
