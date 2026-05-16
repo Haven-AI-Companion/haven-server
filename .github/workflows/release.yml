@@ -47,15 +47,17 @@ jobs:
 
       - name: Publish (${{ matrix.rid }})
         run: |
+          version="${{ github.ref_name }}"
+          numeric="${version#v}"
           dotnet publish ash-server-cs.csproj \
             -c Release \
             -r ${{ matrix.rid }} \
             --self-contained true \
             -p:PublishSingleFile=true \
             -p:EnableCompressionInSingleFile=true \
-            -p:AssemblyVersion=${{ github.ref_name }} \
-            -p:FileVersion=${{ github.ref_name }} \
-            -p:InformationalVersion=${{ github.ref_name }} \
+            -p:AssemblyVersion=${numeric} \
+            -p:FileVersion=${numeric} \
+            -p:InformationalVersion=${version} \
             -o build/dist/${{ matrix.rid }}
         shell: bash
 
