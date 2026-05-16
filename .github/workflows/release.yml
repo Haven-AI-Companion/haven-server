@@ -105,9 +105,14 @@ jobs:
 
       - name: Extract win-x64 zip
         run: |
-          $version = "${{ github.ref_name }}"
-          $zip = "build\dist\ash-server-${version}-win-x64.zip"
+          Write-Host "Contents of build\dist\:"
+          Get-ChildItem "build\dist\" -ErrorAction SilentlyContinue
+          $zip = Get-ChildItem "build\dist\*.zip" | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $zip) { Write-Error "No zip found in build\dist\"; exit 1 }
+          Write-Host "Extracting: $zip"
           Expand-Archive -Path $zip -DestinationPath "build\dist\win-x64" -Force
+          Write-Host "Contents of build\dist\win-x64\:"
+          Get-ChildItem "build\dist\win-x64"
         shell: powershell
 
       - name: Update version in NSIS script
