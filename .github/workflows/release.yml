@@ -126,8 +126,12 @@ jobs:
       - name: Build NSIS installer
         run: |
           choco install nsis --no-progress -y
-          "C:\Program Files (x86)\NSIS\makensis.exe" build\windows\installer.nsi
-        shell: cmd
+          Set-Location "${{ github.workspace }}"
+          Write-Host "CWD: $(Get-Location)"
+          Write-Host "win-x64 dir contents:"
+          Get-ChildItem "build\dist\win-x64" -ErrorAction SilentlyContinue
+          & "C:\Program Files (x86)\NSIS\makensis.exe" build\windows\installer.nsi
+        shell: powershell
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
