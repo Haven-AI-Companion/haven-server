@@ -15,12 +15,12 @@
 !define PUBLISHER         "Ash Server Project"
 !define PRODUCT_URL       "https://github.com/ssfdre38/ash-server-cs"
 
-; Source directory (relative to where makensis is run — repo root)
-!define SRC_DIR           "build\dist\win-x64"
+; Source directory (relative to THIS script file — build\windows\installer.nsi)
+!define SRC_DIR           "..\dist\win-x64"
 
 ; ── NSIS settings ────────────────────────────────────────────────────────────
 Name          "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile       "build\dist\ash-server-${PRODUCT_VERSION}-windows-x64-setup.exe"
+OutFile       "..\dist\ash-server-${PRODUCT_VERSION}-windows-x64-setup.exe"
 InstallDir    "${INSTALL_DIR}"
 InstallDirRegKey HKLM "${UNINSTALL_REG}" "InstallLocation"
 RequestExecutionLevel admin
