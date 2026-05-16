@@ -219,6 +219,13 @@ public class ChatHandler
                         }
                     }
                     catch (OperationCanceledException) { break; }
+                    catch (InvalidOperationException ex)
+                    {
+                        // Configuration errors (e.g. no backend configured) — surface the message directly.
+                        _log.LogWarning("[chat] Configuration error for user {User}: {Message}", username, ex.Message);
+                        await SendJson(ws, new { type = "error", content = ex.Message }, cts.Token);
+                        await SendJson(ws, new { type = "typing", content = false }, cts.Token);
+                    }
                     catch (Exception ex)
                     {
                         _log.LogError(ex, "[chat] Error processing message for user {User}", username);
