@@ -26,10 +26,12 @@ public class PluginManager
     {
         _plugins.Clear();
 
-        if (!Directory.Exists(_pluginsDir))
+        // Pre-built zips ship "Plugins" (capital P); resolve the actual path with a
+        // case-insensitive fallback so Linux case-sensitive filesystems work OOTB.
+        var pluginsDir = _pluginsDir;
+        if (!Directory.Exists(pluginsDir))
         {
-            // Pre-built zips ship "Plugins" (capital P); try alternate casing before giving up.
-            var parent = Path.GetDirectoryName(_pluginsDir) ?? _pluginsDir;
+            var parent = Path.GetDirectoryName(pluginsDir) ?? pluginsDir;
             var altCasing = Directory.EnumerateDirectories(parent)
                 .FirstOrDefault(d => string.Equals(Path.GetFileName(d), "plugins",
                     StringComparison.OrdinalIgnoreCase));
@@ -37,16 +39,16 @@ public class PluginManager
             if (altCasing != null)
             {
                 Console.WriteLine($"[plugins] using directory with alternate casing: {altCasing}");
-                _pluginsDir = altCasing;
+                pluginsDir = altCasing;
             }
             else
             {
-                Console.WriteLine($"[plugins] directory not found: {_pluginsDir}");
+                Console.WriteLine($"[plugins] directory not found: {pluginsDir}");
                 return;
             }
         }
 
-        foreach (var dir in Directory.GetDirectories(_pluginsDir).OrderBy(d => d))
+        foreach (var dir in Directory.GetDirectories(pluginsDir).OrderBy(d => d))
         {
             var manifestPath = Path.Combine(dir, "plugin.json");
             if (!File.Exists(manifestPath)) continue;
