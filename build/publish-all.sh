@@ -31,6 +31,20 @@ for rid in "${TARGETS[@]}"; do
         -p:InformationalVersion="$VERSION" \
         -o "$out"
 
+    # Ensure executable bit + include install scripts + normalise Plugins casing
+    [[ -f "$out/ash-server" ]] && chmod +x "$out/ash-server"
+    mkdir -p "$out/build/linux"
+    cp "$(dirname "$0")/linux/install.sh" "$out/build/linux/install.sh"
+    chmod +x "$out/build/linux/install.sh"
+    if [[ -d "$(dirname "$0")/macos" ]]; then
+        mkdir -p "$out/build/macos"
+        cp "$(dirname "$0")/macos/install.sh" "$out/build/macos/install.sh" 2>/dev/null || true
+        chmod +x "$out/build/macos/install.sh" 2>/dev/null || true
+    fi
+    if [[ -d "$out/Plugins" && ! -d "$out/plugins" ]]; then
+        mv "$out/Plugins" "$out/plugins"
+    fi
+
     # Zip the output
     zipname="ash-server-${VERSION}-${rid}.zip"
     zippath="$OUTDIR/$zipname"

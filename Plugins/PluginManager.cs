@@ -28,8 +28,22 @@ public class PluginManager
 
         if (!Directory.Exists(_pluginsDir))
         {
-            Console.WriteLine($"[plugins] directory not found: {_pluginsDir}");
-            return;
+            // Pre-built zips ship "Plugins" (capital P); try alternate casing before giving up.
+            var parent = Path.GetDirectoryName(_pluginsDir) ?? _pluginsDir;
+            var altCasing = Directory.EnumerateDirectories(parent)
+                .FirstOrDefault(d => string.Equals(Path.GetFileName(d), "plugins",
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (altCasing != null)
+            {
+                Console.WriteLine($"[plugins] using directory with alternate casing: {altCasing}");
+                _pluginsDir = altCasing;
+            }
+            else
+            {
+                Console.WriteLine($"[plugins] directory not found: {_pluginsDir}");
+                return;
+            }
         }
 
         foreach (var dir in Directory.GetDirectories(_pluginsDir).OrderBy(d => d))

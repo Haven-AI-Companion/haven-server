@@ -71,11 +71,32 @@ jobs:
           version="${{ github.ref_name }}"
           rid="${{ matrix.rid }}"
           zipname="ash-server-${version}-${rid}.zip"
-          cd build/dist/${{ matrix.rid }}
+          staging="build/dist/${rid}"
+
+          # Ensure the Unix binary has the executable bit set before zipping
+          if [[ -f "$staging/ash-server" ]]; then
+            chmod +x "$staging/ash-server"
+          fi
+
+          # Include install scripts so the zip layout matches the README quick-start
+          mkdir -p "$staging/build/linux"
+          cp build/linux/install.sh "$staging/build/linux/install.sh"
+          chmod +x "$staging/build/linux/install.sh"
+          if [[ -d "build/macos" ]]; then
+            mkdir -p "$staging/build/macos"
+            cp build/macos/install.sh "$staging/build/macos/install.sh" 2>/dev/null || true
+            chmod +x "$staging/build/macos/install.sh" 2>/dev/null || true
+          fi
+
+          # Normalise Plugins → plugins so Linux case-sensitive filesystems work OOTB
+          if [[ -d "$staging/Plugins" && ! -d "$staging/plugins" ]]; then
+            mv "$staging/Plugins" "$staging/plugins"
+          fi
+
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            powershell -Command "Compress-Archive -Path './*' -DestinationPath '../${zipname}'"
+            powershell -Command "Compress-Archive -Path '$staging/*' -DestinationPath 'build/dist/${zipname}'"
           else
-            zip -r "../$zipname" .
+            (cd "$staging" && zip -r "../../$zipname" .)
           fi
           echo "ASSET_PATH=build/dist/$zipname" >> "$GITHUB_ENV"
           echo "ASSET_NAME=$zipname" >> "$GITHUB_ENV"
