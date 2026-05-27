@@ -202,18 +202,39 @@ External Message (Discord / Slack / Telegram)
 ### Admin Panel (`/admin.html`)
 - User management + role assignment
 - AI backend CRUD (Ollama, OpenAI-compatible)
-- MCP server configuration
-- Third-Party Chat settings (Discord / Slack / Telegram credentials)
+- **MCP App Store** — browse, configure required variables, and install servers with a single click
+- **Update Center** — view current vs latest version, inspect release notes, and hot-swap binary updates
+- Third-Party Chat credentials management
 - Channel configs + allowUnlinked policy
 - External identity link management
 - Audit log viewer
 - Analytics dashboard (messages/day, active users)
 
-### Deployment
+### Deployment & Lifecycle
 - **Cross-platform service installer**: Windows Service, systemd, launchd
+- **Native Self-Updating System**: Hot-swaps running locked binary executables and web assets seamlessly on all platforms (SCM, Systemd, Launchd)
 - **Single binary** — `dotnet publish` produces self-contained executable
 - **SQLite** — zero external DB dependencies
 - **config.json** overlay — override settings without touching the repo
+
+---
+
+## One-Click MCP App Store & Update System
+
+Ash Server introduces a state-of-the-art administrative experience with two native subsystems built into the core:
+
+### 1. One-Click MCP App Store
+Instead of manually typing NPM packages, arguments, and environment keys to configure tools, Ash Server features a fully integrated App Store:
+*   **Git-based Registry**: Automatically pulls available packages from the community-driven, public repository at [ssfdre38/mcp-registry](https://github.com/ssfdre38/mcp-registry).
+*   **Dynamic Variable Substitution**: Renders customized input forms for required keys (like GitHub personal tokens or folder paths), formats them into command-line arguments and environment variables, writes them to SQLite, and dynamically boots the server instantly in the background.
+*   **Pre-built High-Fidelity Apps**: Includes out-of-the-box configurations for *Filesystem*, *Google Search*, *GitHub Integration*, *PostgreSQL*, *Puppeteer Browser*, and *SQLite Database Manager*.
+*   **Universal Tool Calling**: Leverages our fully integrated OpenAI tool-calling adapter to enable multi-step agents and MCP tool execution for OpenAI, Groq, Mistral, Together AI, OpenRouter, and local OpenAI endpoints (LM Studio, Jan, LocalAI).
+
+### 2. Native Self-Updating System
+Keeping a self-hosted AI orchestrator updated is traditionally complex, especially under different system service contexts:
+*   **Dynamic File Swapping**: Renames locked executing binary files first (which filesystems permit) and writes the new build in place, recursively replacing web assets in `wwwroot` while fully preserving configurations and databases.
+*   **Deferred Service Restarts**: Automatically detects your platform service manager (**Windows SCM**, **systemd**, or **launchd**) and schedules a delayed daemon shell script to stop, restart the service, and terminate the previous process.
+*   **Sleek Update Center Dashboard**: An administrative center showing current vs latest tags, raw markdown release notes, and real-time installation log polling that automatically reconnects the browser session once the server is back online.
 
 ---
 
