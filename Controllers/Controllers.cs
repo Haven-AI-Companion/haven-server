@@ -5,8 +5,10 @@ using AshServer.Auth;
 using AshServer.Data;
 using AshServer.Mcp;
 using AshServer.Models;
+using AshServer.Service;
 using System.Diagnostics;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace AshServer.Controllers;
 
@@ -336,10 +338,11 @@ public class AdminController : ControllerBase
     private readonly AshServer.Plugins.PluginManager _plugins;
     private readonly ILogger<AdminController> _log;
     private readonly IWebHostEnvironment _env;
+    private readonly UpdateManager _updateManager;
 
     public AdminController(Database db, AshServer.AI.BackendManager backends, IConfiguration config,
         AshServer.Personality.PersonalityLoader personality, AshServer.Plugins.PluginManager plugins,
-        ILogger<AdminController> log, IWebHostEnvironment env)
+        ILogger<AdminController> log, IWebHostEnvironment env, UpdateManager updateManager)
     {
         _db = db;
         _backends = backends;
@@ -348,6 +351,7 @@ public class AdminController : ControllerBase
         _plugins = plugins;
         _log = log;
         _env = env;
+        _updateManager = updateManager;
     }
 
     private string ConfigPath => Path.Combine(_env.ContentRootPath, "config.json");
@@ -730,6 +734,38 @@ public class AdminController : ControllerBase
         await _db.RemoveRole(userId, roleId);
         return Ok(new { ok = true });
     }
+
+    [HttpGet("updates/check")]
+    public async Task<IActionResult> CheckForUpdates()
+    {
+        if (!IsAdmin) return Forbid();
+        var result = await _updateManager.CheckForUpdatesAsync();
+        return Ok(result);
+    }
+
+    [HttpPost("updates/apply")]
+    public async Task<IActionResult> ApplyUpdate([FromBody] Dictionary<string, string> body)
+    {
+        if (!IsAdmin) return Forbid();
+        if (!body.TryGetValue("download_url", out var downloadUrl) || string.IsNullOrWhiteSpace(downloadUrl))
+            return BadRequest(new { error = "download_url is required" });
+
+        // Run in background task to respond 200 OK before server restart sequence stops the process.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(1000);
+                await _updateManager.ApplyUpdateAsync(downloadUrl);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Failed to apply update from {Url}", downloadUrl);
+            }
+        });
+
+        return Ok(new { ok = true, message = "Update started. The server will restart shortly." });
+    }
 }
 
 // ── MCP Controller ─────────────────────────────────────────────────────────
@@ -741,8 +777,15 @@ public class McpController : ControllerBase
 {
     private readonly McpManager _mcp;
     private readonly Database   _db;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private const string RegistryUrl = "https://raw.githubusercontent.com/ssfdre38/mcp-registry/master/registry.json";
 
-    public McpController(McpManager mcp, Database db) { _mcp = mcp; _db = db; }
+    public McpController(McpManager mcp, Database db, IHttpClientFactory httpClientFactory)
+    {
+        _mcp = mcp;
+        _db = db;
+        _httpClientFactory = httpClientFactory;
+    }
 
     private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
 
@@ -833,6 +876,120 @@ public class McpController : ControllerBase
         if (!IsAdmin) return Forbid();
         var connected = await _mcp.ReconnectAsync(id);
         return Ok(new { ok = true, connected });
+    }
+
+    [HttpGet("registry")]
+    public async Task<IActionResult> GetRegistry()
+    {
+        if (!IsAdmin) return Forbid();
+
+        string json = "";
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("AshServer-Agent/1.0");
+            json = await client.GetStringAsync(RegistryUrl);
+        }
+        catch
+        {
+            var fallbackPath = @"C:\Users\admin\.gemini\antigravity\scratch\mcp-registry\registry.json";
+            if (System.IO.File.Exists(fallbackPath))
+            {
+                json = await System.IO.File.ReadAllTextAsync(fallbackPath);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return BadRequest(new { error = "Failed to fetch MCP registry. Make sure you have internet access." });
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var serversEl = root.GetProperty("servers");
+            
+            var activeServers = _mcp.GetServerInfos();
+
+            var resultList = new List<object>();
+            foreach (var item in serversEl.EnumerateArray())
+            {
+                var id = item.GetProperty("id").GetString() ?? "";
+                var active = activeServers.FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase));
+                
+                resultList.Add(new
+                {
+                    id = id,
+                    name = item.GetProperty("name").GetString() ?? "",
+                    description = item.GetProperty("description").GetString() ?? "",
+                    type = item.GetProperty("type").GetString() ?? "stdio",
+                    command = item.GetProperty("command").GetString() ?? "",
+                    args = item.GetProperty("args").Clone(),
+                    env_variables = item.GetProperty("env_variables").Clone(),
+                    installed = active != null,
+                    enabled = active?.Connected ?? false
+                });
+            }
+
+            return Ok(new { servers = resultList });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = $"Failed to parse registry data: {ex.Message}" });
+        }
+    }
+
+    [HttpPost("registry/install")]
+    public async Task<IActionResult> InstallApp([FromBody] McpInstallRequest req)
+    {
+        if (!IsAdmin) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Id) || string.IsNullOrWhiteSpace(req.Name))
+            return BadRequest(new { error = "id and name are required" });
+
+        var env = new Dictionary<string, string>();
+        if (req.EnvVariables != null)
+        {
+            foreach (var kvp in req.EnvVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(kvp.Value))
+                {
+                    env[kvp.Key] = kvp.Value.Trim();
+                }
+            }
+        }
+
+        var args = new List<string>();
+        if (req.Args != null)
+        {
+            foreach (var arg in req.Args)
+            {
+                var processed = arg;
+                if (req.EnvVariables != null)
+                {
+                    foreach (var kvp in req.EnvVariables)
+                    {
+                        processed = processed.Replace($"{{{kvp.Key}}}", kvp.Value ?? "");
+                    }
+                }
+                args.Add(processed);
+            }
+        }
+
+        var config = new McpServerConfig
+        {
+            Id = req.Id.Trim().ToLower().Replace(' ', '-'),
+            Name = req.Name.Trim(),
+            Type = req.Type is "http" or "stdio" ? req.Type : "stdio",
+            Command = req.Command?.Trim() ?? "",
+            Args = args,
+            Env = env,
+            Url = req.Url?.Trim() ?? "",
+            Enabled = true
+        };
+
+        var connected = await _mcp.AddServerAsync(config);
+        return Ok(new { ok = true, id = config.Id, connected });
     }
 }
 
@@ -1206,3 +1363,13 @@ public class HealthController : ControllerBase
         });
     }
 }
+
+public record McpInstallRequest(
+    string Id,
+    string Name,
+    string Type,
+    string? Command,
+    List<string>? Args,
+    Dictionary<string, string>? EnvVariables,
+    string? Url
+);

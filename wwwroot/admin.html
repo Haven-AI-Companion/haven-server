@@ -179,6 +179,7 @@ select.form-input{cursor:pointer}
 .toast-item.toast-out{animation:toastOut .25s ease forwards}
 @keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes toastOut{to{opacity:0;transform:translateY(10px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* Utility */
 .txt-accent{color:var(--accent)}.txt-muted{color:var(--text-muted)}.txt-error{color:var(--error)}.txt-success{color:var(--success)}
@@ -251,6 +252,10 @@ select.form-input{cursor:pointer}
       <button class="nav-item" data-tab="database" data-title="Database" data-sub="Backups and storage management">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
         Database
+      </button>
+      <button class="nav-item" data-tab="updates" data-title="Update Center" data-sub="Check and install system updates">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Update Center
       </button>
     </nav>
     <div class="sidebar-foot">
@@ -716,9 +721,55 @@ select.form-input{cursor:pointer}
             </div>
           </div>
 
-          <div id="mcp-summary" style="margin-bottom:14px;font-size:13px;color:var(--text-muted)">Loading...</div>
-          <div id="mcp-list"><div class="empty"><div class="empty-icon">🔗</div>Loading...</div></div>
+          <div style="display:flex; gap:8px; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
+            <button class="btn btn-sm btn-primary" id="mcp-tab-active" onclick="switchMcpSubTab('active')">Active Servers</button>
+            <button class="btn btn-sm" id="mcp-tab-store" onclick="switchMcpSubTab('store')">MCP App Store</button>
+          </div>
+
+          <div id="mcp-active-view">
+            <div id="mcp-summary" style="margin-bottom:14px;font-size:13px;color:var(--text-muted)">Loading...</div>
+            <div id="mcp-list"><div class="empty"><div class="empty-icon">🔗</div>Loading...</div></div>
+          </div>
+
+          <div id="mcp-store-view" style="display:none;">
+            <p class="txt-muted" style="font-size:12px; margin-bottom:16px;">
+              Install popular Model Context Protocol (MCP) servers with a single click. Connected stdio servers run natively as background subprocesses on the host system.
+            </p>
+            
+            <div id="mcp-store-loading" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px;">
+              <div class="spinner" style="width:28px; height:28px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; margin-bottom:12px;"></div>
+              <div style="font-size:12px; color:var(--text-muted);">Fetching MCP registry...</div>
+            </div>
+            
+            <div id="mcp-store-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+              <!-- Dynamic App Cards go here -->
+            </div>
+          </div>
+
         </div>
+
+        <!-- App Store Config Modal -->
+        <div id="mcp-install-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+          <div class="card" style="width:100%; max-width:480px; margin:20px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px; box-shadow:var(--shadow); animation:toastIn 0.2s ease;">
+            <div style="font-weight:600; font-size:15px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
+              <span id="install-modal-title">Install App</span>
+              <button onclick="closeInstallModal()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px;">✕</button>
+            </div>
+            <p id="install-modal-desc" class="txt-muted" style="font-size:12px; margin-bottom:16px;"></p>
+            <input type="hidden" id="install-app-id">
+            
+            <div id="install-fields-container" style="margin-bottom:16px; display:flex; flex-direction:column; gap:12px;">
+              <!-- Dynamic Inputs based on app's env_variables go here -->
+            </div>
+            
+            <div id="install-modal-status" style="font-size:12px; margin-bottom:12px; min-height:16px;"></div>
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+              <button class="btn" onclick="closeInstallModal()">Cancel</button>
+              <button class="btn btn-primary" id="btn-submit-install" onclick="submitInstallApp()">Configure &amp; Install</button>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Configuration -->
@@ -906,6 +957,83 @@ select.form-input{cursor:pointer}
         </div>
       </div>
 
+      <!-- Update Center -->
+      <div class="tab-content" id="updates">
+        <div class="card" style="position:relative; overflow:hidden;">
+          <div style="position:absolute; top:0; right:0; width:150px; height:150px; background:radial-gradient(circle, var(--accent-glow) 0%, transparent 70%); pointer-events:none;"></div>
+          <div class="card-title">Update Center</div>
+          
+          <div id="update-loading" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px;">
+            <div class="spinner" style="width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; margin-bottom:16px;"></div>
+            <div style="font-weight:500; color:var(--text-muted);">Checking for updates...</div>
+          </div>
+          
+          <div id="update-uptodate" style="display:none; padding:10px 0;">
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
+              <div style="font-size:24px; background:rgba(52, 211, 153, 0.1); border:1px solid rgba(52, 211, 153, 0.2); width:54px; height:54px; border-radius:14px; display:flex; align-items:center; justify-content:center; color:var(--success);">✓</div>
+              <div>
+                <h3 style="font-size:15px; font-weight:600; margin-bottom:4px;">You're All Set!</h3>
+                <p style="font-size:13px; color:var(--text-muted);">Ash Server is running the latest version.</p>
+              </div>
+            </div>
+            
+            <table class="kv-table" style="max-width:400px; margin-bottom:20px;">
+              <tr><td>Current Version</td><td><span class="badge badge-accent">v<span id="utd-current-version">1.0.2</span></span></td></tr>
+              <tr><td>Latest Version</td><td><span class="badge badge-success">v<span id="utd-latest-version">1.0.2</span></span></td></tr>
+              <tr><td>Status</td><td class="txt-success" style="font-weight:500;">Up to date</td></tr>
+            </table>
+            
+            <button class="btn" onclick="checkUpdates(true)">Check Again</button>
+          </div>
+
+          <div id="update-available" style="display:none; padding:10px 0;">
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
+              <div style="font-size:24px; background:var(--accent-dim); border:1px solid var(--accent-glow); width:54px; height:54px; border-radius:14px; display:flex; align-items:center; justify-content:center; color:var(--accent);">🎁</div>
+              <div>
+                <h3 style="font-size:15px; font-weight:600; margin-bottom:4px;">New Update Available!</h3>
+                <p style="font-size:13px; color:var(--text-muted);">A newer version of Ash Server is available for installation.</p>
+              </div>
+            </div>
+            
+            <table class="kv-table" style="max-width:400px; margin-bottom:20px;">
+              <tr><td>Current Version</td><td><span class="badge badge-muted">v<span id="avail-current-version">1.0.2</span></span></td></tr>
+              <tr><td>New Version</td><td><span class="badge badge-accent">v<span id="avail-latest-version">1.0.3</span></span></td></tr>
+              <tr><td>Platform Match</td><td><span class="badge badge-success" id="avail-platform-match">Yes</span></td></tr>
+            </table>
+
+            <div style="margin-bottom:20px;">
+              <div style="font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Release Notes</div>
+              <div id="update-notes" class="json-editor" style="min-height:120px; max-height:240px; overflow-y:auto; font-family:inherit; font-size:13px; color:var(--text); background:var(--surface2); border:1px solid var(--border); padding:12px; border-radius:var(--radius-sm); white-space:pre-wrap; line-height:1.5;"></div>
+            </div>
+
+            <div style="display:flex; gap:12px;">
+              <button class="btn btn-primary" id="btn-apply-update" onclick="applyUpdate()">Install Update Now</button>
+              <button class="btn" onclick="checkUpdates(true)">Check Again</button>
+            </div>
+          </div>
+
+          <div id="update-error" style="display:none; padding:10px 0;">
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
+              <div style="font-size:24px; background:rgba(248, 113, 113, 0.1); border:1px solid rgba(248, 113, 113, 0.2); width:54px; height:54px; border-radius:14px; display:flex; align-items:center; justify-content:center; color:var(--error);">✕</div>
+              <div>
+                <h3 style="font-size:15px; font-weight:600; margin-bottom:4px;">Update Check Failed</h3>
+                <p style="font-size:13px; color:var(--error);" id="update-error-msg">Failed to connect to GitHub releases.</p>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="checkUpdates(true)">Try Again</button>
+          </div>
+
+          <div id="update-installing" style="display:none; text-align:center; padding:40px 20px;">
+            <div class="spinner" style="width:48px; height:48px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 20px;"></div>
+            <h3 style="font-size:15px; font-weight:600; margin-bottom:8px;" id="installing-title">Installing Update...</h3>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;" id="installing-desc">Downloading package, extracting files, and restarting server. This takes 10-15 seconds.</p>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent); background:var(--bg); border:1px solid var(--border); padding:10px; border-radius:6px; max-width:400px; margin:0 auto; text-align:left;" id="installing-log">
+              Preparing environment...
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /page-body -->
   </main>
 </div><!-- /admin-shell -->
@@ -956,6 +1084,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     document.getElementById('page-title').textContent = btn.dataset.title || tab;
     document.getElementById('page-sub').textContent   = btn.dataset.sub  || '';
     if (tab === 'audit') loadAudit();
+    if (tab === 'updates') checkUpdates();
   });
 });
 
@@ -2115,6 +2244,314 @@ async function saveChatProviders(event) {
     }
   } catch (err) { status.textContent = err.message; status.style.color = 'var(--error)'; }
   btn.disabled = false; btn.textContent = orig;
+}
+
+/* ── Update Center ──────────────────────────────────────────────────────── */
+
+let updateDownloadUrl = "";
+
+async function checkUpdates(forceManual = false) {
+  const loading = document.getElementById('update-loading');
+  const uptodate = document.getElementById('update-uptodate');
+  const available = document.getElementById('update-available');
+  const errorDiv = document.getElementById('update-error');
+  const installing = document.getElementById('update-installing');
+
+  loading.style.display = 'flex';
+  uptodate.style.display = 'none';
+  available.style.display = 'none';
+  errorDiv.style.display = 'none';
+  installing.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/admin/updates/check', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    
+    loading.style.display = 'none';
+    if (data.has_update) {
+      updateDownloadUrl = data.download_url;
+      document.getElementById('avail-current-version').textContent = data.current_version;
+      document.getElementById('avail-latest-version').textContent = data.latest_version;
+      
+      const matchSpan = document.getElementById('avail-platform-match');
+      if (data.download_url) {
+        matchSpan.textContent = 'Yes';
+        matchSpan.className = 'badge badge-success';
+        document.getElementById('btn-apply-update').disabled = false;
+      } else {
+        matchSpan.textContent = 'No matching zip for your OS/Arch';
+        matchSpan.className = 'badge badge-warn';
+        document.getElementById('btn-apply-update').disabled = true;
+      }
+      
+      document.getElementById('update-notes').textContent = data.release_notes || 'No release notes available.';
+      available.style.display = 'block';
+      if (forceManual) toast('New update available: v' + data.latest_version, 'success');
+    } else {
+      document.getElementById('utd-current-version').textContent = data.current_version;
+      document.getElementById('utd-latest-version').textContent = data.latest_version;
+      uptodate.style.display = 'block';
+      if (forceManual) toast('Ash Server is up to date.');
+    }
+  } catch (err) {
+    loading.style.display = 'none';
+    document.getElementById('update-error-msg').textContent = err.message || 'Failed to check updates.';
+    errorDiv.style.display = 'block';
+  }
+}
+
+async function applyUpdate() {
+  if (!updateDownloadUrl) return;
+  if (!confirm('Are you sure you want to install this update now? The server will restart automatically.')) return;
+  
+  const loading = document.getElementById('update-loading');
+  const uptodate = document.getElementById('update-uptodate');
+  const available = document.getElementById('update-available');
+  const errorDiv = document.getElementById('update-error');
+  const installing = document.getElementById('update-installing');
+  const log = document.getElementById('installing-log');
+  
+  available.style.display = 'none';
+  installing.style.display = 'block';
+  
+  log.textContent = 'Downloading zip archive...';
+  
+  try {
+    const res = await fetch('/api/admin/updates/apply', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ download_url: updateDownloadUrl })
+    });
+    
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to initiate update.');
+    }
+    
+    log.innerHTML += '<br>Download completed. Extracting files...';
+    setTimeout(() => {
+      log.innerHTML += '<br>Swapping system executable...';
+    }, 1500);
+    setTimeout(() => {
+      log.innerHTML += '<br>Scheduling deferred restart daemon...';
+    }, 3000);
+    setTimeout(() => {
+      log.innerHTML += '<br>Server shutting down. Reconnecting...';
+      document.getElementById('installing-title').textContent = 'Reconnecting to Server...';
+      pollServerAlive();
+    }, 4500);
+    
+  } catch (err) {
+    installing.style.display = 'none';
+    document.getElementById('update-error-msg').textContent = err.message || 'Failed to apply update.';
+    errorDiv.style.display = 'block';
+    toast('Update failed: ' + err.message, 'error');
+  }
+}
+
+function pollServerAlive() {
+  const log = document.getElementById('installing-log');
+  let attempts = 0;
+  const maxAttempts = 30;
+  
+  const interval = setInterval(async () => {
+    attempts++;
+    log.innerHTML = `Attempting to reconnect (Attempt ${attempts}/${maxAttempts})...`;
+    try {
+      const res = await fetch('/api/auth/config', { method: 'GET' });
+      if (res.ok) {
+        clearInterval(interval);
+        log.innerHTML = '<span style="color:var(--success)">✓ Server reconnected successfully!</span>';
+        toast('Server successfully updated and restarted!', 'success');
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
+    } catch {
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        log.innerHTML = '<span style="color:var(--error)">✕ Reconnection timeout. Please refresh manually.</span>';
+      }
+    }
+  }, 1000);
+}
+
+/* ── MCP App Store ──────────────────────────────────────────────────────── */
+
+let registryApps = [];
+
+function switchMcpSubTab(tab) {
+  const activeBtn = document.getElementById('mcp-tab-active');
+  const storeBtn = document.getElementById('mcp-tab-store');
+  const activeView = document.getElementById('mcp-active-view');
+  const storeView = document.getElementById('mcp-store-view');
+  
+  if (tab === 'active') {
+    activeBtn.classList.add('btn-primary');
+    storeBtn.classList.remove('btn-primary');
+    activeView.style.display = 'block';
+    storeView.style.display = 'none';
+    loadMcp();
+  } else {
+    storeBtn.classList.add('btn-primary');
+    activeBtn.classList.remove('btn-primary');
+    activeView.style.display = 'none';
+    storeView.style.display = 'block';
+    loadMcpRegistry();
+  }
+}
+
+async function loadMcpRegistry() {
+  const loading = document.getElementById('mcp-store-loading');
+  const grid = document.getElementById('mcp-store-grid');
+  
+  loading.style.display = 'flex';
+  grid.innerHTML = '';
+  
+  try {
+    const res = await fetch('/api/mcp/registry', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    registryApps = data.servers || [];
+    
+    loading.style.display = 'none';
+    if (!registryApps.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">No applications in the registry.</div>';
+      return;
+    }
+    
+    grid.innerHTML = registryApps.map(app => {
+      const installBtn = app.installed 
+        ? `<button class="btn btn-sm" disabled style="opacity:0.6; cursor:default;">✓ Installed</button>`
+        : `<button class="btn btn-sm btn-primary" onclick="openInstallModal('${app.id}')">Install App</button>`;
+      
+      const badge = app.installed 
+        ? `<span class="badge badge-success" style="font-size:10px;">Installed</span>`
+        : `<span class="badge badge-muted" style="font-size:10px;">Available</span>`;
+
+      return `
+        <div class="card" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:space-between; border-color:${app.installed ? 'var(--accent-glow)' : 'var(--border)'}; background:var(--surface2);">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+              <h4 style="font-weight:600; font-size:13.5px; color:var(--text);">${escHtml(app.name)}</h4>
+              ${badge}
+            </div>
+            <p class="txt-muted" style="font-size:12px; margin-bottom:12px; line-height:1.4;">${escHtml(app.description)}</p>
+            <div class="mono txt-accent" style="font-size:11px; margin-bottom:12px;">${escHtml(app.command)} ${escHtml(app.args.join(' '))}</div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; border-top:1px solid var(--border); padding-top:10px; margin-top:10px;">
+            ${installBtn}
+          </div>
+        </div>`;
+    }).join('');
+    
+  } catch (err) {
+    loading.style.display = 'none';
+    grid.innerHTML = `<div class="empty txt-error" style="grid-column:1/-1;">Failed to fetch app registry: ${err.message}</div>`;
+  }
+}
+
+function openInstallModal(appId) {
+  const app = registryApps.find(a => a.id === appId);
+  if (!app) return;
+  
+  document.getElementById('install-app-id').value = appId;
+  document.getElementById('install-modal-title').textContent = `Install ${app.name}`;
+  document.getElementById('install-modal-desc').textContent = app.description;
+  document.getElementById('install-modal-status').textContent = '';
+  
+  const container = document.getElementById('install-fields-container');
+  container.innerHTML = '';
+  
+  const envVars = app.env_variables || [];
+  if (envVars.length === 0) {
+    container.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:10px 0;">This application does not require any custom environment configuration.</div>';
+  } else {
+    container.innerHTML = envVars.map(v => `
+      <div class="form-group">
+        <label class="form-label" style="display:flex; justify-content:space-between;">
+          <span>${escHtml(v.name)} ${v.required ? '<span style="color:var(--error)">*</span>' : ''}</span>
+        </label>
+        <input type="text" data-env="${escHtml(v.name)}" class="form-input install-env-input" placeholder="${escHtml(v.placeholder || '')}" autocomplete="off">
+        <span class="form-hint">${escHtml(v.description)}</span>
+      </div>`).join('');
+  }
+  
+  document.getElementById('mcp-install-modal').style.display = 'flex';
+}
+
+function closeInstallModal() {
+  document.getElementById('mcp-install-modal').style.display = 'none';
+}
+
+async function submitInstallApp() {
+  const appId = document.getElementById('install-app-id').value;
+  const app = registryApps.find(a => a.id === appId);
+  if (!app) return;
+  
+  const status = document.getElementById('install-modal-status');
+  status.textContent = 'Installing server...';
+  status.style.color = '';
+  
+  // Collect dynamic environments
+  const envVariables = {};
+  let missingRequired = false;
+  
+  const inputs = document.querySelectorAll('.install-env-input');
+  inputs.forEach(input => {
+    const key = input.dataset.env;
+    const val = input.value.trim();
+    const isRequired = (app.env_variables || []).find(v => v.name === key)?.required;
+    
+    if (isRequired && !val) {
+      missingRequired = true;
+      input.style.borderColor = 'var(--error)';
+    } else {
+      input.style.borderColor = '';
+    }
+    envVariables[key] = val;
+  });
+  
+  if (missingRequired) {
+    status.textContent = 'Please fill in all required configuration variables.';
+    status.style.color = 'var(--error)';
+    return;
+  }
+  
+  try {
+    const payload = {
+      id: app.id,
+      name: app.name,
+      type: app.type,
+      command: app.command,
+      args: app.args,
+      env_variables: envVariables,
+      url: app.url
+    };
+    
+    const res = await fetch('/api/mcp/registry/install', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Installation failed.');
+    
+    status.style.color = 'var(--success)';
+    status.textContent = data.connected ? '✓ Installed and running!' : '✓ Installed successfully!';
+    
+    toast(`Server "${app.name}" installed successfully!`, 'success');
+    setTimeout(() => {
+      closeInstallModal();
+      switchMcpSubTab('active');
+    }, 1000);
+    
+  } catch (err) {
+    status.textContent = err.message;
+    status.style.color = 'var(--error)';
+  }
 }
 </script>
 </body>

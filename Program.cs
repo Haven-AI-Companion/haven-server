@@ -92,6 +92,7 @@ public class Program
 
         builder.Services.AddSingleton<AshServer.Plugins.PluginManager>();
         builder.Services.AddSingleton<McpManager>();
+        builder.Services.AddSingleton<UpdateManager>();
         builder.Services.AddSingleton<AuthService>();
         builder.Services.AddSingleton<AshServer.Chat.IdentityResolver>();
         builder.Services.AddSingleton<AshServer.Chat.Discord.DiscordMessageRouter>();

@@ -185,8 +185,29 @@ public class OpenAiCompatBackend : IAiBackend
         }
     }
 
-    public Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
-        => throw new NotSupportedException("Tool calling not yet implemented for OpenAI-compat backend");
+    public async Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            model,
+            messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+            tools,
+            stream = false
+        });
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        if (_apiKey != "none") req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+
+        var resp = await Http.SendAsync(req, ct);
+        resp.EnsureSuccessStatusCode();
+
+        var jsonStr = await resp.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(jsonStr);
+        return doc.RootElement.GetProperty("choices")[0].GetProperty("message").Clone();
+    }
 }
 
 // ── Anthropic Claude backend ──────────────────────────────────────────────────
