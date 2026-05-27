@@ -854,8 +854,8 @@ select.form-input{cursor:pointer}
             <div class="config-block">
               <div class="config-block-title">Default AI</div>
               <div class="form-row">
-                <div class="form-group"><label class="form-label">Fallback Model</label><input type="text" id="cfg-ollama-model" class="form-input mono" placeholder="gemma4:turbo"><span class="form-hint">Used when no model is selected.</span></div>
-                <div class="form-group"><label class="form-label">Temperature</label><input type="number" id="cfg-ollama-temp" class="form-input" placeholder="0.7" min="0" max="2" step="0.1"><span class="form-hint">0 = deterministic · 2 = very creative</span></div>
+                <div class="form-group"><label class="form-label">Fallback Model</label><input type="text" id="cfg-fallback-model" class="form-input mono" placeholder="default-model"><span class="form-hint">Used when no model is selected.</span></div>
+                <div class="form-group"><label class="form-label">Temperature</label><input type="number" id="cfg-fallback-temp" class="form-input" placeholder="0.7" min="0" max="2" step="0.1"><span class="form-hint">0 = deterministic · 2 = very creative</span></div>
               </div>
             </div>
             <div class="config-block">
@@ -1542,8 +1542,8 @@ async function loadConfigToMenu() {
     document.getElementById('cfg-server-port').value        = config.server?.port ?? 8765;
     document.getElementById('cfg-require-auth').value       = String(config.server?.require_auth ?? false);
     document.getElementById('cfg-allow-registration').value = String(config.server?.allow_registration ?? true);
-    document.getElementById('cfg-ollama-model').value       = config.ai?.model ?? config.ollama?.model ?? 'gemma4:turbo';
-    document.getElementById('cfg-ollama-temp').value        = config.ai?.temperature ?? config.ollama?.temperature ?? 0.7;
+    document.getElementById('cfg-fallback-model').value      = config.ai?.model ?? config.ollama?.model ?? '';
+    document.getElementById('cfg-fallback-temp').value       = config.ai?.temperature ?? config.ollama?.temperature ?? 0.7;
     document.getElementById('cfg-db-path').value            = config.database?.path ?? 'ash_server.db';
     document.getElementById('cfg-uploads-dir').value        = config.uploads?.directory ?? 'uploads';
     document.getElementById('cfg-uploads-maxsize').value    = config.uploads?.max_size_mb ?? 10;
@@ -1557,14 +1557,14 @@ function validateConfigForm() {
   const errors = [];
   const port   = parseInt(document.getElementById('cfg-server-port').value);
   if (isNaN(port) || port < 1 || port > 65535) errors.push('Port must be 1-65535');
-  const temp   = parseFloat(document.getElementById('cfg-ollama-temp').value);
+  const temp   = parseFloat(document.getElementById('cfg-fallback-temp').value);
   if (isNaN(temp) || temp < 0 || temp > 2) errors.push('Temperature must be 0-2');
   const maxSz  = parseInt(document.getElementById('cfg-uploads-maxsize').value);
   if (isNaN(maxSz) || maxSz < 1 || maxSz > 1000) errors.push('Max upload 1-1000 MB');
   const expiry = parseInt(document.getElementById('cfg-auth-expiry').value);
   if (isNaN(expiry) || expiry < 1 || expiry > 720) errors.push('Token expiry 1-720 hours');
   if (!document.getElementById('cfg-server-host').value.trim())      errors.push('Host is required');
-  if (!document.getElementById('cfg-ollama-model').value.trim())     errors.push('Fallback model is required');
+  if (!document.getElementById('cfg-fallback-model').value.trim())     errors.push('Fallback model is required');
   if (!document.getElementById('cfg-db-path').value.trim())          errors.push('Database path is required');
   if (!document.getElementById('cfg-uploads-dir').value.trim())      errors.push('Uploads directory is required');
   if (!document.getElementById('cfg-personality-path').value.trim()) errors.push('Personality path is required');
@@ -1581,7 +1581,7 @@ async function saveConfigFromMenu(event) {
     const secret = document.getElementById('cfg-auth-secret').value;
     const config = {
       server:      { host: document.getElementById('cfg-server-host').value, port: parseInt(document.getElementById('cfg-server-port').value), require_auth: document.getElementById('cfg-require-auth').value === 'true', allow_registration: document.getElementById('cfg-allow-registration').value === 'true' },
-      ai:          { model: document.getElementById('cfg-ollama-model').value, temperature: parseFloat(document.getElementById('cfg-ollama-temp').value) },
+      ai:          { model: document.getElementById('cfg-fallback-model').value, temperature: parseFloat(document.getElementById('cfg-fallback-temp').value) },
       database:    { path: document.getElementById('cfg-db-path').value },
       uploads:     { directory: document.getElementById('cfg-uploads-dir').value, max_size_mb: parseInt(document.getElementById('cfg-uploads-maxsize').value) },
       auth:        { jwt_secret: secret || undefined, token_expiry_hours: parseInt(document.getElementById('cfg-auth-expiry').value) },
@@ -1624,7 +1624,7 @@ async function loadOllamaModels() {
 function selectModel(modelName) {
   const menuVisible = document.getElementById('config-menu').style.display !== 'none';
   if (menuVisible) {
-    document.getElementById('cfg-ollama-model').value = modelName;
+    document.getElementById('cfg-fallback-model').value = modelName;
     toast(`Fallback model set to ${modelName} — save to apply`);
   } else {
     try {

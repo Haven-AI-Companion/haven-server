@@ -70,6 +70,15 @@ public class McpClient : IAsyncDisposable
             foreach (var (k, v) in _config.Env) psi.Environment[k] = v;
 
             _process  = Process.Start(psi) ?? throw new Exception("Failed to start MCP process");
+            _process.ErrorDataReceived += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    Console.Error.WriteLine($"[mcp-stderr:{_config.Id}] {e.Data}");
+                }
+            };
+            _process.BeginErrorReadLine();
+
             _stdin    = _process.StandardInput;
             _stdout   = _process.StandardOutput;
             _cts      = CancellationTokenSource.CreateLinkedTokenSource(ct);

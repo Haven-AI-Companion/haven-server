@@ -119,30 +119,63 @@ public class PluginManager
     private static readonly HashSet<string> _blockedHosts = new(StringComparer.OrdinalIgnoreCase)
         { "169.254.169.254", "metadata.google.internal" };
 
-    private static bool IsPrivateUrl(string? url)
+    private static async Task<bool> IsPrivateUrlAsync(string? url)
     {
         if (string.IsNullOrEmpty(url)) return true;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return true;
         if (uri.Scheme != "http" && uri.Scheme != "https") return true;
         if (_blockedHosts.Contains(uri.Host)) return true;
-        if (uri.HostNameType == UriHostNameType.IPv4)
+        if (uri.IsLoopback) return true;
+
+        try
         {
-            var parts = uri.Host.Split('.');
-            if (parts.Length == 4 && byte.TryParse(parts[0], out var a))
+            // Resolve host to IP addresses to prevent DNS Rebinding / loopback SSRF
+            var ips = await System.Net.Dns.GetHostAddressesAsync(uri.Host);
+            foreach (var ip in ips)
             {
-                // Block 10.x, 172.16-31.x, 192.168.x, 127.x
-                if (a == 10 || a == 127) return true;
-                if (a == 172 && byte.TryParse(parts[1], out var b) && b >= 16 && b <= 31) return true;
-                if (a == 192 && parts[1] == "168") return true;
+                if (System.Net.IPAddress.IsLoopback(ip)) return true;
+                if (IsPrivateIP(ip)) return true;
             }
         }
-        if (uri.IsLoopback) return true;
+        catch
+        {
+            // If DNS resolution fails, block to be safe
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsPrivateIP(System.Net.IPAddress ip)
+    {
+        // IPv4 Private Ranges:
+        // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 (Link-local)
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            var bytes = ip.GetAddressBytes();
+            if (bytes[0] == 10) return true;
+            if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+            if (bytes[0] == 192 && bytes[1] == 168) return true;
+            if (bytes[0] == 169 && bytes[1] == 254) return true;
+        }
+
+        // IPv6 Private Ranges:
+        // fe80::/10 (Link-local), fc00::/7 (Unique Local Address)
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            if (ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal) return true;
+
+            var bytes = ip.GetAddressBytes();
+            // ULA (fc00::/7) first byte starts with 0xfc or 0xfd
+            if ((bytes[0] & 0xfe) == 0xfc) return true;
+        }
+
         return false;
     }
 
     private async Task<string> ExecuteHttp(PluginTool tool, JsonElement args)
     {
-        if (IsPrivateUrl(tool.Handler.Url))
+        if (await IsPrivateUrlAsync(tool.Handler.Url))
             return $"HTTP plugin tool '{tool.Name}' rejected: URL targets a private/loopback address.";
         try
         {
@@ -183,6 +216,15 @@ public class PluginManager
             };
 
             using var proc = Process.Start(psi) ?? throw new Exception("Failed to start process");
+            proc.ErrorDataReceived += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    Console.Error.WriteLine($"[plugin-process-stderr:{tool.Name}] {e.Data}");
+                }
+            };
+            proc.BeginErrorReadLine();
+
             await proc.StandardInput.WriteAsync(JsonSerializer.Serialize(args));
             proc.StandardInput.Close();
 

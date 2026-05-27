@@ -446,11 +446,22 @@ public class BackendManager
             if (entry != default) return (entry.Instance, modelName);
         }
 
-        // Fallback: first Ollama backend
-        var ollama = _cache!.FirstOrDefault(e => e.Row.Type == "ollama");
-        if (ollama != default) return (ollama.Instance, modelId);
+        // Dynamically find if any backend explicitly supports/advertises this modelName
+        if (!string.IsNullOrEmpty(modelId))
+        {
+            foreach (var (row, instance) in _cache!)
+            {
+                try
+                {
+                    var models = await instance.ListModels();
+                    if (models.Any(m => string.Equals(m, modelId, StringComparison.OrdinalIgnoreCase)))
+                        return (instance, modelId);
+                }
+                catch { /* Ignore unreachable/non-responsive backends and continue scanning */ }
+            }
+        }
 
-        // Any backend
+        // Fallback: first available configured backend
         if (_cache!.Count > 0) return (_cache![0].Instance, modelId);
 
         throw new InvalidOperationException(
