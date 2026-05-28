@@ -52,6 +52,13 @@ public class Program
         if (File.Exists(configPath))
             builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: true);
 
+        // Configure Kestrel to listen on all interfaces (wildcard IPv4 and IPv6)
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            var kestrelPort = builder.Configuration.GetValue("Port", 18799);
+            options.ListenAnyIP(kestrelPort);
+        });
+
         // Auto-generate a secure JWT secret on first run and persist it to config.json
         // so it survives restarts without requiring manual configuration.
         const string defaultSecretPlaceholder = "CHANGE_THIS_TO_A_RANDOM_SECRET_AT_LEAST_32_CHARS_LONG";
@@ -249,14 +256,13 @@ public class Program
         app.MapFallbackToFile("index.html");
 
         var port = builder.Configuration.GetValue("Port", 18799);
-        var url = $"http://0.0.0.0:{port}";
         Console.WriteLine($"""
-            🌸 Ash Server (C#) starting on http://0.0.0.0:{port}
+            🌸 Ash Server (C#) starting on http://0.0.0.0:{port} (all interfaces)
                Database: {dbPath}
                Personality: {personalityDir}
             """);
 
-        app.Run(url);
+        app.Run();
     }
 }
 
