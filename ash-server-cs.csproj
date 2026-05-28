@@ -53,4 +53,10 @@
           SkipUnchangedFiles="true" />
   </Target>
 
+  <ItemGroup>
+    <None Update="appsettings.json.example">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

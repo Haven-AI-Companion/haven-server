@@ -40,6 +40,25 @@ public class Program
             }
         }
 
+        // Bootstrap appsettings.json from appsettings.json.example if missing
+        var appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        if (!File.Exists(appSettingsPath))
+        {
+            var examplePath = Path.Combine(AppContext.BaseDirectory, "appsettings.json.example");
+            if (File.Exists(examplePath))
+            {
+                try
+                {
+                    File.Copy(examplePath, appSettingsPath);
+                    Console.WriteLine("[startup] Bootstrapped appsettings.json from example template.");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[startup] Warning: Failed to copy appsettings.json: {ex.Message}");
+                }
+            }
+        }
+
         var builder = WebApplication.CreateBuilder(args);
 
         // ── Native service hosting (auto-detects OS) ─────────────────────────
