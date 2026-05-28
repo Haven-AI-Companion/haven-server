@@ -1315,7 +1315,7 @@ public class ChatProvidersController : ControllerBase
     }
 
     private string ConfigPath =>
-        Path.Combine(_env.ContentRootPath, "config.json");
+        Path.Combine(AppContext.BaseDirectory, "config.json");
 
     private static string MaskToken(string? val) =>
         string.IsNullOrEmpty(val) ? "" : MaskPlaceholder + val[^Math.Min(4, val.Length)..];
