@@ -1437,12 +1437,20 @@ async function addUser() {
   status.style.color = ''; status.textContent = 'Creating…';
 
   try {
-    const fd = new URLSearchParams();
-    fd.append('username', username);
-    fd.append('email', email);
-    fd.append('password', password);
-    fd.append('is_admin', isAdmin);
-    const resp = await fetch('/api/admin/users', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+    const payload = {
+      username: username,
+      email: email,
+      password: password,
+      isAdmin: isAdmin
+    };
+    const resp = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || data.detail || 'Failed');
     status.style.color = 'var(--success)'; status.textContent = `User "${username}" created.`;
@@ -1989,10 +1997,24 @@ async function addBackend() {
   if (!name || !base_url) { statusDiv.innerHTML = '<span class="txt-error">Name and URL are required.</span>'; return; }
   statusDiv.innerHTML = '';
   try {
-    const fd = new URLSearchParams({ name, type, base_url });
-    if (api_key) fd.append('api_key', api_key);
-    const res = await fetch('/api/admin/backends', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
-    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    const payload = {
+      name: name,
+      type: type,
+      baseUrl: base_url,
+      apiKey: api_key || null
+    };
+    const res = await fetch('/api/admin/backends', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || errData.detail || 'Failed to save backend');
+    }
     ['nb-name','nb-url','nb-key'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('nb-type').value = 'ollama';
     document.getElementById('add-backend-form').style.display = 'none';
@@ -2002,7 +2024,15 @@ async function addBackend() {
 
 async function toggleBackend(id, currentlyEnabled) {
   try {
-    await fetch(`/api/admin/backends/${id}/toggle`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: new URLSearchParams({ enabled: !currentlyEnabled }) });
+    const res = await fetch(`/api/admin/backends/${id}/toggle`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ enabled: !currentlyEnabled })
+    });
+    if (!res.ok) throw new Error('Toggle failed');
     loadBackends();
   } catch (err) { toast('Failed: ' + err.message, 'error'); }
 }
