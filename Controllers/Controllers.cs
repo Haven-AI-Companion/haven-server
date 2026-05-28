@@ -574,6 +574,61 @@ public class AdminController : ControllerBase
         return Ok(fallbackConfig);
     }
 
+    [HttpGet("network/interfaces")]
+    public IActionResult GetNetworkInterfaces()
+    {
+        if (!IsAdmin) return Forbid();
+        
+        var list = new List<object>
+        {
+            new { name = "All Interfaces (Wildcard)", ip = "0.0.0.0", type = "Wildcard" },
+            new { name = "Local Loopback (Private)", ip = "127.0.0.1", type = "Loopback" }
+        };
+
+        try
+        {
+            foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                
+                var ipProps = ni.GetIPProperties();
+                foreach (var addr in ipProps.UnicastAddresses)
+                {
+                    if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) // IPv4
+                    {
+                        var ip = addr.Address.ToString();
+                        if (ip == "127.0.0.1" || ip == "0.0.0.0") continue;
+                        
+                        var name = ni.Name;
+                        var desc = ni.Description;
+                        var type = ni.NetworkInterfaceType.ToString();
+                        
+                        // Detect Tailscale or other secure mesh VPNs
+                        if (name.Contains("tailscale", StringComparison.OrdinalIgnoreCase) || 
+                            desc.Contains("tailscale", StringComparison.OrdinalIgnoreCase))
+                        {
+                            type = "VPN";
+                            name = "Tailscale Mesh VPN";
+                        }
+                        
+                        list.Add(new
+                        {
+                            name = $"{name} ({desc})",
+                            ip = ip,
+                            type = type
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Failed to retrieve network interfaces");
+        }
+
+        return Ok(list);
+    }
+
     [HttpPost("config")]
     public async Task<IActionResult> SaveAdminConfig([FromBody] System.Text.Json.Nodes.JsonObject body)
     {
