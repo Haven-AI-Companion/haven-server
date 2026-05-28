@@ -8,7 +8,7 @@
 ; ============================================================
 
 !define PRODUCT_NAME      "Ash Server"
-!define PRODUCT_VERSION   "1.1.0"
+!define PRODUCT_VERSION   "1.1.1"
 !define SERVICE_NAME      "ash-server"
 !define INSTALL_DIR       "$PROGRAMFILES64\Ash Server"
 !define UNINSTALL_REG     "Software\Microsoft\Windows\CurrentVersion\Uninstall\AshServer"
