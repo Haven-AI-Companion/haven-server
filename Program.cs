@@ -20,6 +20,9 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
+        // Suppress default URL bindings from launchSettings/environment variables to prevent Kestrel override warnings at startup
+        Environment.SetEnvironmentVariable("ASPNETCORE_URLS", null);
+
         // ── Service management commands ─────────────────────────────────────
         if (args.Length > 0)
         {
