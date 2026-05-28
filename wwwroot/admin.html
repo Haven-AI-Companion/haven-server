@@ -1213,7 +1213,7 @@ async function loadUsers() {
         <td>${u.is_admin ? '<span class="badge badge-accent">Admin</span>' : ''} ${roleBadges}</td>
         <td class="txt-muted">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
         <td class="txt-muted">${u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never'}</td>
-        <td><div class="actions"><button class="btn btn-sm" onclick="toggleAdmin(${u.id})">Toggle Admin</button><button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">Delete</button></div></td>
+        <td><div class="actions"><button class="btn btn-sm" onclick="toggleAdmin(${u.id}, ${u.is_admin})">Toggle Admin</button><button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">Delete</button></div></td>
       </tr>`;
     }).join('');
   } catch (err) { console.error('loadUsers:', err); }
@@ -1410,10 +1410,18 @@ async function removeUserRole(userId, roleId, roleName) {
 function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 
-async function toggleAdmin(userId) {
+async function toggleAdmin(userId, currentlyAdmin) {
   if (!confirm('Toggle admin status for this user?')) return;
   try {
-    await fetch(`/api/admin/users/${userId}/toggle-admin`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`/api/admin/users/${userId}/toggle-admin`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ is_admin: !currentlyAdmin })
+    });
+    if (!res.ok) throw new Error('Toggle failed');
     loadUsers(); loadStats();
   } catch (err) { toast('Failed: ' + err.message, 'error'); }
 }

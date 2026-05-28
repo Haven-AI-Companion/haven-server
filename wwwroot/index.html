@@ -1218,8 +1218,14 @@ async function saveEmail() {
   if (!email) { msg.textContent = 'Enter an email.'; msg.className = 'settings-msg err'; return; }
   btn.disabled = true; msg.textContent = '';
   try {
-    const fd = new URLSearchParams(); fd.append('email', email);
-    const res = await fetch('/api/auth/me/email', { method: 'PATCH', headers: { Authorization: 'Bearer ' + token }, body: fd });
+    const res = await fetch('/api/auth/me/email', {
+      method: 'PATCH',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email: email })
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Failed');
     currentUser.email = email;
@@ -1239,8 +1245,17 @@ async function savePassword() {
   if (next !== confirm) { msg.textContent = 'New passwords do not match.'; msg.className = 'settings-msg err'; return; }
   btn.disabled = true; msg.textContent = '';
   try {
-    const fd = new URLSearchParams(); fd.append('current_password', cur); fd.append('new_password', next);
-    const res = await fetch('/api/auth/me/password', { method: 'PATCH', headers: { Authorization: 'Bearer ' + token }, body: fd });
+    const res = await fetch('/api/auth/me/password', {
+      method: 'PATCH',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        current_password: cur,
+        new_password: next
+      })
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Failed');
     msg.textContent = 'Password changed!'; msg.className = 'settings-msg ok';
