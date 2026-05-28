@@ -1,0 +1,34 @@
+# nfpm.yaml
+name: "ash-server"
+arch: "amd64"
+platform: "linux"
+version: "1.1.1"
+section: "utils"
+priority: "extra"
+maintainer: "Daniel Elliott <ssfdre38@msn.com>"
+description: "Hardened, security-first locally-running AI orchestrator and C# API backend."
+homepage: "https://github.com/ssfdre38/ash-server"
+license: "MIT"
+provides:
+  - ash-server
+depends:
+  - sqlite3
+recommends:
+  - tailscale
+contents:
+  - src: "build/dist/linux-x64/ash-server"
+    dst: "/opt/ash-server/ash-server"
+    file_info:
+      mode: 0755
+  - src: "build/dist/linux-x64/wwwroot"
+    dst: "/opt/ash-server/wwwroot"
+  - src: "build/dist/linux-x64/personality"
+    dst: "/opt/ash-server/personality"
+  - src: "build/dist/linux-x64/appsettings.json"
+    dst: "/opt/ash-server/appsettings.json"
+  - src: "/opt/ash-server/ash-server"
+    dst: "/usr/bin/ash-server"
+    type: "symlink"
+scripts:
+  postinstall: "build/linux/postinstall.sh"
+  preremove: "build/linux/preremove.sh"

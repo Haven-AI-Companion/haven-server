@@ -72,35 +72,24 @@ Section "Install" SEC_MAIN
     CreateShortCut  "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall Ash Server.lnk" \
                     "$INSTDIR\uninstall.exe"
 
-    ; Check and install SQLite3 dependency if missing
-    nsExec::ExecToStack 'cmd.exe /c "where sqlite3.exe"'
-    Pop $0
-    Pop $1
-    ${If} $0 != 0
-        DetailPrint "SQLite3 not found. Attempting to install via winget..."
-        nsExec::ExecToLog 'winget install --id SQLite.SQLite --accept-source-agreements --accept-package-agreements --silent'
-        Pop $0
-        ${If} $0 != 0
-            DetailPrint "Failed to install SQLite3 via winget. Please install it manually from https://sqlite.org/download.html"
-            MessageBox MB_OK|MB_ICONEXCLAMATION "SQLite3 is required but could not be installed automatically. Please install SQLite3 from https://sqlite.org/download.html after this setup completes."
-        ${Else}
-            DetailPrint "SQLite3 installed successfully."
-        ${EndIf}
-    ${Else}
-        DetailPrint "SQLite3 is already installed."
-    ${EndIf}
+    ; Install bundled SQLite3 directly (zero-config, local scope visibility)
+    DetailPrint "Installing bundled SQLite3 CLI..."
+    File "dependencies\sqlite3.exe"
 
-    ; Optional Tailscale Mesh VPN check and installation
+    ; Optional Tailscale Mesh VPN check and installation using bundled MSI
     nsExec::ExecToStack 'cmd.exe /c "where tailscale.exe"'
     Pop $0
     Pop $1
     ${If} $0 != 0
-        MessageBox MB_YESNO|MB_ICONQUESTION "Tailscale Mesh VPN is highly recommended for secure remote access without opening public firewall ports.$\r$\n$\r$\nWould you like to install Tailscale securely via winget now?" IDNO skip_tailscale
-        DetailPrint "Installing Tailscale via winget..."
-        nsExec::ExecToLog 'winget install --id Tailscale.Tailscale --accept-source-agreements --accept-package-agreements --silent'
-        Pop $0
+        MessageBox MB_YESNO|MB_ICONQUESTION "Tailscale Mesh VPN is highly recommended for secure remote access without opening public firewall ports.$\r$\n$\r$\nWould you like to install Tailscale now?" IDNO skip_tailscale
+        DetailPrint "Extracting Tailscale installer..."
+        InitPluginsDir
+        File "/oname=$PLUGINSDIR\tailscale-setup.msi" "dependencies\tailscale-setup.msi"
+        
+        DetailPrint "Installing Tailscale silently..."
+        ExecWait '"msiexec.exe" /i "$PLUGINSDIR\tailscale-setup.msi" /qn' $0
         ${If} $0 != 0
-            DetailPrint "Failed to install Tailscale via winget."
+            DetailPrint "Failed to install Tailscale. Exit code: $0"
         ${Else}
             DetailPrint "Tailscale installed successfully."
         ${EndIf}
@@ -119,6 +108,7 @@ Section "Uninstall"
 
     ; Remove files (preserve database and config.json so user data survives)
     Delete "$INSTDIR\ash-server.exe"
+    Delete "$INSTDIR\sqlite3.exe"
     Delete "$INSTDIR\appsettings.json"
     Delete "$INSTDIR\uninstall.exe"
     RMDir  /r "$INSTDIR\wwwroot"

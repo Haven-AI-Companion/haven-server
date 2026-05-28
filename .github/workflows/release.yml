@@ -139,6 +139,23 @@ jobs:
             Set-Content build\windows\installer.nsi
         shell: powershell
 
+      - name: Download and Stage Windows Offline Dependencies
+        run: |
+          New-Item -ItemType Directory -Force -Path build\windows\dependencies
+          
+          # Download SQLite3 Tools and extract sqlite3.exe
+          $sqliteUrl = "https://www.sqlite.org/2025/sqlite-tools-win-x64-3490100.zip"
+          $sqliteZip = "build\windows\dependencies\sqlite-tools.zip"
+          Invoke-WebRequest -Uri $sqliteUrl -OutFile $sqliteZip
+          Expand-Archive -Path $sqliteZip -DestinationPath "build\windows\dependencies\sqlite-temp" -Force
+          Copy-Item -Path "build\windows\dependencies\sqlite-temp\*\sqlite3.exe" -Destination "build\windows\dependencies\sqlite3.exe" -Force
+          Remove-Item -Recurse -Force -Path "build\windows\dependencies\sqlite-temp", $sqliteZip
+
+          # Download Tailscale MSI Setup
+          $tailscaleUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
+          Invoke-WebRequest -Uri $tailscaleUrl -OutFile "build\windows\dependencies\tailscale-setup.msi"
+        shell: powershell
+
       - name: Build NSIS installer
         run: |
           choco install nsis --no-progress -y
@@ -170,6 +187,27 @@ jobs:
       - name: List assets
         run: ls -lh release-assets/
 
+      - name: Extract linux-x64 artifact for nfpm packaging
+        run: |
+          mkdir -p build/dist/linux-x64
+          zipfile=$(find release-assets/ -name "*linux-x64.zip" | head -n 1)
+          if [ -n "$zipfile" ]; then
+            unzip -o "$zipfile" -d build/dist/linux-x64
+          else
+            echo "Error: linux-x64 zip not found!"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Build Debian and RPM packages using nfpm
+        run: |
+          curl -sfL https://github.com/goreleaser/nfpm/releases/download/v2.41.2/nfpm_2.41.2_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin nfpm
+          version="${{ github.ref_name }}"
+          numeric="${version#v}"
+          nfpm package --config nfpm.yaml --packager deb --target release-assets/ --version "${numeric}"
+          nfpm package --config nfpm.yaml --packager rpm --target release-assets/ --version "${numeric}"
+        shell: bash
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -188,12 +226,24 @@ jobs:
             | Linux (arm64)           | `ash-server-*-linux-arm64.zip` |
             | macOS (Apple Silicon)   | `ash-server-*-osx-arm64.zip` |
             | macOS (Intel)           | `ash-server-*-osx-x64.zip` |
+            | Debian / Ubuntu Package  | `ash-server_*_amd64.deb` |
+            | RedHat / Fedora Package  | `ash-server-*-1.x86_64.rpm` |
 
             ### Quick install
 
             **Windows** — Run the `.exe` installer as Administrator.
 
-            **Linux**
+            **Native Linux Packages (Recommended)**
+            *   **Debian / Ubuntu**:
+                ```bash
+                sudo apt install ./ash-server_*_amd64.deb
+                ```
+            *   **Fedora / RedHat**:
+                ```bash
+                sudo dnf install ./ash-server-*.x86_64.rpm
+                ```
+
+            **Linux Zip Script**
             ```bash
             unzip ash-server-*-linux-x64.zip -d ash-server
             sudo bash ash-server/build/linux/install.sh ash-server/ash-server
