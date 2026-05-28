@@ -82,7 +82,7 @@ Section "Install" SEC_MAIN
         Pop $0
         ${If} $0 != 0
             DetailPrint "Failed to install SQLite3 via winget. Please install it manually from https://sqlite.org/download.html"
-            MessageBox MB_OK|MB_ICONWARNING "SQLite3 is required but could not be installed automatically. Please install SQLite3 from https://sqlite.org/download.html after this setup completes."
+            MessageBox MB_OK|MB_ICONEXCLAMATION "SQLite3 is required but could not be installed automatically. Please install SQLite3 from https://sqlite.org/download.html after this setup completes."
         ${Else}
             DetailPrint "SQLite3 installed successfully."
         ${EndIf}
