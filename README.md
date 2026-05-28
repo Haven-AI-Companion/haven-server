@@ -321,7 +321,7 @@ ash-server/
 | **ash-server** | This — secure AI backend |
 | [gemma4-turbo](https://ollama.com/ssfdre38/gemma4-turbo) | IQ4_XS Gemma 4 for Ollama — 17.3k+ downloads |
 | [ash-bot](https://github.com/ssfdre38/ash-bot) | .NET 10 Discord bot — Ash's personality, 20 built-in tools, long-term memory |
-| [Discord](https://discord.gg/DCYC2fFQQ6) Join us on the G4Turbo.com Discord server.
+| [Discord](https://discord.gg/DCYC2fFQQ6) | Join us on the G4Turbo.com Discord server.
 
 ---
 
