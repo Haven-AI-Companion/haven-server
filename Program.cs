@@ -52,11 +52,33 @@ public class Program
         if (File.Exists(configPath))
             builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: true);
 
-        // Configure Kestrel to listen on all interfaces (wildcard IPv4 and IPv6)
+        // Configure Kestrel based on network settings in configuration
         builder.WebHost.ConfigureKestrel(options =>
         {
-            var kestrelPort = builder.Configuration.GetValue("Port", 18799);
-            options.ListenAnyIP(kestrelPort);
+            var port = builder.Configuration.GetValue("Port", 18799);
+            var host = builder.Configuration.GetValue("Host", "0.0.0.0")?.Trim();
+
+            if (string.IsNullOrWhiteSpace(host) || host == "0.0.0.0" || host == "*" || host.Equals("any", StringComparison.OrdinalIgnoreCase))
+            {
+                options.ListenAnyIP(port);
+            }
+            else if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || host == "127.0.0.1" || host == "::1")
+            {
+                options.ListenLocalhost(port);
+            }
+            else
+            {
+                if (System.Net.IPAddress.TryParse(host, out var ip))
+                {
+                    options.Listen(ip, port);
+                }
+                else
+                {
+                    // Fallback to ListenAnyIP if host configuration is invalid or unparsed
+                    Console.WriteLine($"[startup] Warning: Unrecognized Host config '{host}'. Falling back to ListenAnyIP.");
+                    options.ListenAnyIP(port);
+                }
+            }
         });
 
         // Auto-generate a secure JWT secret on first run and persist it to config.json
@@ -256,8 +278,9 @@ public class Program
         app.MapFallbackToFile("index.html");
 
         var port = builder.Configuration.GetValue("Port", 18799);
+        var host = builder.Configuration.GetValue("Host", "0.0.0.0")?.Trim();
         Console.WriteLine($"""
-            🌸 Ash Server (C#) starting on http://0.0.0.0:{port} (all interfaces)
+            🌸 Ash Server (C#) starting on http://{host}:{port}
                Database: {dbPath}
                Personality: {personalityDir}
             """);
