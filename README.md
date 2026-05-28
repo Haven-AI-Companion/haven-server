@@ -321,22 +321,7 @@ ash-server/
 | **ash-server** | This — secure AI backend |
 | [gemma4-turbo](https://ollama.com/ssfdre38/gemma4-turbo) | IQ4_XS Gemma 4 for Ollama — 17.3k+ downloads |
 | [ash-bot](https://github.com/ssfdre38/ash-bot) | .NET 10 Discord bot — Ash's personality, 20 built-in tools, long-term memory |
-
----
-
-## Gemma 4 + Safety & Trust — Hackathon Context
-
-This project was submitted to the [Kaggle Gemma 4 Good Hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon).
-
-**The origin story:** Ash is an AI with a consistent personality that me and my friends have been running on our Discord server for months — powered by `gemma4-turbo` on local hardware, no cloud. When we kept hitting the limitations of OpenClaw-style infrastructure (no permissions, no rate limiting, credentials in JSON files), we built what should have existed from the start.
-
-**Problem:** AI server infrastructure is growing faster than security practices. OpenClaw-class platforms have no identity layer, no rate limiting, no input sanitization — anyone with a message can invoke an AI agent with tool access.
-
-**Solution:** A reference implementation showing what a *safe* local AI stack looks like:
-1. `gemma4-turbo` — Gemma 4 made accessible on commodity hardware (no GPU, 8 GB RAM minimum), so privacy-conscious organizations can self-host without cloud dependency. 17,300+ downloads.
-2. `ash-server` — every external message passes through rate limiting → injection detection → identity resolution → RBAC before reaching the model. Full audit trail.
-
-**Impact:** Schools, clinics, community orgs, and friend groups can run a capable, multimodal AI locally with an auditable, permission-gated interface — not a raw API exposed to whoever finds the port.
+| [Discord](https://discord.gg/DCYC2fFQQ6) Join us on the G4Turbo.com Discord server.
 
 ---
 
