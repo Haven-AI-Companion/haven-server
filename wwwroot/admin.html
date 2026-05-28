@@ -1748,7 +1748,6 @@ function validateConfigForm() {
   const expiry = parseInt(document.getElementById('cfg-auth-expiry').value);
   if (isNaN(expiry) || expiry < 1 || expiry > 720) errors.push('Token expiry 1-720 hours');
   if (!document.getElementById('cfg-server-host').value.trim())      errors.push('Host is required');
-  if (!document.getElementById('cfg-fallback-model').value.trim())     errors.push('Fallback model is required');
   if (!document.getElementById('cfg-db-path').value.trim())          errors.push('Database path is required');
   if (!document.getElementById('cfg-uploads-dir').value.trim())      errors.push('Uploads directory is required');
   if (!document.getElementById('cfg-personality-path').value.trim()) errors.push('Personality path is required');

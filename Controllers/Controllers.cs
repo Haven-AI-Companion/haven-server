@@ -520,15 +520,58 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("config")]
-    public IActionResult GetAdminConfig()
+    public async Task<IActionResult> GetAdminConfig()
     {
         if (!IsAdmin) return Forbid();
-        return Ok(new
+        var path = ConfigPath;
+        if (System.IO.File.Exists(path))
         {
-            auth = new { require_auth = _config.GetValue("RequireAuth", true), allow_registration = _config.GetValue("AllowRegistration", true), token_expiry_hours = 24 },
-            personality = new { dir = _config["PersonalityDir"] ?? "personality" },
-            server = new { port = _config.GetValue("Port", 18799) }
-        });
+            try
+            {
+                var content = await System.IO.File.ReadAllTextAsync(path);
+                return Content(content, "application/json");
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Failed to read config.json");
+            }
+        }
+
+        // Fallback: build a complete object from the loaded IConfiguration
+        var fallbackConfig = new
+        {
+            server = new
+            {
+                host = _config["Host"] ?? "0.0.0.0",
+                port = _config.GetValue("Port", 18799),
+                require_auth = _config.GetValue("RequireAuth", true),
+                allow_registration = _config.GetValue("AllowRegistration", true)
+            },
+            ai = new
+            {
+                model = _config["DefaultModel"] ?? "",
+                temperature = _config.GetValue("DefaultTemperature", 0.7)
+            },
+            database = new
+            {
+                path = _config["DatabasePath"] ?? "ash_server.db"
+            },
+            uploads = new
+            {
+                directory = _config["UploadsDir"] ?? "uploads",
+                max_size_mb = _config.GetValue("MaxUploadSizeMb", 10)
+            },
+            auth = new
+            {
+                token_expiry_hours = _config.GetValue("TokenExpiryHours", 24)
+            },
+            personality = new
+            {
+                path = _config["PersonalityDir"] ?? "personality"
+            }
+        };
+
+        return Ok(fallbackConfig);
     }
 
     [HttpPost("config")]
