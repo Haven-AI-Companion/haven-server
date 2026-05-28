@@ -126,3 +126,25 @@ elif [[ "$OS" == "Darwin" ]]; then
 else
     die "Unknown OS: $OS"
 fi
+
+# ── Check for Tailscale Mesh VPN ──────────────────────────────────────────────
+if ! command -v tailscale &>/dev/null; then
+    echo ""
+    warn "For secure remote access without port-forwarding, we highly recommend Tailscale."
+    read -p "Would you like to install Tailscale securely now? (y/n): " -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        info "Installing Tailscale..."
+        if [[ "$OS" == "Linux" ]]; then
+            curl -fsSL https://tailscale.com/install.sh | sh
+            ok "Tailscale installed! Run 'sudo tailscale up' to join your secure tailnet."
+        elif [[ "$OS" == "Darwin" ]]; then
+            if command -v brew &>/dev/null; then
+                brew install tailscale
+                ok "Tailscale installed! Run 'tailscale up' to join your secure tailnet."
+            else
+                warn "Homebrew not found. Please install Tailscale manually from: https://tailscale.com"
+            fi
+        fi
+    fi
+fi
+

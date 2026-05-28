@@ -740,7 +740,87 @@ public class AdminController : ControllerBase
     {
         if (!IsAdmin) return Forbid();
         var result = await _updateManager.CheckForUpdatesAsync();
-        return Ok(result);
+        return Ok(new {
+            has_update = result.HasUpdate,
+            current_version = result.CurrentVersion,
+            latest_version = result.LatestVersion,
+            release_notes = result.ReleaseNotes,
+            download_url = result.DownloadUrl,
+            public_exposure_detected = Program.PublicExposureDetected
+        });
+    }
+
+    [HttpGet("network/mesh")]
+    public async Task<IActionResult> GetMeshNetworkStatus()
+    {
+        if (!IsAdmin) return Forbid();
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "tailscale",
+                Arguments = "ip -4",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                await proc.WaitForExitAsync();
+                if (proc.ExitCode == 0)
+                {
+                    var ip = (await proc.StandardOutput.ReadToEndAsync()).Trim();
+
+                    // Get hostname / tailnet domain if possible
+                    var tailnet = "";
+                    var deviceName = "";
+                    try
+                    {
+                        var statusPsi = new ProcessStartInfo
+                        {
+                            FileName = "tailscale",
+                            Arguments = "status --json",
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using var statusProc = Process.Start(statusPsi);
+                        if (statusProc != null)
+                        {
+                            await statusProc.WaitForExitAsync();
+                            if (statusProc.ExitCode == 0)
+                            {
+                                var json = await statusProc.StandardOutput.ReadToEndAsync();
+                                using var doc = JsonDocument.Parse(json);
+                                if (doc.RootElement.TryGetProperty("Self", out var self))
+                                {
+                                    if (self.TryGetProperty("DNSName", out var dnsName))
+                                        tailnet = dnsName.GetString()?.TrimEnd('.');
+                                    if (self.TryGetProperty("HostName", out var hostName))
+                                        deviceName = hostName.GetString();
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    return Ok(new {
+                        active = true,
+                        provider = "tailscale",
+                        ip = ip,
+                        tailnet = tailnet,
+                        device_name = deviceName
+                    });
+                }
+            }
+        }
+        catch { }
+
+        return Ok(new { active = false, provider = "none", ip = "", tailnet = "", device_name = "" });
     }
 
     [HttpPost("updates/apply")]

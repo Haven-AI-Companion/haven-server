@@ -270,6 +270,21 @@ select.form-input{cursor:pointer}
 
   <!-- Main -->
   <main class="admin-main">
+    <!-- Public Exposure Warning Banner -->
+    <div id="public-exposure-banner" style="display:none; margin: 16px 20px 0; border: 1px solid #f59e0b; background: rgba(245, 158, 11, 0.08); border-radius: 12px; padding: 14px 20px;" class="card">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="font-size:28px; line-height:1; color:#f59e0b;">⚠️</div>
+        <div style="flex:1;">
+          <h3 style="font-size:14px; font-weight:600; color:#f59e0b; margin:0 0 4px 0;">Public Network Exposure Detected!</h3>
+          <p style="font-size:12.5px; color:var(--text-muted); margin:0; line-height:1.5;">
+            Your Ash Server is currently listening on all network interfaces and is accessible via a public IP address. To prevent brute-force or scanner attacks:
+            <br>
+            1. Configure <strong>"Host": "127.0.0.1"</strong> or bind to your private mesh VPN IP (like Tailscale) in <code style="background:var(--surface2); padding:1px 5px; border-radius:3px;">config.json</code>.
+            2. Run a secure mesh VPN (Tailscale) on the host for private, encrypted remote access.
+          </p>
+        </div>
+      </div>
+    </div>
     <div class="page-header">
       <div>
         <div class="page-title" id="page-title">Overview</div>
@@ -320,6 +335,46 @@ select.form-input{cursor:pointer}
             <tr><td>Personality Path</td><td id="server-personality" class="mono txt-muted">—</td></tr>
             <tr><td>Plugins Enabled</td><td id="server-plugins-enabled">—</td></tr>
           </table>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Mesh Network (Tailscale)</span>
+            <span id="mesh-badge" class="badge badge-muted">Checking...</span>
+          </div>
+          
+          <div id="mesh-loading" style="display:flex; align-items:center; gap:10px; padding:10px 0;">
+            <div class="spinner" style="width:18px; height:18px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite;"></div>
+            <span style="font-size:13px; color:var(--text-muted);">Querying Tailscale status...</span>
+          </div>
+
+          <div id="mesh-active" style="display:none; padding:10px 0;">
+            <table class="kv-table" style="margin-bottom:14px;">
+              <tr><td>Secure IP Address</td><td>
+                <span class="mono" id="mesh-ip" style="font-weight:600; color:var(--accent);">—</span>
+                <button class="btn btn-sm" style="padding:2px 8px; margin-left:8px; font-size:11px;" onclick="copyMeshIp()">Copy</button>
+              </td></tr>
+              <tr><td>Tailnet Domain</td><td id="mesh-tailnet" class="mono txt-muted">—</td></tr>
+              <tr><td>Device Hostname</td><td id="mesh-device" class="mono txt-muted">—</td></tr>
+            </table>
+            <p style="font-size:12px; color:var(--text-muted); margin:0;">
+              ✓ You can safely access your Ash Server from any device on your Tailscale mesh network using the secure IP above.
+            </p>
+          </div>
+
+          <div id="mesh-inactive" style="display:none; padding:10px 0;">
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">
+              No secure mesh network is active. Your server can only be reached locally or via your public network interfaces.
+            </p>
+            <div style="font-size:13px; margin-bottom:14px; background:var(--surface2); border:1px solid var(--border); padding:10px 12px; border-radius:8px;">
+              <strong>Secure Your Server in 2 Steps:</strong>
+              <ul style="margin:6px 0 0 16px; padding:0; line-height:1.6; font-size:12.5px;">
+                <li>Install Tailscale on this machine: <a href="https://tailscale.com/download" target="_blank" style="color:var(--accent); font-weight:500;">tailscale.com/download</a></li>
+                <li>Run <code style="background:var(--bg); padding:1px 5px; border-radius:3px; font-size:11.5px;">tailscale up</code> in the terminal to join your secure tailnet.</li>
+              </ul>
+            </div>
+            <button class="btn btn-sm" onclick="loadMeshNetworkStatus()">Reload Status</button>
+          </div>
         </div>
       </div>
 
@@ -1060,7 +1115,7 @@ function toast(msg, type = 'success', duration = 3500) {
       if (d.require_auth && token === 'noauth') { window.location.href = '/'; return; }
     }
   } catch {}
-  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles(); loadAllIdentities(); loadChannels(); loadChatProviders();
+  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles(); loadAllIdentities(); loadChannels(); loadChatProviders(); loadMeshNetworkStatus(); checkPublicExposure();
   const raw = token !== 'noauth' ? token.split('.')[1] : null;
   if (raw) {
     try {
@@ -2551,6 +2606,66 @@ async function submitInstallApp() {
   } catch (err) {
     status.textContent = err.message;
     status.style.color = 'var(--error)';
+  }
+}
+
+async function checkPublicExposure() {
+  try {
+    const res = await fetch('/api/admin/updates/check', { headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) {
+      const data = await res.json();
+      const banner = document.getElementById('public-exposure-banner');
+      if (banner) {
+        banner.style.display = data.public_exposure_detected ? 'block' : 'none';
+      }
+    }
+  } catch {}
+}
+
+async function loadMeshNetworkStatus() {
+  const loading = document.getElementById('mesh-loading');
+  const active = document.getElementById('mesh-active');
+  const inactive = document.getElementById('mesh-inactive');
+  const badge = document.getElementById('mesh-badge');
+
+  loading.style.display = 'flex';
+  active.style.display = 'none';
+  inactive.style.display = 'none';
+  badge.className = 'badge badge-muted';
+  badge.textContent = 'Checking...';
+
+  try {
+    const res = await fetch('/api/admin/network/mesh', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+
+    loading.style.display = 'none';
+    if (data.active) {
+      document.getElementById('mesh-ip').textContent = data.ip || '—';
+      document.getElementById('mesh-tailnet').textContent = data.tailnet || '—';
+      document.getElementById('mesh-device').textContent = data.device_name || '—';
+      
+      badge.textContent = 'Mesh VPN Active';
+      badge.className = 'badge badge-success';
+      active.style.display = 'block';
+    } else {
+      badge.textContent = 'Inactive';
+      badge.className = 'badge badge-muted';
+      inactive.style.display = 'block';
+    }
+  } catch (err) {
+    loading.style.display = 'none';
+    badge.textContent = 'Error';
+    badge.className = 'badge badge-warn';
+    inactive.style.display = 'block';
+  }
+}
+
+function copyMeshIp() {
+  const ip = document.getElementById('mesh-ip').textContent;
+  if (ip && ip !== '—') {
+    navigator.clipboard.writeText(ip);
+    toast('Mesh IP address copied to clipboard!');
   }
 }
 </script>

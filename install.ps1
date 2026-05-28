@@ -103,6 +103,27 @@ Info "Starting service…"
 Start-Service -Name "ash-server" -ErrorAction SilentlyContinue
 
 Ok "Ash Server installed and running."
+
+# ── Check for Tailscale Mesh VPN ───────────────────────────────────────────────
+if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) {
+    Write-Host ""
+    Warn "For secure remote access without port-forwarding, we highly recommend Tailscale."
+    $response = Read-Host "Would you like to install Tailscale securely via winget now? (Y/N)"
+    if ($response -eq 'Y' -or $response -eq 'y') {
+        Info "Installing Tailscale via winget…"
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            try {
+                & winget install --id Tailscale.Tailscale --accept-source-agreements --accept-package-agreements
+                Ok "Tailscale installed successfully! Run 'tailscale up' in a new terminal to join your secure tailnet."
+            } catch {
+                Warn "Failed to install Tailscale automatically. Please download it from: https://tailscale.com"
+            }
+        } else {
+            Warn "winget not found. Please install Tailscale manually from: https://tailscale.com"
+        }
+    }
+}
+
 Write-Host ""
 Write-Host "  Web UI:   http://localhost:18799"
 Write-Host "  Admin:    http://localhost:18799/admin.html"

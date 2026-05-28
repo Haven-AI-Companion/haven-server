@@ -90,6 +90,23 @@ Section "Install" SEC_MAIN
         DetailPrint "SQLite3 is already installed."
     ${EndIf}
 
+    ; Optional Tailscale Mesh VPN check and installation
+    nsExec::ExecToStack 'cmd.exe /c "where tailscale.exe"'
+    Pop $0
+    Pop $1
+    ${If} $0 != 0
+        MessageBox MB_YESNO|MB_ICONQUESTION "Tailscale Mesh VPN is highly recommended for secure remote access without opening public firewall ports.$\r$\n$\r$\nWould you like to install Tailscale securely via winget now?" IDNO skip_tailscale
+        DetailPrint "Installing Tailscale via winget..."
+        nsExec::ExecToLog 'winget install --id Tailscale.Tailscale --accept-source-agreements --accept-package-agreements --silent'
+        Pop $0
+        ${If} $0 != 0
+            DetailPrint "Failed to install Tailscale via winget."
+        ${Else}
+            DetailPrint "Tailscale installed successfully."
+        ${EndIf}
+        skip_tailscale:
+    ${EndIf}
+
     ; Register and start the Windows service
     nsExec::ExecToLog '"$INSTDIR\ash-server.exe" install-service'
     nsExec::ExecToLog 'sc.exe start ${SERVICE_NAME}'

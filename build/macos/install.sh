@@ -105,3 +105,24 @@ echo "  Config:    $INSTALL_DIR/config.json"
 echo "  Stop:      sudo launchctl stop $SERVICE_NAME"
 echo "  Remove:    sudo bash $0 --uninstall"
 echo ""
+
+# ── Check for Tailscale Mesh VPN ──────────────────────────────────────────────
+if ! command -v tailscale &>/dev/null; then
+    echo ""
+    warn "For secure remote access without port-forwarding, we highly recommend Tailscale."
+    read -p "Would you like to install Tailscale securely now? (y/n): " -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        info "Installing Tailscale..."
+        if command -v brew &>/dev/null; then
+            if [[ -n "${SUDO_USER:-}" ]]; then
+                sudo -u "$SUDO_USER" brew install tailscale
+            else
+                brew install tailscale
+            fi
+            ok "Tailscale installed! Run 'tailscale up' to join your secure tailnet."
+        else
+            warn "Homebrew not found. Please install Tailscale manually from: https://tailscale.com"
+        fi
+    fi
+fi
+

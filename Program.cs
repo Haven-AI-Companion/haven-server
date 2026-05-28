@@ -111,6 +111,14 @@ public class Program
         db.Initialize();
         builder.Services.AddSingleton(db);
 
+        // ── CLI Command: create-admin ───────────────────────────────────────
+        if (args.Length > 0 && (args[0].Equals("create-admin", StringComparison.OrdinalIgnoreCase) || args[0].Equals("--create-admin", StringComparison.OrdinalIgnoreCase)))
+        {
+            var auth = new AuthService(db, builder.Configuration);
+            await CreateAdminCli(args, db, auth);
+            return;
+        }
+
         var personalityDir = builder.Configuration["PersonalityDir"] ?? "personality";
         var personality = new PersonalityLoader(personalityDir);
         personality.Load();
@@ -278,7 +286,23 @@ public class Program
         app.MapFallbackToFile("index.html");
 
         var port = builder.Configuration.GetValue("Port", 18799);
-        var host = builder.Configuration.GetValue("Host", "0.0.0.0")?.Trim();
+        var host = builder.Configuration.GetValue("Host", "0.0.0.0")?.Trim() ?? "0.0.0.0";
+
+        PublicExposureDetected = IsPublicIpExposureDetected(host);
+        if (PublicExposureDetected)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("""
+
+                ⚠️  SECURITY WARNING: Public Network Exposure Detected!
+                   Your Ash Server is accessible over the public internet on a non-private IP.
+                   We highly recommend setting up a secure mesh VPN (Tailscale) and binding
+                   the Host to '127.0.0.1' or your private VPN IP in config.json.
+
+                """);
+            Console.ResetColor();
+        }
+
         Console.WriteLine($"""
             🌸 Ash Server (C#) starting on http://{host}:{port}
                Database: {dbPath}
@@ -287,5 +311,185 @@ public class Program
 
         app.Run();
     }
-}
 
+    public static bool PublicExposureDetected { get; private set; }
+
+    public static bool IsPublicIpExposureDetected(string host)
+    {
+        // If explicitly binding to loopback only, it is never exposed publicly
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || host == "127.0.0.1" || host == "::1")
+        {
+            return false;
+        }
+
+        // If explicitly binding to a private IP (not wildcard), it is not exposed publicly
+        if (System.Net.IPAddress.TryParse(host, out var bindIp))
+        {
+            if (IsPrivateIp(bindIp)) return false;
+        }
+
+        // If wildcard (0.0.0.0 / [::]) or a public IP, scan interfaces for any public IP address
+        try
+        {
+            foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                
+                // Skip loopbacks
+                if (ni.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback) continue;
+
+                var ipProps = ni.GetIPProperties();
+                foreach (var addr in ipProps.UnicastAddresses)
+                {
+                    var ip = addr.Address;
+                    
+                    // Skip IPv6 Link-Local (fe80::) or loopbacks
+                    if (ip.IsIPv6LinkLocal || System.Net.IPAddress.IsLoopback(ip)) continue;
+
+                    // If we find any active IP that is NOT private, we have public exposure!
+                    if (!IsPrivateIp(ip))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    private static bool IsPrivateIp(System.Net.IPAddress ip)
+    {
+        if (System.Net.IPAddress.IsLoopback(ip)) return true;
+
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            var bytes = ip.GetAddressBytes();
+            int first = bytes[0];
+            int second = bytes[1];
+
+            // 10.0.0.0/8
+            if (first == 10) return true;
+            
+            // 172.16.0.0/12
+            if (first == 172 && second >= 16 && second <= 31) return true;
+            
+            // 192.168.0.0/16
+            if (first == 192 && second == 168) return true;
+            
+            // 169.254.0.0/16 (Link-Local)
+            if (first == 169 && second == 254) return true;
+
+            // 100.64.0.0/10 (CGNAT / Tailscale)
+            if (first == 100 && second >= 64 && second <= 127) return true;
+        }
+        else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            var bytes = ip.GetAddressBytes();
+            if ((bytes[0] & 0xFE) == 0xFC) return true;
+            if (bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80) return true;
+        }
+
+        return false;
+    }
+
+    private static async Task CreateAdminCli(string[] args, Database db, AuthService auth)
+    {
+        Console.WriteLine("\n🌸 Ash Server — Secure CLI Administrator Bootstrap\n");
+
+        string? username = null;
+        string? password = null;
+        string? email = null;
+
+        for (int i = 1; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals("--username", StringComparison.OrdinalIgnoreCase) || args[i].Equals("-u", StringComparison.OrdinalIgnoreCase))
+            {
+                username = args[i + 1];
+            }
+            else if (args[i].Equals("--password", StringComparison.OrdinalIgnoreCase) || args[i].Equals("-p", StringComparison.OrdinalIgnoreCase))
+            {
+                password = args[i + 1];
+            }
+            else if (args[i].Equals("--email", StringComparison.OrdinalIgnoreCase) || args[i].Equals("-e", StringComparison.OrdinalIgnoreCase))
+            {
+                email = args[i + 1];
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            Console.Write("Enter Administrator Username: ");
+            username = Console.ReadLine()?.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            Console.Write("Enter Administrator Email: ");
+            email = Console.ReadLine()?.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            password = ReadPasswordSecurely();
+        }
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            Console.WriteLine("[error] Username and Password cannot be empty.");
+            Environment.Exit(1);
+        }
+
+        try
+        {
+            var existing = await db.GetUserByUsername(username);
+            if (existing != null)
+            {
+                Console.WriteLine($"[error] A user with username '{username}' already exists.");
+                Environment.Exit(1);
+            }
+
+            var passwordHash = auth.HashPassword(password);
+            var user = await db.CreateUser(username, passwordHash, email, isAdmin: true);
+            await db.ToggleAdmin(user.Id, true);
+
+            Console.WriteLine($"\n[success] Administrator account '{username}' successfully created and bootstrapped!");
+            Console.WriteLine("You can now securely log in to the web interface.\n");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[error] Failed to create admin account: {ex.Message}");
+            Environment.Exit(1);
+        }
+    }
+
+    private static string ReadPasswordSecurely()
+    {
+        var pass = new StringBuilder();
+        ConsoleKeyInfo key;
+        Console.Write("Enter Password: ");
+
+        do
+        {
+            key = Console.ReadKey(true);
+
+            if (key.Key == ConsoleKey.Backspace)
+            {
+                if (pass.Length > 0)
+                {
+                    pass.Remove(pass.Length - 1, 1);
+                    Console.Write("\b \b");
+                }
+            }
+            else if (key.Key != ConsoleKey.Enter)
+            {
+                pass.Append(key.KeyChar);
+                Console.Write("*");
+            }
+        } while (key.Key != ConsoleKey.Enter);
+
+        Console.WriteLine();
+        return pass.ToString();
+    }
+}
