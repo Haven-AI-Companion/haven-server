@@ -46,6 +46,38 @@ fi
 DOTNET_VERSION="$(dotnet --version 2>/dev/null || echo 'unknown')"
 info ".NET SDK version: $DOTNET_VERSION"
 
+# ── Check for SQLite3 ─────────────────────────────────────────────────────────
+if ! command -v sqlite3 &>/dev/null; then
+    warn "SQLite3 not found. It is a required dependency."
+    if [[ "$OS" == "Linux" ]]; then
+        if command -v apt-get &>/dev/null; then
+            info "Installing sqlite3 via apt-get…"
+            sudo apt-get update && sudo apt-get install -y sqlite3
+        elif command -v dnf &>/dev/null; then
+            info "Installing sqlite3 via dnf…"
+            sudo dnf install -y sqlite
+        elif command -v yum &>/dev/null; then
+            info "Installing sqlite3 via yum…"
+            sudo yum install -y sqlite
+        elif command -v pacman &>/dev/null; then
+            info "Installing sqlite3 via pacman…"
+            sudo pacman -S --noconfirm sqlite
+        else
+            warn "Could not install sqlite3 automatically. Please install it using your package manager."
+        fi
+    elif [[ "$OS" == "Darwin" ]]; then
+        if command -v brew &>/dev/null; then
+            info "Installing sqlite3 via Homebrew…"
+            brew install sqlite
+        else
+            warn "Could not install sqlite3 automatically (Homebrew not found). Please install it manually."
+        fi
+    fi
+else
+    info "SQLite3 version: $(sqlite3 --version | head -n 1 | awk '{print $1}')"
+fi
+
+
 # ── Build ─────────────────────────────────────────────────────────────────────
 OUT="$REPO_DIR/build/dist/$RID"
 info "Building self-contained binary for $RID…"

@@ -36,6 +36,23 @@ BINARY="${1:-$SCRIPT_DIR/ash-server}"
 
 info "Installing Ash Server from: $BINARY"
 
+# ── Check for SQLite3 ─────────────────────────────────────────────────────────
+if ! command -v sqlite3 &>/dev/null; then
+    info "SQLite3 not found. Installing it…"
+    if command -v apt-get &>/dev/null; then
+        apt-get update && apt-get install -y sqlite3
+    elif command -v dnf &>/dev/null; then
+        dnf install -y sqlite
+    elif command -v yum &>/dev/null; then
+        yum install -y sqlite
+    elif command -v pacman &>/dev/null; then
+        pacman -S --noconfirm sqlite
+    else
+        warn "Could not install sqlite3 automatically. Please install the 'sqlite3' package manually."
+    fi
+fi
+
+
 # ── Create system user ────────────────────────────────────────────────────────
 if ! id "$SERVICE_USER" &>/dev/null; then
     info "Creating system user '$SERVICE_USER'…"

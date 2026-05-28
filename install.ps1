@@ -34,6 +34,25 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 $dotnetVer = dotnet --version 2>$null
 Info ".NET SDK version: $dotnetVer"
 
+# ── Check for SQLite3 ──────────────────────────────────────────────────────────
+if (-not (Get-Command sqlite3 -ErrorAction SilentlyContinue)) {
+    Info "SQLite3 not found. Attempting to install via winget…"
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try {
+            & winget install --id SQLite.SQLite --accept-source-agreements --accept-package-agreements
+            Ok "SQLite3 installed successfully."
+        } catch {
+            Warn "Failed to install SQLite3 via winget. Please install it manually from: https://sqlite.org/download.html"
+        }
+    } else {
+        Warn "winget not found. Please install SQLite3 manually from: https://sqlite.org/download.html"
+    }
+} else {
+    $sqliteVer = sqlite3 --version
+    Info "SQLite3 version: $sqliteVer"
+}
+
+
 # ── Uninstall ──────────────────────────────────────────────────────────────────
 if ($Uninstall) {
     $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()

@@ -8,7 +8,7 @@
 ; ============================================================
 
 !define PRODUCT_NAME      "Ash Server"
-!define PRODUCT_VERSION   "1.0.0"
+!define PRODUCT_VERSION   "1.1.0"
 !define SERVICE_NAME      "ash-server"
 !define INSTALL_DIR       "$PROGRAMFILES64\Ash Server"
 !define UNINSTALL_REG     "Software\Microsoft\Windows\CurrentVersion\Uninstall\AshServer"
@@ -71,6 +71,24 @@ Section "Install" SEC_MAIN
                     "http://localhost:18799/admin.html"
     CreateShortCut  "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall Ash Server.lnk" \
                     "$INSTDIR\uninstall.exe"
+
+    ; Check and install SQLite3 dependency if missing
+    nsExec::ExecToStack 'cmd.exe /c "where sqlite3.exe"'
+    Pop $0
+    Pop $1
+    ${If} $0 != 0
+        DetailPrint "SQLite3 not found. Attempting to install via winget..."
+        nsExec::ExecToLog 'winget install --id SQLite.SQLite --accept-source-agreements --accept-package-agreements --silent'
+        Pop $0
+        ${If} $0 != 0
+            DetailPrint "Failed to install SQLite3 via winget. Please install it manually from https://sqlite.org/download.html"
+            MessageBox MB_OK|MB_ICONWARNING "SQLite3 is required but could not be installed automatically. Please install SQLite3 from https://sqlite.org/download.html after this setup completes."
+        ${Else}
+            DetailPrint "SQLite3 installed successfully."
+        ${EndIf}
+    ${Else}
+        DetailPrint "SQLite3 is already installed."
+    ${EndIf}
 
     ; Register and start the Windows service
     nsExec::ExecToLog '"$INSTDIR\ash-server.exe" install-service'

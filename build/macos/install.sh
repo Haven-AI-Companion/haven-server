@@ -47,6 +47,21 @@ BINARY="${1:-$SCRIPT_DIR/ash-server}"
 
 info "Installing Ash Server from: $BINARY"
 
+# ── Check for SQLite3 ─────────────────────────────────────────────────────────
+if ! command -v sqlite3 &>/dev/null; then
+    info "SQLite3 not found. Installing it via Homebrew…"
+    if command -v brew &>/dev/null; then
+        if [[ -n "${SUDO_USER:-}" ]]; then
+            sudo -u "$SUDO_USER" brew install sqlite
+        else
+            brew install sqlite
+        fi
+    else
+        warn "Could not install sqlite3 automatically (Homebrew not found). Please install the 'sqlite' package manually."
+    fi
+fi
+
+
 # ── Install files ─────────────────────────────────────────────────────────────
 info "Installing to $INSTALL_DIR…"
 mkdir -p "$INSTALL_DIR"
