@@ -75,9 +75,9 @@ mkdir -p "$INSTALL_DIR"
 # Binary
 install -m 755 "$BINARY" "$INSTALL_DIR/ash-server"
 
-# appsettings.json (only if not already present — don't overwrite user config)
-if [[ -f "$SRC_DIR/appsettings.json" && ! -f "$INSTALL_DIR/appsettings.json" ]]; then
-    install -m 644 "$SRC_DIR/appsettings.json" "$INSTALL_DIR/appsettings.json"
+# appsettings.json.example (only if not already present — don't overwrite user config)
+if [[ -f "$SRC_DIR/appsettings.json.example" && ! -f "$INSTALL_DIR/appsettings.json.example" ]]; then
+    install -m 644 "$SRC_DIR/appsettings.json.example" "$INSTALL_DIR/appsettings.json.example"
 fi
 
 # wwwroot (static web UI)

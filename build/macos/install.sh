@@ -81,9 +81,9 @@ install -m 755 "$BINARY" "$INSTALL_DIR/ash-server"
 # macOS: clear quarantine bit so the binary runs without Gatekeeper prompts
 xattr -d com.apple.quarantine "$INSTALL_DIR/ash-server" 2>/dev/null || true
 
-# appsettings.json (only if not already present)
-if [[ -f "$SRC_DIR/appsettings.json" && ! -f "$INSTALL_DIR/appsettings.json" ]]; then
-    install -m 644 "$SRC_DIR/appsettings.json" "$INSTALL_DIR/appsettings.json"
+# appsettings.json.example (only if not already present)
+if [[ -f "$SRC_DIR/appsettings.json.example" && ! -f "$INSTALL_DIR/appsettings.json.example" ]]; then
+    install -m 644 "$SRC_DIR/appsettings.json.example" "$INSTALL_DIR/appsettings.json.example"
 fi
 
 # wwwroot (static web UI)
