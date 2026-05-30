@@ -96,7 +96,7 @@ jobs:
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             powershell -Command "Compress-Archive -Path '$staging/*' -DestinationPath 'build/dist/${zipname}'"
           else
-            (cd "$staging" && zip -r "../../$zipname" .)
+            (cd "$staging" && zip -r "../$zipname" .)
           fi
           echo "ASSET_PATH=build/dist/$zipname" >> "$GITHUB_ENV"
           echo "ASSET_NAME=$zipname" >> "$GITHUB_ENV"
@@ -152,7 +152,7 @@ jobs:
           Remove-Item -Recurse -Force -Path "build\windows\dependencies\sqlite-temp", $sqliteZip
 
           # Download Tailscale MSI Setup
-          $tailscaleUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
+          $tailscaleUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           Invoke-WebRequest -Uri $tailscaleUrl -OutFile "build\windows\dependencies\tailscale-setup.msi"
         shell: powershell
 
