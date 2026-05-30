@@ -42,7 +42,16 @@ fi
 
 # ── Locate binary ─────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BINARY="${1:-$SCRIPT_DIR/ash-server}"
+
+# Auto-detect source directory (where assets and binary reside)
+SRC_DIR="$SCRIPT_DIR"
+if [[ -d "$SCRIPT_DIR/../../wwwroot" ]]; then
+    SRC_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+elif [[ -d "$SCRIPT_DIR/../wwwroot" ]]; then
+    SRC_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
+BINARY="${1:-$SRC_DIR/ash-server}"
 [[ -f "$BINARY" ]] || die "Binary not found: $BINARY\nUsage: sudo bash $0 /path/to/ash-server"
 
 info "Installing Ash Server from: $BINARY"
@@ -73,20 +82,20 @@ install -m 755 "$BINARY" "$INSTALL_DIR/ash-server"
 xattr -d com.apple.quarantine "$INSTALL_DIR/ash-server" 2>/dev/null || true
 
 # appsettings.json (only if not already present)
-if [[ -f "$SCRIPT_DIR/appsettings.json" && ! -f "$INSTALL_DIR/appsettings.json" ]]; then
-    install -m 644 "$SCRIPT_DIR/appsettings.json" "$INSTALL_DIR/appsettings.json"
+if [[ -f "$SRC_DIR/appsettings.json" && ! -f "$INSTALL_DIR/appsettings.json" ]]; then
+    install -m 644 "$SRC_DIR/appsettings.json" "$INSTALL_DIR/appsettings.json"
 fi
 
 # wwwroot (static web UI)
-if [[ -d "$SCRIPT_DIR/wwwroot" ]]; then
-    cp -r "$SCRIPT_DIR/wwwroot" "$INSTALL_DIR/"
+if [[ -d "$SRC_DIR/wwwroot" ]]; then
+    cp -r "$SRC_DIR/wwwroot" "$INSTALL_DIR/"
 fi
 
 # personality (default starter files — don't overwrite customised files)
-if [[ -d "$SCRIPT_DIR/personality" ]]; then
+if [[ -d "$SRC_DIR/personality" ]]; then
     mkdir -p "$INSTALL_DIR/personality"
     # -n = no-clobber (skip files that already exist)
-    cp -rn "$SCRIPT_DIR/personality/." "$INSTALL_DIR/personality/" 2>/dev/null || true
+    cp -rn "$SRC_DIR/personality/." "$INSTALL_DIR/personality/" 2>/dev/null || true
 fi
 
 # Symlink so 'ash-server' works anywhere in the terminal
