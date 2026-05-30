@@ -144,7 +144,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path build\windows\dependencies
           
           # Download SQLite3 Tools and extract sqlite3.exe
-          $sqliteUrl = "https://www.sqlite.org/2025/sqlite-tools-win-x64-3490100.zip"
+          $sqliteUrl = "https://www.sqlite.org/2026/sqlite-tools-win-x64-3530100.zip"
           $sqliteZip = "build\windows\dependencies\sqlite-tools.zip"
           Invoke-WebRequest -Uri $sqliteUrl -OutFile $sqliteZip
           Expand-Archive -Path $sqliteZip -DestinationPath "build\windows\dependencies\sqlite-temp" -Force
