@@ -148,7 +148,7 @@ jobs:
           $sqliteZip = "build\windows\dependencies\sqlite-tools.zip"
           Invoke-WebRequest -Uri $sqliteUrl -OutFile $sqliteZip
           Expand-Archive -Path $sqliteZip -DestinationPath "build\windows\dependencies\sqlite-temp" -Force
-          Copy-Item -Path "build\windows\dependencies\sqlite-temp\*\sqlite3.exe" -Destination "build\windows\dependencies\sqlite3.exe" -Force
+          Get-ChildItem -Path "build\windows\dependencies\sqlite-temp" -Filter "sqlite3.exe" -Recurse | Copy-Item -Destination "build\windows\dependencies\sqlite3.exe" -Force
           Remove-Item -Recurse -Force -Path "build\windows\dependencies\sqlite-temp", $sqliteZip
 
           # Download Tailscale MSI Setup
