@@ -266,6 +266,10 @@
   .settings-msg.ok { color: var(--success); }
   .settings-msg.err { color: var(--error); }
 
+  /* Spinner */
+  .spinner { border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   /* Mobile */
   .sidebar-overlay { display: none; position: fixed; inset: 0; background: #00000077; z-index: 49; }
   @media (max-width: 700px) {
@@ -492,6 +496,13 @@
         <button class="save-btn" id="save-email-btn" onclick="saveEmail()">Save email</button>
         <div class="settings-msg" id="email-msg"></div>
       </div>
+      <div class="settings-section" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+        <div class="settings-label">Mobile Companion</div>
+        <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:8px;">
+          Connect the PocketAsh mobile app to chat on your device.
+        </div>
+        <button class="save-btn" style="background:var(--accent); color:#fff; border:none;" onclick="showMobilePairingModal()">Connect PocketAsh</button>
+      </div>
     </div>
 
     <!-- Security tab -->
@@ -506,6 +517,45 @@
         <button class="save-btn" id="save-pass-btn" onclick="savePassword()">Change password</button>
         <div class="settings-msg" id="pass-msg"></div>
       </div>
+    </div>
+</div>
+
+<!-- Mobile Pairing Modal -->
+<div class="modal-overlay" id="mobile-pair-modal" style="display:none; z-index:10000;" onclick="closeMobilePairingOnBg(event)">
+  <div class="modal" style="max-width:440px; text-align:center;">
+    <div class="modal-header">
+      <span class="modal-title">Connect PocketAsh</span>
+      <button class="modal-close" onclick="closeMobilePairingModal()">×</button>
+    </div>
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
+      <p style="font-size:13px; color:var(--text-muted); text-align:left; margin:0;">
+        Scan the QR code with PocketAsh or enter the pairing details manually in the app to establish a secure connection.
+      </p>
+      
+      <div style="display:flex; flex-direction:column; align-items:center; gap:16px; background:var(--bg); padding:16px; border-radius:8px; border:1px solid var(--border);">
+        <div id="pair-qr-container" style="background:#fff; padding:10px; border-radius:8px; display:flex; align-items:center; justify-content:center; width:220px; height:220px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+          <img id="pair-qr-image" style="width:200px; height:200px; display:none;" alt="QR Code">
+          <div id="pair-qr-spinner" class="spinner" style="width:24px; height:24px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite;"></div>
+        </div>
+        
+        <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+          <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--text-dim);">Pairing Code</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="pair-code-display" style="font-size:24px; font-weight:700; color:var(--accent); font-family:monospace; letter-spacing:2px;">------</span>
+            <button class="save-btn" onclick="copyPairingCode()" style="padding:4px 8px; font-size:11px; margin:0; width:auto;">Copy</button>
+          </div>
+        </div>
+      </div>
+      
+      <div style="display:flex; flex-direction:column; gap:8px; font-size:13px; text-align:left;">
+        <div><strong>Server URLs:</strong></div>
+        <div id="pair-urls-list" style="display:flex; flex-direction:column; gap:6px; font-family:monospace; color:var(--text-muted); background:var(--bg); padding:8px 12px; border-radius:6px; border:1px solid var(--border); max-height:80px; overflow-y:auto; font-size:12px;">
+          <!-- Dynamically populated list of URLs -->
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="save-btn" onclick="closeMobilePairingModal()" style="margin:0;">Close</button>
     </div>
   </div>
 </div>
@@ -1372,6 +1422,101 @@ async function onDrop(e) {
 // ── Init ───────────────────────────────────────────────────────────────────
 document.getElementById('messages-area').addEventListener('scroll', updateScrollBtn);
 initApp();
+
+let pairingCode = '';
+
+async function showMobilePairingModal() {
+  const modal = document.getElementById('mobile-pair-modal');
+  const qrImg = document.getElementById('pair-qr-image');
+  const qrSpinner = document.getElementById('pair-qr-spinner');
+  const codeDisp = document.getElementById('pair-code-display');
+  const urlsList = document.getElementById('pair-urls-list');
+  
+  modal.style.display = 'flex';
+  qrImg.style.display = 'none';
+  qrSpinner.style.display = 'block';
+  codeDisp.textContent = '------';
+  urlsList.innerHTML = '<span style="font-size:11px;">Loading server endpoints...</span>';
+  
+  try {
+    const resp = await fetch('/api/auth/mobile/pair/initiate', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    if (!resp.ok) throw new Error('Failed to initiate mobile pairing.');
+    const data = await resp.json();
+    
+    pairingCode = data.code;
+    codeDisp.textContent = data.code;
+    
+    urlsList.innerHTML = '';
+    const port = data.port || 18799;
+    
+    let urls = [`http://localhost:${port}`];
+    if (data.ips && data.ips.length > 0) {
+      data.ips.forEach(ip => {
+        urls.push(`http://${ip}:${port}`);
+      });
+    }
+    
+    urls.forEach(url => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.justifyContent = 'space-between';
+      row.style.alignItems = 'center';
+      
+      const txt = document.createElement('span');
+      txt.textContent = url;
+      
+      const copyBtn = document.createElement('span');
+      copyBtn.innerHTML = '📋';
+      copyBtn.style.cursor = 'pointer';
+      copyBtn.style.fontSize = '12px';
+      copyBtn.title = 'Copy URL';
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(url);
+        toast('URL copied to clipboard!', 'success');
+      };
+      
+      row.appendChild(txt);
+      row.appendChild(copyBtn);
+      urlsList.appendChild(row);
+    });
+    
+    const encodedPayload = encodeURIComponent(data.qr_data);
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodedPayload}`;
+    qrImg.onload = () => {
+      qrSpinner.style.display = 'none';
+      qrImg.style.display = 'block';
+    };
+    qrImg.onerror = () => {
+      qrSpinner.style.display = 'none';
+      urlsList.insertAdjacentHTML('afterbegin', '<div style="color:var(--warning); font-size:11px; margin-bottom:6px;">⚠️ QR code offline. Use manual details below:</div>');
+    };
+  } catch(e) {
+    qrSpinner.style.display = 'none';
+    urlsList.innerHTML = `<span style="color:var(--error);">${e.message}</span>`;
+    toast(e.message, 'error');
+  }
+}
+
+function closeMobilePairingModal() {
+  document.getElementById('mobile-pair-modal').style.display = 'none';
+}
+
+function closeMobilePairingOnBg(e) {
+  if (e.target === document.getElementById('mobile-pair-modal')) {
+    closeMobilePairingModal();
+  }
+}
+
+function copyPairingCode() {
+  if (!pairingCode) return;
+  navigator.clipboard.writeText(pairingCode);
+  toast('Pairing code copied to clipboard!', 'success');
+}
 </script>
 </body>
 </html>

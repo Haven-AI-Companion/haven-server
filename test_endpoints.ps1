@@ -11,7 +11,7 @@ $BinaryDir = "C:\Users\admin\source\ash-server-cs\bin\Debug\net10.0\win-x64"
 $BinaryPath = Join-Path $BinaryDir "ash-server.exe"
 $ConfigPath = Join-Path $BinaryDir "config.json"
 $ConfigBakPath = Join-Path $BinaryDir "config.json.bak"
-$DbPath = Join-Path $BinaryDir "ash_server_test.db"
+$DbPath = Join-Path $PSScriptRoot "ash_server_test.db"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "   Ash Server Pre-Release Integration Test Runner         " -ForegroundColor Cyan
@@ -138,12 +138,16 @@ function Assert-Status {
     param (
         [string]$Name,
         [int]$Expected,
-        [int]$Actual
+        [int]$Actual,
+        [string]$Content = $null
     )
     if ($Expected -eq $Actual) {
         Write-Host "  [PASS] $Name" -ForegroundColor Green
     } else {
         Write-Host "  [FAIL] $Name (Expected: $Expected, Actual: $Actual)" -ForegroundColor Red
+        if ($Content) {
+            Write-Host "    Response: $Content" -ForegroundColor Yellow
+        }
         $script:TestsFailed++
     }
 }
@@ -153,7 +157,7 @@ Write-Host "" -ForegroundColor Yellow
 Write-Host "Running Auth & Registration Tests..." -ForegroundColor Yellow
 $RegBody = "username=testadmin&password=AdminPassword123!&email=admin@example.com"
 $RegResp = Invoke-WebRequestSafe -Uri "$BaseUrl/api/auth/register" -Method Post -ContentType "application/x-www-form-urlencoded" -Body $RegBody
-Assert-Status "Register Admin User" 200 $RegResp.StatusCode
+Assert-Status "Register Admin User" 200 $RegResp.StatusCode $RegResp.Content
 
 $RegJson = $RegResp.Content | ConvertFrom-Json
 $AdminToken = $RegJson.access_token
@@ -235,6 +239,34 @@ if ($TargetUser.is_admin -eq $true) {
     $TestsFailed++
 }
 
+# Test 5.8: Initiate Mobile Pairing
+Write-Host "" -ForegroundColor Yellow
+Write-Host "Running Mobile Pairing Tests..." -ForegroundColor Yellow
+
+$PairInitResp = Invoke-WebRequestSafe -Uri "$BaseUrl/api/auth/mobile/pair/initiate" -Method Post -Headers $Headers
+Assert-Status "Initiate Mobile Pairing (Authorized)" 200 $PairInitResp.StatusCode
+
+$PairInitJson = $PairInitResp.Content | ConvertFrom-Json
+$PairingCode = $PairInitJson.code
+Write-Host "  Generated Pairing Code: $PairingCode" -ForegroundColor Gray
+
+# Test 5.9: Confirm Mobile Pairing
+$ConfirmBody = @{ "code" = $PairingCode; "device_name" = "Test Device" } | ConvertTo-Json
+$ConfirmResp = Invoke-WebRequestSafe -Uri "$BaseUrl/api/auth/mobile/pair/confirm" -Method Post -ContentType "application/json" -Body $ConfirmBody
+Assert-Status "Confirm Mobile Pairing (Public)" 200 $ConfirmResp.StatusCode
+
+$ConfirmJson = $ConfirmResp.Content | ConvertFrom-Json
+$LongLivedToken = $ConfirmJson.token
+
+# Test 5.10: Re-confirming same code fails
+$ConfirmResp2 = Invoke-WebRequestSafe -Uri "$BaseUrl/api/auth/mobile/pair/confirm" -Method Post -ContentType "application/json" -Body $ConfirmBody
+Assert-Status "Confirm Pairing Again Fails (Consumed Code)" 400 $ConfirmResp2.StatusCode
+
+# Test 5.11: Use long-lived mobile token to access API
+$MobileHeaders = @{ "Authorization" = "Bearer $LongLivedToken" }
+$MobileMeResp = Invoke-WebRequestSafe -Uri "$BaseUrl/api/auth/me" -Method Get -Headers $MobileHeaders
+Assert-Status "Access API using paired long-lived Mobile JWT" 200 $MobileMeResp.StatusCode
+
 # 6. Tear down server
 Write-Host "" -ForegroundColor Gray
 Write-Host "[6/7] Tearing down background server..." -ForegroundColor Gray
@@ -256,7 +288,7 @@ if (Test-Path $ConfigBakPath) {
 }
 
 # Remove temporary test database files
-Get-ChildItem -Path $BinaryDir -Filter "ash_server_test.db*" | Remove-Item -Force
+Get-ChildItem -Path $PSScriptRoot -Filter "ash_server_test.db*" | Remove-Item -Force
 Write-Host "[OK] Cleaned test database files." -ForegroundColor Green
 
 # Print Final Summary Report
