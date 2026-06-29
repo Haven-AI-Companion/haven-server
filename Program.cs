@@ -64,6 +64,23 @@ public class Program
 
         var builder = WebApplication.CreateBuilder(args);
 
+        // Map custom CLI flags to configuration keys
+        if (args.Contains("--worker", StringComparer.OrdinalIgnoreCase))
+        {
+            builder.Configuration["Mode"] = "worker";
+        }
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals("--master", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.Configuration["Grid:MasterUrl"] = args[i + 1];
+            }
+            else if (args[i].Equals("--token", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.Configuration["Grid:PairingToken"] = args[i + 1];
+            }
+        }
+
         // ── Native service hosting (auto-detects OS) ─────────────────────────
         builder.Host.UseWindowsService(opts => opts.ServiceName = "ash-server");
         builder.Host.UseSystemd();
@@ -78,6 +95,27 @@ public class Program
         builder.WebHost.ConfigureKestrel(options =>
         {
             var port = builder.Configuration.GetValue("Port", 18799);
+            var tailscaleOnly = builder.Configuration.GetValue("TailscaleOnly", false);
+
+            if (tailscaleOnly)
+            {
+                var tsIp = DiscoverTailscaleIp();
+                if (tsIp != null)
+                {
+                    Console.WriteLine($"[startup] TailscaleOnly is enabled. Binding Kestrel to Tailscale IP: {tsIp}:{port}");
+                    options.Listen(tsIp, port);
+                    return;
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"[startup] ERROR: TailscaleOnly is enabled, but no Tailscale interface was found! Falling back to localhost (127.0.0.1) for safety.");
+                    Console.ResetColor();
+                    options.ListenLocalhost(port);
+                    return;
+                }
+            }
+
             var host = builder.Configuration.GetValue("Host", "0.0.0.0")?.Trim();
 
             if (string.IsNullOrWhiteSpace(host) || host == "0.0.0.0" || host == "*" || host.Equals("any", StringComparison.OrdinalIgnoreCase))
@@ -145,14 +183,16 @@ public class Program
         var personality = new PersonalityLoader(personalityDir);
         personality.Load();
         builder.Services.AddSingleton(personality);
-
-        var backendManager = new BackendManager(db);
-        builder.Services.AddSingleton(backendManager);
+        builder.Services.AddSingleton<BackendManager>();
+        builder.Services.AddSingleton<HardwareProfiler>();
 
         builder.Services.AddSingleton<AshServer.Plugins.PluginManager>();
         builder.Services.AddSingleton<McpManager>();
         builder.Services.AddSingleton<UpdateManager>();
         builder.Services.AddSingleton<AuthService>();
+        builder.Services.AddSingleton<RagService>();
+        builder.Services.AddSingleton<GridManager>();
+        builder.Services.AddHostedService<GridWorkerService>();
         builder.Services.AddSingleton<AshServer.Chat.IdentityResolver>();
         builder.Services.AddSingleton<AshServer.Chat.Discord.DiscordMessageRouter>();
         builder.Services.AddSingleton<AshServer.Middleware.ExternalRateLimiter>();
@@ -223,6 +263,10 @@ public class Program
         // Initialize MCP servers (non-fatal — server starts even if MCP servers fail)
         var mcpManager = app.Services.GetRequiredService<McpManager>();
         await mcpManager.InitializeAsync();
+
+        // Initialize local backend (runs hardware profiling and starts llama-server if models exist)
+        var profiler = app.Services.GetRequiredService<HardwareProfiler>();
+        await profiler.InitializeLocalBackendAsync();
 
         // ── WebSocket endpoint ──────────────────────────────────────────────
         app.Map("/ws/{sessionId}", async (HttpContext ctx, string sessionId, ChatHandler chat, Database dbSvc) =>
@@ -302,6 +346,18 @@ public class Program
             }
 
             await chat.Handle(ctx, ws, userId, username, isAdmin, permissions);
+        });
+
+        // ── Grid Worker WebSocket endpoint ──────────────────────────────────
+        app.Map("/api/grid/ws", async (HttpContext ctx, GridManager grid) =>
+        {
+            if (!ctx.WebSockets.IsWebSocketRequest)
+            {
+                ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+            using var webSocket = await ctx.WebSockets.AcceptWebSocketAsync();
+            await grid.HandleWorkerConnectionAsync(webSocket, ctx);
         });
 
         // ── Fallback: serve chat.html for /chat and / ───────────────────────
@@ -513,5 +569,33 @@ public class Program
 
         Console.WriteLine();
         return pass.ToString();
+    }
+
+    public static System.Net.IPAddress? DiscoverTailscaleIp()
+    {
+        try
+        {
+            foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                
+                var ipProps = ni.GetIPProperties();
+                foreach (var addr in ipProps.UnicastAddresses)
+                {
+                    if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                    {
+                        var ipBytes = addr.Address.GetAddressBytes();
+                        // Tailscale IPs are in the CGNAT 100.64.0.0/10 range:
+                        // 100.64.0.0 to 100.127.255.255
+                        if (ipBytes[0] == 100 && ipBytes[1] >= 64 && ipBytes[1] <= 127)
+                        {
+                            return addr.Address;
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 }

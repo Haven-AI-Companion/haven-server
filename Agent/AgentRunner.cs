@@ -24,14 +24,16 @@ public class AgentRunner
     private readonly string _model;
     private readonly PluginManager? _plugins;
     private readonly McpManager?    _mcp;
+    private readonly RagService?    _rag;
     private readonly int _maxIterations;
 
-    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null, int maxIterations = MaxIterations)
+    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null, RagService? rag = null, int maxIterations = MaxIterations)
     {
         _backend = backend;
         _model   = model;
         _plugins = plugins;
         _mcp     = mcp;
+        _rag     = rag;
         _maxIterations = Math.Max(1, maxIterations);
     }
 
@@ -40,6 +42,28 @@ public class AgentRunner
     {
         var builtins = JsonSerializer.Deserialize<List<JsonElement>>(
             AgentTools.ToolDefinitions.GetRawText())!;
+
+        if (_rag != null)
+        {
+            var searchDocTool = JsonSerializer.Deserialize<JsonElement>("""
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "search_documents",
+                    "description": "Search through your uploaded documents and files for relevant information using semantic search.",
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "query": { "type": "string", "description": "The search query" },
+                        "filename": { "type": "string", "description": "Optional filename to restrict search to" }
+                      },
+                      "required": ["query"]
+                    }
+                  }
+                }
+                """);
+            builtins.Add(searchDocTool);
+        }
 
         if (_plugins != null)
         {
@@ -50,7 +74,6 @@ public class AgentRunner
                 var external = pluginTools.EnumerateArray()
                     .Where(t =>
                     {
-                        // exclude if it matches a builtin tool name
                         var name = t.TryGetProperty("function", out var f) &&
                                    f.TryGetProperty("name", out var n) ? n.GetString() : null;
                         return name != null && !AgentTools.IsBuiltinTool(name);
@@ -68,8 +91,6 @@ public class AgentRunner
                 {
                     var name = t.TryGetProperty("function", out var f) &&
                                f.TryGetProperty("name", out var n) ? n.GetString() : null;
-                    // MCP tools take precedence over builtins only if names collide;
-                    // add if not already present
                     if (name != null && !builtins.Any(b =>
                         b.TryGetProperty("function", out var bf) &&
                         bf.TryGetProperty("name", out var bn) &&
@@ -84,6 +105,27 @@ public class AgentRunner
 
     private async Task<string> DispatchTool(string name, JsonElement args)
     {
+        if (name == "search_documents" && _rag != null)
+        {
+            var query = args.TryGetProperty("query", out var q) ? q.GetString() ?? "" : "";
+            var filename = args.TryGetProperty("filename", out var f) ? f.GetString() : null;
+            
+            if (string.IsNullOrWhiteSpace(query)) return "No query provided.";
+            
+            var results = await _rag.SearchAsync(query, filename);
+            if (results.Count == 0) return "No matching document snippets found.";
+            
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Semantic search results for \"{query}\":\n");
+            foreach (var r in results)
+            {
+                sb.AppendLine($"--- Snippet from {r.Filename} (Similarity: {r.Similarity:F2}) ---");
+                sb.AppendLine(r.Content);
+                sb.AppendLine();
+            }
+            return sb.ToString();
+        }
+
         // MCP tools first (external protocol servers)
         if (_mcp != null && _mcp.IsMcpTool(name))
             return await _mcp.ExecuteToolAsync(name, args);

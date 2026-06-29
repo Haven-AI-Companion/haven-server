@@ -16,7 +16,7 @@ public class Database
         _connectionString = $"Data Source={dbPath}";
     }
 
-    private SqliteConnection Open()
+    public SqliteConnection Open()
     {
         var conn = new SqliteConnection(_connectionString);
         conn.Open();
@@ -161,6 +161,26 @@ public class Database
                 channel_key TEXT NOT NULL,
                 conv_id     TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                 UNIQUE(provider, channel_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS document_chunks (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id TEXT NOT NULL,
+                filename    TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                embedding   BLOB
+            );
+            CREATE INDEX IF NOT EXISTS idx_document_chunks_filename ON document_chunks(filename);
+
+            CREATE TABLE IF NOT EXISTS grid_workers (
+                id          TEXT PRIMARY KEY,
+                name        TEXT NOT NULL,
+                secret      TEXT NOT NULL,
+                created_at  TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS grid_tokens (
+                token       TEXT PRIMARY KEY,
+                expires_at  TEXT NOT NULL
             );
 
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(

@@ -123,13 +123,38 @@ public static class AgentTools
         try
         {
             var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Add("User-Agent", "Mozilla/5.0 (compatible; AshServer/1.0)");
+            req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            req.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+            
             var resp = await Http.SendAsync(req);
             var html = await resp.Content.ReadAsStringAsync();
-            // Strip HTML tags
+
+            // 1. Remove non-content blocks (scripts, styles, head, header, footer, nav)
+            html = Regex.Replace(html, @"<(script|style|head|header|footer|nav)\b[^>]*>.*?</\1>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            html = Regex.Replace(html, @"<!--.*?-->", "", RegexOptions.Singleline); // comments
+
+            // 2. Convert structural elements to Markdown
+            html = Regex.Replace(html, @"<h1\b[^>]*>(.*?)</h1>", "\n# $1\n", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            html = Regex.Replace(html, @"<h2\b[^>]*>(.*?)</h2>", "\n## $1\n", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            html = Regex.Replace(html, @"<h3\b[^>]*>(.*?)</h3>", "\n### $1\n", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            html = Regex.Replace(html, @"<p\b[^>]*>(.*?)</p>", "\n$1\n", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            html = Regex.Replace(html, @"<li\b[^>]*>(.*?)</li>", "\n* $1", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            
+            // Convert links: <a href="url">text</a> -> [text](url)
+            html = Regex.Replace(html, @"<a\b[^>]*href=""([^""]+)""[^>]*>(.*?)</a>", "[$2]($1)", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+
+            // 3. Strip remaining HTML tags
             var text = Regex.Replace(html, "<[^>]+>", " ");
-            text = Regex.Replace(text, @"\s{2,}", " ").Trim();
-            return text.Length > 3000 ? text[..3000] + "\n[truncated]" : text;
+            
+            // 4. Decode HTML entities and clean whitespace
+            text = System.Net.WebUtility.HtmlDecode(text);
+            text = Regex.Replace(text, @"[ \t]+", " "); // collapse horizontal spaces
+            text = Regex.Replace(text, @"\r\n|\n|\r", "\n"); // normalize newlines
+            text = Regex.Replace(text, @"\n{3,}", "\n\n"); // collapse multiple newlines
+            text = text.Trim();
+
+            // Return up to 6000 characters for more context, with a truncation note
+            return text.Length > 6000 ? text[..6000] + "\n\n[Content truncated for length...]" : text;
         }
         catch (Exception ex)
         {

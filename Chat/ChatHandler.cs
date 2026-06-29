@@ -32,10 +32,11 @@ public class ChatHandler
     private readonly McpManager    _mcp;
     private readonly IMemoryCache  _convCache;
     private readonly ILogger<ChatHandler> _log;
+    private readonly RagService _rag;
 
     public ChatHandler(Database db, BackendManager backends, PersonalityLoader personality,
         IConfiguration config, PluginManager plugins, McpManager mcp, IMemoryCache convCache,
-        ILogger<ChatHandler> log)
+        ILogger<ChatHandler> log, RagService rag)
     {
         _db = db;
         _backends = backends;
@@ -45,6 +46,7 @@ public class ChatHandler
         _mcp = mcp;
         _convCache = convCache;
         _log = log;
+        _rag = rag;
     }
 
     public async Task Handle(HttpContext context, WebSocket ws, int userId, string username, bool isAdmin = false, HashSet<string>? permissions = null)
@@ -176,7 +178,7 @@ public class ChatHandler
                         if (agentMode)
                         {
                             var (backend, modelName) = await _backends.Resolve(modelId);
-                            var runner = new AgentRunner(backend, modelName, _plugins, _mcp);
+                            var runner = new AgentRunner(backend, modelName, _plugins, _mcp, _rag);
                             await foreach (var evt in runner.Run(messages).WithCancellation(cts.Token))
                             {
                                 switch (evt.Type)

@@ -389,12 +389,14 @@ public class GeminiBackend : IAiBackend
 public class BackendManager
 {
     private readonly Database _db;
+    private readonly GridManager _grid;
     private List<(AiBackend Row, IAiBackend Instance)>? _cache;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public BackendManager(Database db)
+    public BackendManager(Database db, GridManager grid)
     {
         _db = db;
+        _grid = grid;
     }
 
     public void Invalidate()
@@ -458,6 +460,16 @@ public class BackendManager
 
     public async Task<(IAiBackend backend, string modelName)> Resolve(string modelId)
     {
+        if (string.IsNullOrEmpty(modelId) || modelId.Equals("default", StringComparison.OrdinalIgnoreCase))
+        {
+            var optimalWorker = _grid.GetOptimalWorker();
+            if (optimalWorker != null)
+            {
+                Console.WriteLine($"[grid-router] Offloading inference request to worker node '{optimalWorker.Name}' ({optimalWorker.Id[..4]}).");
+                return (new GridWorkerBackend(_grid, optimalWorker), "default");
+            }
+        }
+
         await EnsureLoaded();
         var (backendId, modelName) = ParseModelId(modelId);
 
@@ -496,5 +508,32 @@ public class BackendManager
         var (backend, modelName) = await Resolve(modelId);
         await foreach (var token in backend.StreamChat(modelName, messages).WithCancellation(ct))
             yield return token;
+    }
+}
+
+public class GridWorkerBackend : IAiBackend
+{
+    private readonly GridManager _grid;
+    private readonly ConnectedWorker _worker;
+
+    public GridWorkerBackend(GridManager grid, ConnectedWorker worker)
+    {
+        _grid = grid;
+        _worker = worker;
+    }
+
+    public Task<List<string>> ListModels()
+    {
+        return Task.FromResult(new List<string> { "default" });
+    }
+
+    public IAsyncEnumerable<string> StreamChat(string model, List<ChatMessage> messages, CancellationToken ct = default)
+    {
+        return _grid.StreamRemoteChatAsync(_worker, model, messages, ct);
+    }
+
+    public Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
+    {
+        return _grid.ChatWithToolsRemoteAsync(_worker, model, messages, tools, ct);
     }
 }

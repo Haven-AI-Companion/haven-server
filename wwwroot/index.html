@@ -579,6 +579,19 @@ let agentStepsEl = null;
 // Pending attachments: [{base64, url, isImage, name}]
 let pendingAttachments = [];
 
+/* Date Parsing Helpers (SQLite space-separated compatibility) */
+function parseSqliteDate(dateStr) {
+  if (!dateStr) return null;
+  const isoStr = dateStr.includes(' ') && !dateStr.includes('T') ? dateStr.replace(' ', 'T') : dateStr;
+  const d = new Date(isoStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatDate(dateStr, fallback = '—') {
+  const d = parseSqliteDate(dateStr);
+  return d ? d.toLocaleDateString() : fallback;
+}
+
 // ── Auth helpers ───────────────────────────────────────────────────────────
 function toggleForm(mode) {
   document.getElementById('login-form').style.display = mode === 'login' ? '' : 'none';
@@ -963,7 +976,7 @@ function appendMessage(role, content, streaming, images, timestamp) {
   const avatarInit = role === 'assistant' ? '🌸' : (currentUser?.username?.[0]?.toUpperCase() || 'U');
   const avatarClass = role === 'assistant' ? 'ash' : 'user-av';
   const name = role === 'assistant' ? 'Ash' : (currentUser?.username || 'You');
-  const ts = timestamp ? new Date(timestamp) : new Date();
+  const ts = parseSqliteDate(timestamp) || new Date();
   const time = ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
 
   let imagesHtml = '';
@@ -1240,8 +1253,7 @@ function openSettings() {
   if (currentUser) {
     document.getElementById('s-username').textContent = currentUser.username;
     document.getElementById('s-role').textContent = currentUser.is_admin ? 'Admin' : 'User';
-    document.getElementById('s-created').textContent = currentUser.created_at
-      ? new Date(currentUser.created_at).toLocaleDateString() : '—';
+    document.getElementById('s-created').textContent = formatDate(currentUser.created_at);
     document.getElementById('s-email').value = currentUser.email || '';
   }
   document.getElementById('email-msg').textContent = '';

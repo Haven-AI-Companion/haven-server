@@ -230,14 +230,25 @@ public class ModelsController : ControllerBase
     private readonly IWebHostEnvironment _env;
     private readonly Database _db;
     private readonly AshServer.Plugins.PluginManager _plugins;
+    private readonly AshServer.Personality.PersonalityLoader _personality;
+    private readonly AshServer.AI.RagService _ragService;
 
-    public ModelsController(AshServer.AI.BackendManager backends, IConfiguration config, IWebHostEnvironment env, Database db, AshServer.Plugins.PluginManager plugins)
+    public ModelsController(
+        AshServer.AI.BackendManager backends, 
+        IConfiguration config, 
+        IWebHostEnvironment env, 
+        Database db, 
+        AshServer.Plugins.PluginManager plugins,
+        AshServer.Personality.PersonalityLoader personality,
+        AshServer.AI.RagService ragService)
     {
         _backends = backends;
         _config = config;
         _env = env;
         _db = db;
         _plugins = plugins;
+        _personality = personality;
+        _ragService = ragService;
     }
 
     private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -252,6 +263,51 @@ public class ModelsController : ControllerBase
     {
         default_model = _config["DefaultModel"] ?? ""
     });
+
+    [HttpPost("chat")]
+    [Authorize]
+    public async Task Chat([FromBody] ChatRequest req)
+    {
+        var modelId = req.Model ?? _config["DefaultModel"] ?? "";
+        
+        Response.ContentType = "text/plain";
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Connection"] = "keep-alive";
+
+        var username = User.FindFirstValue(ClaimTypes.Name) ?? "User";
+        var systemPrompt = _personality.GetSystemPrompt(username);
+        
+        var messages = new List<ChatMessage>
+        {
+            new ChatMessage("system", systemPrompt),
+            new ChatMessage("user", req.Prompt, req.Image != null ? new List<string>{ req.Image } : null)
+        };
+
+        var responseText = new System.Text.StringBuilder();
+        try
+        {
+            await foreach (var token in _backends.StreamChat(modelId, messages))
+            {
+                responseText.Append(token);
+                // Write token + newline so pocket-ash ReadLineAsync streams it smoothly
+                await Response.WriteAsync(token + "\n");
+                await Response.Body.FlushAsync();
+            }
+
+            if (responseText.Length > 0)
+            {
+                var userId = UserId;
+                var conversationId = await _db.CreateConversation(userId);
+                await _db.AddMessage(conversationId, "user", req.Prompt);
+                await _db.AddMessage(conversationId, "assistant", responseText.ToString());
+            }
+        }
+        catch (Exception ex)
+        {
+            await Response.WriteAsync($"\n[ERROR] {ex.Message}\n");
+            await Response.Body.FlushAsync();
+        }
+    }
 
     [HttpGet("plugins")]
     [Authorize]
@@ -304,6 +360,9 @@ public class ModelsController : ControllerBase
             textContent = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
             if (fs.Length > maxTextBytes)
                 textContent += $"\n\n[... file truncated at 100 KB, {fs.Length:N0} bytes total ...]";
+
+            // Trigger background semantic indexing for RAG
+            _ = Task.Run(async () => await _ragService.IndexDocumentAsync(file.FileName, textContent));
         }
 
         return Ok(new
@@ -339,10 +398,12 @@ public class AdminController : ControllerBase
     private readonly ILogger<AdminController> _log;
     private readonly IWebHostEnvironment _env;
     private readonly UpdateManager _updateManager;
+    private readonly AshServer.AI.GridManager _grid;
 
     public AdminController(Database db, AshServer.AI.BackendManager backends, IConfiguration config,
         AshServer.Personality.PersonalityLoader personality, AshServer.Plugins.PluginManager plugins,
-        ILogger<AdminController> log, IWebHostEnvironment env, UpdateManager updateManager)
+        ILogger<AdminController> log, IWebHostEnvironment env, UpdateManager updateManager,
+        AshServer.AI.GridManager grid)
     {
         _db = db;
         _backends = backends;
@@ -352,11 +413,167 @@ public class AdminController : ControllerBase
         _log = log;
         _env = env;
         _updateManager = updateManager;
+        _grid = grid;
     }
 
     private string ConfigPath => Path.Combine(_env.ContentRootPath, "config.json");
 
     private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
+
+    [HttpGet("tailscale")]
+    public IActionResult GetTailscaleStatus()
+    {
+        if (!IsAdmin) return Forbid();
+        
+        var tailscaleOnly = _config.GetValue("TailscaleOnly", false);
+        var tsIp = AshServer.Program.DiscoverTailscaleIp();
+        
+        return Ok(new
+        {
+            tailscale_only = tailscaleOnly,
+            tailscale_ip = tsIp?.ToString()
+        });
+    }
+
+    [HttpPost("tailscale")]
+    public async Task<IActionResult> SaveTailscaleSettings([FromBody] Dictionary<string, bool> body)
+    {
+        if (!IsAdmin) return Forbid();
+        if (!body.TryGetValue("tailscale_only", out var tailscaleOnly))
+            return BadRequest(new { error = "tailscale_only field is required" });
+
+        var path = ConfigPath;
+        System.Text.Json.Nodes.JsonObject root;
+        if (System.IO.File.Exists(path))
+        {
+            try { root = System.Text.Json.Nodes.JsonNode.Parse(await System.IO.File.ReadAllTextAsync(path))!.AsObject(); }
+            catch { root = new System.Text.Json.Nodes.JsonObject(); }
+        }
+        else
+        {
+            root = new System.Text.Json.Nodes.JsonObject();
+        }
+
+        root["TailscaleOnly"] = tailscaleOnly;
+
+        var opts = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+        await System.IO.File.WriteAllTextAsync(path, root.ToJsonString(opts));
+
+        return Ok(new { ok = true, note = "Tailscale settings saved. Restart server to apply network binding changes." });
+    }
+
+    [HttpGet("grid/nodes")]
+    public async Task<IActionResult> GetGridNodes()
+    {
+        if (!IsAdmin) return Forbid();
+
+        var online = _grid.ActiveWorkers.Select(w => new
+        {
+            id = w.Id,
+            name = w.Name,
+            status = "online",
+            hardware = w.Hardware,
+            active_connections = w.ActiveConnections,
+            last_heartbeat = w.LastHeartbeat
+        }).ToList();
+
+        var registered = await Task.Run(() =>
+        {
+            using var conn = _db.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT id, name, created_at FROM grid_workers ORDER BY name";
+            using var r = cmd.ExecuteReader();
+            var list = new List<object>();
+            while (r.Read())
+            {
+                var rid = r.GetString(0);
+                var isOnline = online.Any(o => o.id == rid);
+                list.Add(new
+                {
+                    id = rid,
+                    name = r.GetString(1),
+                    status = isOnline ? "online" : "offline",
+                    created_at = r.GetString(2)
+                });
+            }
+            return list;
+        });
+
+        return Ok(new
+        {
+            online_count = online.Count,
+            nodes = registered
+        });
+    }
+
+    [HttpPost("grid/nodes/add")]
+    public async Task<IActionResult> AddGridNode()
+    {
+        if (!IsAdmin) return Forbid();
+
+        var token = await _grid.GeneratePairingTokenAsync();
+        return Ok(new { token });
+    }
+
+    [HttpDelete("grid/nodes/{id}")]
+    public async Task<IActionResult> DeleteGridNode(string id)
+    {
+        if (!IsAdmin) return Forbid();
+
+        await Task.Run(() =>
+        {
+            using var conn = _db.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM grid_workers WHERE id = $i";
+            cmd.Parameters.AddWithValue("$i", id);
+            cmd.ExecuteNonQuery();
+        });
+
+        return Ok(new { ok = true });
+    }
+
+    [HttpPost("grid/join")]
+    public async Task<IActionResult> JoinGrid([FromBody] Dictionary<string, string> body)
+    {
+        if (!IsAdmin) return Forbid();
+
+        if (!body.TryGetValue("master_url", out var masterUrl) || string.IsNullOrEmpty(masterUrl))
+            return BadRequest(new { error = "master_url is required" });
+        if (!body.TryGetValue("pairing_token", out var pairingToken) || string.IsNullOrEmpty(pairingToken))
+            return BadRequest(new { error = "pairing_token is required" });
+
+        var name = body.TryGetValue("name", out var n) ? n : Environment.MachineName;
+
+        var path = ConfigPath;
+        System.Text.Json.Nodes.JsonObject root;
+        if (System.IO.File.Exists(path))
+        {
+            try { root = System.Text.Json.Nodes.JsonNode.Parse(await System.IO.File.ReadAllTextAsync(path))!.AsObject(); }
+            catch { root = new System.Text.Json.Nodes.JsonObject(); }
+        }
+        else
+        {
+            root = new System.Text.Json.Nodes.JsonObject();
+        }
+
+        root["Mode"] = "worker";
+        if (!root.ContainsKey("Grid"))
+        {
+            root["Grid"] = new System.Text.Json.Nodes.JsonObject();
+        }
+
+        var gridNode = root["Grid"]!.AsObject();
+        gridNode["MasterUrl"] = masterUrl;
+        gridNode["PairingToken"] = pairingToken;
+        gridNode["WorkerName"] = name;
+        gridNode.Remove("WorkerId");
+        gridNode.Remove("WorkerSecret");
+
+        var opts = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+        await System.IO.File.WriteAllTextAsync(path, root.ToJsonString(opts));
+
+        return Ok(new { ok = true, note = "Configured in Worker Mode. Restarting background service to connect to Master..." });
+    }
 
     [HttpGet("stats")]
     public async Task<IActionResult> Stats()
@@ -1551,3 +1768,11 @@ public record McpInstallRequest(
     Dictionary<string, string>? EnvVariables,
     string? Url
 );
+
+public class ChatRequest
+{
+    public string Prompt { get; set; } = string.Empty;
+    public string? Image { get; set; }
+    public bool Stream { get; set; }
+    public string? Model { get; set; }
+}
