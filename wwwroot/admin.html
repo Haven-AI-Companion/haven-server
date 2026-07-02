@@ -312,7 +312,7 @@ select.form-input{cursor:pointer}
                 <strong>Quick setup with Ollama:</strong>
                 <ol style="margin:8px 0 0 18px;line-height:2;">
                   <li>Download &amp; install from <a href="https://ollama.com/download" target="_blank" style="color:var(--accent);">ollama.com/download</a></li>
-                  <li>Open a terminal and run: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">ollama pull gemma3:4b</code></li>
+                  <li>Open a terminal and run: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">ollama pull gemma4-turbo:e4b</code></li>
                   <li>Ollama starts automatically — then <button class="btn btn-sm" onclick="checkBackendDetection()" style="vertical-align:middle;">Check Again</button></li>
                 </ol>
               </div>
@@ -597,8 +597,14 @@ select.form-input{cursor:pointer}
           Manage your compute cluster. Link multiple <code>ash-server</code> instances together over your private network (Tailscale) to spread LLM inference workload.
         </p>
 
+        <!-- Segmented Role Selector -->
+        <div style="display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:12px;">
+          <button class="btn btn-sm btn-primary" id="grid-role-master-btn" onclick="setGridUIRole('master')">Coordinator Mode (Master)</button>
+          <button class="btn btn-sm" id="grid-role-worker-btn" onclick="setGridUIRole('worker')">Worker Node Mode</button>
+        </div>
+
         <!-- Master Node Configuration (My Compute Grid) -->
-        <div class="card" style="margin-bottom:16px">
+        <div class="card" id="grid-master-card" style="margin-bottom:16px">
           <div class="card-title">My Compute Grid <button class="btn btn-sm btn-primary" onclick="addGridWorker()">+ Add Worker Node</button></div>
           <div style="margin-top:12px; overflow-x:auto;">
             <table class="data-table">
@@ -620,7 +626,7 @@ select.form-input{cursor:pointer}
         </div>
 
         <!-- Join Grid (Worker Mode Configuration) -->
-        <div class="card">
+        <div class="card" id="grid-worker-card" style="display:none;">
           <div class="card-title">Worker Mode Configuration</div>
           <p class="txt-muted" style="font-size:12px;margin-bottom:12px">
             Turn this server into a stateless compute worker that connects to a Master.
@@ -1120,11 +1126,42 @@ select.form-input{cursor:pointer}
 
       <!-- Database -->
       <div class="tab-content" id="database">
-        <div class="card">
-          <div class="card-title">Backup</div>
-          <p class="txt-muted" style="font-size:13px;margin-bottom:14px;">Creates a timestamped copy of the SQLite database in the <code class="mono" style="font-size:12px;">backups/</code> directory.</p>
+        <!-- Database Info Card -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Database Status</div>
+          <table class="kv-table" style="max-width:500px; margin-top:12px;">
+            <tr><td>Database Path</td><td id="db-path" class="mono">—</td></tr>
+            <tr><td>Database Size</td><td id="db-size" class="mono">—</td></tr>
+          </table>
+        </div>
+
+        <!-- Backup Action Card -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Create Database Backup</div>
+          <p class="txt-muted" style="font-size:13px;margin-bottom:14px;">Creates a timestamped copy of the SQLite database in the server database directory.</p>
           <button class="btn btn-primary" onclick="createBackup()">Create Backup</button>
           <div id="backup-status" style="margin-top:12px;font-size:13px;"></div>
+        </div>
+
+        <!-- Existing Backups Card -->
+        <div class="card">
+          <div class="card-title">Manage Backups</div>
+          <p class="txt-muted" style="font-size:13px;margin-bottom:14px;">All database backups stored on this server.</p>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Backup Name</th>
+                  <th>File Size</th>
+                  <th>Created At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="backups-list">
+                <tr><td colspan="4" class="txt-center txt-muted">Loading backups...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1275,6 +1312,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     if (tab === 'audit') loadAudit();
     if (tab === 'updates') checkUpdates();
     if (tab === 'grid') loadGridNodes();
+    if (tab === 'database') loadDatabaseStatus();
   });
 });
 
@@ -2024,15 +2062,74 @@ function selectModel(modelName) {
   }
 }
 
-/* Backup */
+/* Database Status & Backups */
+async function loadDatabaseStatus() {
+  const pathEl = document.getElementById('db-path');
+  const sizeEl = document.getElementById('db-size');
+  const listEl = document.getElementById('backups-list');
+  if (!pathEl || !sizeEl || !listEl) return;
+
+  try {
+    const res = await fetch('/api/admin/database/status', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    
+    pathEl.textContent = data.path || 'ash_server.db';
+    sizeEl.textContent = data.size ? `${(data.size / 1024).toFixed(1)} KB` : '0 KB';
+    
+    const backups = data.backups || [];
+    if (!backups.length) {
+      listEl.innerHTML = '<tr><td colspan="4" class="txt-center txt-muted">No backups found. Click "Create Backup" above to generate one.</td></tr>';
+      return;
+    }
+    
+    listEl.innerHTML = backups.map(b => `
+      <tr>
+        <td class="mono" style="font-weight:600;">${b.filename}</td>
+        <td class="mono">${(b.size / 1024).toFixed(1)} KB</td>
+        <td class="txt-muted">${formatDate(b.created_at)}</td>
+        <td class="actions">
+          <button class="btn btn-sm btn-danger" onclick="deleteBackup('${b.filename}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    listEl.innerHTML = `<tr><td colspan="4" class="txt-center txt-error">Failed to load backups: ${err.message}</td></tr>`;
+  }
+}
+
 async function createBackup() {
   const statusDiv = document.getElementById('backup-status');
+  if (!statusDiv) return;
+  
+  statusDiv.innerHTML = '<span class="txt-muted">Creating backup...</span>';
   try {
-    const resp   = await fetch('/api/admin/backup', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const resp = await fetch('/api/admin/backup', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    if (!resp.ok) throw new Error(await resp.text());
     const result = await resp.json();
+    
     toast(`Backup created: ${result.filename} (${(result.size / 1024).toFixed(1)} KB)`);
     statusDiv.innerHTML = `<span class="txt-success">\u2713 ${result.message} \u2014 <strong>${result.filename}</strong></span>`;
-  } catch (err) { toast('Backup failed: ' + err.message, 'error'); }
+    loadDatabaseStatus();
+  } catch (err) {
+    toast('Backup failed: ' + err.message, 'error');
+    statusDiv.innerHTML = `<span class="txt-error">Backup failed: ${err.message}</span>`;
+  }
+}
+
+async function deleteBackup(filename) {
+  if (!confirm(`Are you sure you want to delete backup file "${filename}"? This action cannot be undone.`)) return;
+  try {
+    const res = await fetch(`/api/admin/database/backups/${filename}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    toast('Backup deleted successfully');
+    loadDatabaseStatus();
+  } catch (err) {
+    alert(`Failed to delete backup: ${err.message}`);
+  }
 }
 
 /* Backends */
@@ -3069,6 +3166,30 @@ async function joinGrid() {
     alert(`Failed to join grid: ${err.message}`);
   }
 }
+
+function setGridUIRole(role) {
+  const masterBtn = document.getElementById('grid-role-master-btn');
+  const workerBtn = document.getElementById('grid-role-worker-btn');
+  const masterCard = document.getElementById('grid-master-card');
+  const workerCard = document.getElementById('grid-worker-card');
+  if (!masterBtn || !workerBtn || !masterCard || !workerCard) return;
+
+  if (role === 'master') {
+    masterBtn.classList.add('btn-primary');
+    workerBtn.classList.remove('btn-primary');
+    masterCard.style.display = '';
+    workerCard.style.display = 'none';
+  } else {
+    masterBtn.classList.remove('btn-primary');
+    workerBtn.classList.add('btn-primary');
+    masterCard.style.display = 'none';
+    workerCard.style.display = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => { setGridUIRole('master'); }, 100);
+});
 </script>
 </body>
 </html>

@@ -380,8 +380,139 @@ public class GeminiBackend : IAiBackend
         }
     }
 
-    public Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
-        => throw new NotSupportedException("Tool calling not yet implemented for Gemini backend");
+    public async Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
+    {
+        var systemMsg = messages.FirstOrDefault(m => m.Role == "system");
+        var contents = new List<object>();
+        
+        foreach (var m in messages.Where(m => m.Role != "system"))
+        {
+            var role = m.Role == "assistant" ? "model" : "user";
+            var text = m.Content;
+            
+            if (m.Role == "tool")
+            {
+                role = "user";
+                text = $"[Tool Result: {m.Content}]";
+            }
+            else if (m.Role == "assistant" && string.IsNullOrWhiteSpace(text))
+            {
+                text = "[Executing tool calls...]";
+            }
+            
+            contents.Add(new
+            {
+                role,
+                parts = new[] { new { text } }
+            });
+        }
+
+        var functionDeclarations = new List<object>();
+        if (tools.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var tool in tools.EnumerateArray())
+            {
+                if (tool.TryGetProperty("function", out var func))
+                {
+                    var name = func.GetProperty("name").GetString();
+                    var desc = func.TryGetProperty("description", out var d) ? d.GetString() : "";
+                    var parameters = func.TryGetProperty("parameters", out var p) ? (object)p : null;
+                    
+                    var decl = new Dictionary<string, object>
+                    {
+                        ["name"] = name ?? "unknown",
+                        ["description"] = desc ?? ""
+                    };
+                    if (parameters != null)
+                    {
+                        decl["parameters"] = parameters;
+                    }
+                    functionDeclarations.Add(decl);
+                }
+            }
+        }
+
+        var payload = new Dictionary<string, object>
+        {
+            ["contents"] = contents
+        };
+
+        if (systemMsg != null)
+        {
+            payload["systemInstruction"] = new
+            {
+                parts = new[] { new { text = systemMsg.Content } }
+            };
+        }
+
+        if (functionDeclarations.Count > 0)
+        {
+            payload["tools"] = new[]
+            {
+                new { functionDeclarations }
+            };
+        }
+
+        var url = $"{_baseUrl}/v1beta/models/{model}:generateContent?key={_apiKey}";
+        using var req = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+
+        using var resp = await Http.SendAsync(req, ct);
+        resp.EnsureSuccessStatusCode();
+
+        var jsonStr = await resp.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(jsonStr);
+        var root = doc.RootElement;
+
+        var contentText = "";
+        var toolCallsList = new List<object>();
+
+        if (root.TryGetProperty("candidates", out var candidates) &&
+            candidates.GetArrayLength() > 0 &&
+            candidates[0].TryGetProperty("content", out var contentElement) &&
+            contentElement.TryGetProperty("parts", out var parts))
+        {
+            foreach (var part in parts.EnumerateArray())
+            {
+                if (part.TryGetProperty("functionCall", out var funcCall))
+                {
+                    var name = funcCall.GetProperty("name").GetString();
+                    var args = funcCall.GetProperty("args").Clone();
+                    
+                    toolCallsList.Add(new
+                    {
+                        id = $"call_{Guid.NewGuid().ToString("N")[..8]}",
+                        type = "function",
+                        function = new
+                        {
+                            name,
+                            arguments = JsonSerializer.Serialize(args)
+                        }
+                    });
+                }
+                else if (part.TryGetProperty("text", out var textEl))
+                {
+                    contentText += textEl.GetString();
+                }
+            }
+        }
+
+        var resultObj = new Dictionary<string, object>
+        {
+            ["role"] = "assistant",
+            ["content"] = contentText
+        };
+        
+        if (toolCallsList.Count > 0)
+        {
+            resultObj["tool_calls"] = toolCallsList;
+        }
+
+        var serialized = JsonSerializer.Serialize(resultObj);
+        return JsonDocument.Parse(serialized).RootElement.Clone();
+    }
 }
 
 // ── Backend manager ───────────────────────────────────────────────────────────

@@ -1001,10 +1001,95 @@ public class AdminController : ControllerBase
         var fullPath = Path.IsPathRooted(dbPath) ? dbPath : Path.Combine(AppContext.BaseDirectory, dbPath);
         if (!System.IO.File.Exists(fullPath))
             return NotFound(new { error = "Database file not found" });
+        
         var backupName = $"ash_server_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.db";
-        var backupPath = Path.Combine(Path.GetDirectoryName(fullPath)!, backupName);
+        var dir = Path.GetDirectoryName(fullPath) ?? AppContext.BaseDirectory;
+        var backupPath = Path.Combine(dir, backupName);
         System.IO.File.Copy(fullPath, backupPath);
-        return Ok(new { ok = true, file = backupName });
+        
+        var size = new FileInfo(backupPath).Length;
+        
+        return Ok(new
+        {
+            ok = true,
+            filename = backupName,
+            size = size,
+            message = "Database backup created successfully."
+        });
+    }
+
+    [HttpGet("database/status")]
+    public IActionResult GetDatabaseStatus()
+    {
+        if (!IsAdmin) return Forbid();
+        
+        var dbPath = _config["DatabasePath"] ?? "ash_server.db";
+        var fullPath = Path.IsPathRooted(dbPath) ? dbPath : Path.Combine(AppContext.BaseDirectory, dbPath);
+        
+        long dbSize = 0;
+        if (System.IO.File.Exists(fullPath))
+        {
+            dbSize = new FileInfo(fullPath).Length;
+        }
+
+        var dir = Path.GetDirectoryName(fullPath) ?? AppContext.BaseDirectory;
+        var backupFiles = new List<object>();
+        if (Directory.Exists(dir))
+        {
+            var files = Directory.GetFiles(dir, "ash_server_backup_*.db");
+            foreach (var f in files)
+            {
+                var fi = new FileInfo(f);
+                backupFiles.Add(new
+                {
+                    filename = fi.Name,
+                    size = fi.Length,
+                    created_at = fi.CreationTimeUtc.ToString("o")
+                });
+            }
+        }
+
+        return Ok(new
+        {
+            path = dbPath,
+            size = dbSize,
+            backups = backupFiles
+        });
+    }
+
+    [HttpDelete("database/backups/{filename}")]
+    public IActionResult DeleteBackup(string filename)
+    {
+        if (!IsAdmin) return Forbid();
+        
+        if (string.IsNullOrEmpty(filename) || filename.Contains("..") || filename.Contains("/") || filename.Contains("\\"))
+        {
+            return BadRequest(new { error = "Invalid filename" });
+        }
+        if (!filename.StartsWith("ash_server_backup_") || !filename.EndsWith(".db"))
+        {
+            return BadRequest(new { error = "Invalid backup file format" });
+        }
+
+        var dbPath = _config["DatabasePath"] ?? "ash_server.db";
+        var fullPath = Path.IsPathRooted(dbPath) ? dbPath : Path.Combine(AppContext.BaseDirectory, dbPath);
+        var dir = Path.GetDirectoryName(fullPath) ?? AppContext.BaseDirectory;
+        var targetFile = Path.Combine(dir, filename);
+
+        if (!System.IO.File.Exists(targetFile))
+        {
+            return NotFound(new { error = "Backup file not found" });
+        }
+
+        try
+        {
+            System.IO.File.Delete(targetFile);
+            return Ok(new { ok = true, message = "Backup deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to delete backup: {ex.Message}" });
+        }
     }
 
     // ── Roles CRUD ──────────────────────────────────────────────────────────
