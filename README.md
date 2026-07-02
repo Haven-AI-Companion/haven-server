@@ -219,6 +219,28 @@ External Message (Discord / Slack / Telegram)
 
 ---
 
+## P2P AI Compute Grid & VPN Binding (v1.2)
+
+Ash Server version 1.2 introduces two powerful network-level capabilities to support decentralized, private, and distributed local AI architectures:
+
+### 1. P2P AI Compute Grid
+Ash Server features a built-in hub-and-spoke peer compute sharing system. Multiple instances of Ash Server can cluster together to distribute LLM inference work across different physical machines:
+*   **Master Node (Orchestrator)**: Receives client requests, maintains connection pools, and routes tasks based on the capabilities, CPU/GPU, and memory parameters of connected workers.
+*   **Worker Node**: Connects to the Master via secure WebSockets to process local inference queries.
+    *   *To start in Worker Mode:*
+        ```bash
+        ash-server --worker --master http://<master-ip>:18799 --token <pairing-token>
+        ```
+    *   *Auto-Pairing & Reconnection*: Dynamically authenticates with a one-time pairing token, stores a secure generated worker identity, and automatically reconnects with exponential backoff if the link drops.
+
+### 2. Generalized VPN & Adapter Binding
+Rather than binding to all public interfaces (`0.0.0.0`) or being hardcoded to a single VPN, Ash Server features generic network interface auto-discovery and binding:
+*   **Zero-Trust Mesh & Tunnel Support**: Natively scans and detects secure VPNs like **NetBird**, **Tailscale**, **Proton VPN**, **WireGuard**, **OpenVPN**, and custom adapters, resolving their statuses and IPs.
+*   **UI-Driven Interface Pinning**: Exposes active interfaces in the Admin Panel network tab. Administrators can select an interface (e.g. `"NetBird"`, `"Tailscale Tunnel"`, or `"ProtonVPN"`) to save `BindInterface` to config.
+*   **Resilient Startup**: Dynamically binds Kestrel to the chosen network IP. If the VPN interface drops or is disabled, the server automatically binds to localhost (`127.0.0.1`) for local-only safety rather than failing to boot.
+
+---
+
 ## One-Click MCP App Store & Update System
 
 Ash Server introduces a state-of-the-art administrative experience with two native subsystems built into the core:
