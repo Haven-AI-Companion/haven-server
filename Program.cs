@@ -95,6 +95,27 @@ public class Program
         builder.WebHost.ConfigureKestrel(options =>
         {
             var port = builder.Configuration.GetValue("Port", 18799);
+            
+            var bindInterface = builder.Configuration["BindInterface"]?.Trim();
+            if (!string.IsNullOrEmpty(bindInterface))
+            {
+                var targetIp = DiscoverInterfaceIp(bindInterface);
+                if (targetIp != null)
+                {
+                    Console.WriteLine($"[startup] BindInterface '{bindInterface}' is configured. Binding Kestrel to: {targetIp}:{port}");
+                    options.Listen(targetIp, port);
+                    return;
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"[startup] ERROR: Configured BindInterface '{bindInterface}' not found or has no active IPv4! Falling back to localhost (127.0.0.1).");
+                    Console.ResetColor();
+                    options.ListenLocalhost(port);
+                    return;
+                }
+            }
+
             var tailscaleOnly = builder.Configuration.GetValue("TailscaleOnly", false);
 
             if (tailscaleOnly)
@@ -588,6 +609,32 @@ public class Program
                         // Tailscale IPs are in the CGNAT 100.64.0.0/10 range:
                         // 100.64.0.0 to 100.127.255.255
                         if (ipBytes[0] == 100 && ipBytes[1] >= 64 && ipBytes[1] <= 127)
+                        {
+                            return addr.Address;
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static System.Net.IPAddress? DiscoverInterfaceIp(string interfaceName)
+    {
+        try
+        {
+            foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                
+                if (ni.Name.Equals(interfaceName, StringComparison.OrdinalIgnoreCase) || 
+                    ni.Description.Contains(interfaceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var ipProps = ni.GetIPProperties();
+                    foreach (var addr in ipProps.UnicastAddresses)
+                    {
+                        if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
                         {
                             return addr.Address;
                         }

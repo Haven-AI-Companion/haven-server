@@ -2,7 +2,7 @@
 name: "ash-server"
 arch: "amd64"
 platform: "linux"
-version: "1.1.2"
+version: "1.2.0"
 section: "utils"
 priority: "extra"
 maintainer: "Daniel Elliott <ssfdre38@msn.com>"

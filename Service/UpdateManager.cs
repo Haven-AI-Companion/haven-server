@@ -16,7 +16,7 @@ public record UpdateCheckResult(
 
 public class UpdateManager
 {
-    public static readonly string CurrentVersion = "1.1.1";
+    public static readonly string CurrentVersion = "1.2.0";
     private static readonly HttpClient Http = new();
 
     static UpdateManager()

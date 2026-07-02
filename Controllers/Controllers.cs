@@ -820,12 +820,10 @@ public class AdminController : ControllerBase
                         var desc = ni.Description;
                         var type = ni.NetworkInterfaceType.ToString();
                         
-                        // Detect Tailscale or other secure mesh VPNs
-                        if (name.Contains("tailscale", StringComparison.OrdinalIgnoreCase) || 
-                            desc.Contains("tailscale", StringComparison.OrdinalIgnoreCase))
+                        // Detect any secure mesh VPN or virtual tunnels
+                        if (IsVpnOrVirtual(ni))
                         {
                             type = "VPN";
-                            name = "Tailscale Mesh VPN";
                         }
                         
                         list.Add(new
@@ -844,6 +842,54 @@ public class AdminController : ControllerBase
         }
 
         return Ok(list);
+    }
+
+    private static bool IsVpnOrVirtual(System.Net.NetworkInformation.NetworkInterface ni)
+    {
+        if (ni.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Tunnel ||
+            ni.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Ppp ||
+            ni.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Slip)
+        {
+            return true;
+        }
+
+        var name = ni.Name.ToLowerInvariant();
+        var desc = ni.Description.ToLowerInvariant();
+
+        string[] vpnSignatures = new[] {
+            "vpn", "wintun", "tun", "tap", "wireguard", "tailscale", "netbird", 
+            "zerotier", "hamachi", "forticlient", "anyconnect", "checkpoint", 
+            "openvpn", "nordvpn", "proton", "expressvpn", "mullvad", "softether",
+            "virtual", "pseudo", "loopback", "bridge", "vmware", "virtualbox", 
+            "hyper-v", "docker", "vethernet", "software", "ts0", "wt0", "wg0"
+        };
+
+        foreach (var sig in vpnSignatures)
+        {
+            if (name.Contains(sig) || desc.Contains(sig))
+            {
+                return true;
+            }
+        }
+
+        try
+        {
+            var ipProps = ni.GetIPProperties();
+            foreach (var addr in ipProps.UnicastAddresses)
+            {
+                if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                {
+                    var ipBytes = addr.Address.GetAddressBytes();
+                    if (ipBytes[0] == 100 && ipBytes[1] >= 64 && ipBytes[1] <= 127)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return false;
     }
 
     [HttpPost("config")]

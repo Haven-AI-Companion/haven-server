@@ -21,6 +21,8 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.7" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.18.0" />
     <PackageReference Include="Telegram.Bot" Version="22.4.0" />
   </ItemGroup>
@@ -38,9 +40,7 @@
     <ItemGroup>
       <_PersonalityFiles Include="Personality\personality\**\*" />
     </ItemGroup>
-    <Copy SourceFiles="@(_PersonalityFiles)"
-          DestinationFiles="@(_PersonalityFiles->'$(PublishDir)personality\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_PersonalityFiles)" DestinationFiles="@(_PersonalityFiles->'$(PublishDir)personality\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
   <!-- Same copy for local build output (dotnet run / debug) -->
@@ -48,9 +48,7 @@
     <ItemGroup>
       <_PersonalityFilesOut Include="Personality\personality\**\*" />
     </ItemGroup>
-    <Copy SourceFiles="@(_PersonalityFilesOut)"
-          DestinationFiles="@(_PersonalityFilesOut->'$(OutputPath)personality\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_PersonalityFilesOut)" DestinationFiles="@(_PersonalityFilesOut->'$(OutputPath)personality\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>
