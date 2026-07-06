@@ -740,55 +740,43 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetAdminConfig()
     {
         if (!IsAdmin) return Forbid();
-        var path = ConfigPath;
-        if (System.IO.File.Exists(path))
-        {
-            try
-            {
-                var content = await System.IO.File.ReadAllTextAsync(path);
-                return Content(content, "application/json");
-            }
-            catch (Exception ex)
-            {
-                _log.LogError(ex, "Failed to read config.json");
-            }
-        }
-
-        // Fallback: build a complete object from the loaded IConfiguration
-        var fallbackConfig = new
+        
+        // Build a complete configuration representation by combining IConfiguration settings
+        // (which naturally includes appsettings.json, environment variables, and config.json overlays)
+        var mergedConfig = new
         {
             server = new
             {
-                host = _config["Host"] ?? "0.0.0.0",
-                port = _config.GetValue("Port", 18799),
-                require_auth = _config.GetValue("RequireAuth", true),
-                allow_registration = _config.GetValue("AllowRegistration", true)
+                host = _config["Server:Host"] ?? _config["Host"] ?? "0.0.0.0",
+                port = _config.GetValue("Server:Port", _config.GetValue("Port", 18799)),
+                require_auth = _config.GetValue("Server:RequireAuth", _config.GetValue("RequireAuth", true)),
+                allow_registration = _config.GetValue("Server:AllowRegistration", _config.GetValue("AllowRegistration", true))
             },
             ai = new
             {
-                model = _config["DefaultModel"] ?? "",
-                temperature = _config.GetValue("DefaultTemperature", 0.7)
+                model = _config["Ai:Model"] ?? _config["DefaultModel"] ?? "",
+                temperature = _config.GetValue("Ai:Temperature", _config.GetValue("DefaultTemperature", 0.7))
             },
             database = new
             {
-                path = _config["DatabasePath"] ?? "ash_server.db"
+                path = _config["Database:Path"] ?? _config["DatabasePath"] ?? "ash_server.db"
             },
             uploads = new
             {
-                directory = _config["UploadsDir"] ?? "uploads",
-                max_size_mb = _config.GetValue("MaxUploadSizeMb", 10)
+                directory = _config["Uploads:Directory"] ?? _config["UploadsDir"] ?? "uploads",
+                max_size_mb = _config.GetValue("Uploads:MaxSizeMb", _config.GetValue("MaxUploadSizeMb", 10))
             },
             auth = new
             {
-                token_expiry_hours = _config.GetValue("TokenExpiryHours", 24)
+                token_expiry_hours = _config.GetValue("Auth:TokenExpiryHours", _config.GetValue("TokenExpiryHours", 24))
             },
             personality = new
             {
-                path = _config["PersonalityDir"] ?? "personality"
+                path = _config["Personality:Path"] ?? _config["PersonalityDir"] ?? "personality"
             }
         };
 
-        return Ok(fallbackConfig);
+        return Ok(mergedConfig);
     }
 
     [HttpGet("network/interfaces")]
@@ -998,12 +986,12 @@ public class AdminController : ControllerBase
     {
         if (!IsAdmin) return Forbid();
         var dbPath = _config["DatabasePath"] ?? "ash_server.db";
-        var fullPath = Path.IsPathRooted(dbPath) ? dbPath : Path.Combine(AppContext.BaseDirectory, dbPath);
+        var fullPath = Path.GetFullPath(dbPath);
         if (!System.IO.File.Exists(fullPath))
             return NotFound(new { error = "Database file not found" });
         
         var backupName = $"ash_server_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.db";
-        var dir = Path.GetDirectoryName(fullPath) ?? AppContext.BaseDirectory;
+        var dir = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
         var backupPath = Path.Combine(dir, backupName);
         System.IO.File.Copy(fullPath, backupPath);
         
@@ -1024,7 +1012,7 @@ public class AdminController : ControllerBase
         if (!IsAdmin) return Forbid();
         
         var dbPath = _config["DatabasePath"] ?? "ash_server.db";
-        var fullPath = Path.IsPathRooted(dbPath) ? dbPath : Path.Combine(AppContext.BaseDirectory, dbPath);
+        var fullPath = Path.GetFullPath(dbPath);
         
         long dbSize = 0;
         if (System.IO.File.Exists(fullPath))
@@ -1032,7 +1020,7 @@ public class AdminController : ControllerBase
             dbSize = new FileInfo(fullPath).Length;
         }
 
-        var dir = Path.GetDirectoryName(fullPath) ?? AppContext.BaseDirectory;
+        var dir = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
         var backupFiles = new List<object>();
         if (Directory.Exists(dir))
         {
@@ -1072,8 +1060,8 @@ public class AdminController : ControllerBase
         }
 
         var dbPath = _config["DatabasePath"] ?? "ash_server.db";
-        var fullPath = Path.IsPathRooted(dbPath) ? dbPath : Path.Combine(AppContext.BaseDirectory, dbPath);
-        var dir = Path.GetDirectoryName(fullPath) ?? AppContext.BaseDirectory;
+        var fullPath = Path.GetFullPath(dbPath);
+        var dir = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
         var targetFile = Path.Combine(dir, filename);
 
         if (!System.IO.File.Exists(targetFile))

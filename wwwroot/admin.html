@@ -893,6 +893,7 @@ select.form-input{cursor:pointer}
               <button class="btn" onclick="closeInstallModal()">Cancel</button>
               <button class="btn btn-primary" id="btn-submit-install" onclick="submitInstallApp()">Configure &amp; Install</button>
             </div>
+          </div>
         </div>
 
         <!-- Mobile Pairing Modal -->
@@ -1570,6 +1571,7 @@ async function removeUserRole(userId, roleId, roleName) {
 }
 
 function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const esc = escHtml;
 
 
 async function toggleAdmin(userId, currentlyAdmin) {
