@@ -606,8 +606,10 @@ select.form-input{cursor:pointer}
           <div id="add-companion-status" style="margin-top:8px; margin-bottom:8px; font-size:12px;"></div>
           <div class="row-gap" style="margin-top: 16px; display: flex; gap: 8px;">
             <button class="btn btn-primary" onclick="saveCompanion()">Save Companion</button>
+            <button class="btn" id="btn-export-card" onclick="triggerTavernExport()" style="display:none;background:var(--accent);color:var(--bg);">Export Tavern Card</button>
             <button class="btn" onclick="hideCompanionForm()">Cancel</button>
           </div>
+          <input type="file" id="tavern-export-file-input" accept="image/png" style="display:none" onchange="handleTavernExport(event)">
         </div>
         
         <div class="card">
@@ -3372,6 +3374,7 @@ function showAddCompanionForm() {
   document.getElementById('c-scenario').value = '';
   document.getElementById('c-first').value = '';
   document.getElementById('c-system').value = '';
+  document.getElementById('btn-export-card').style.display = 'none';
   document.getElementById('add-companion-status').textContent = '';
   document.getElementById('add-companion-form').style.display = '';
 }
@@ -3392,6 +3395,7 @@ function editCompanion(name) {
   document.getElementById('c-scenario').value = c.scenario || '';
   document.getElementById('c-first').value = c.firstMessage || '';
   document.getElementById('c-system').value = c.systemPrompt || '';
+  document.getElementById('btn-export-card').style.display = '';
   document.getElementById('add-companion-status').textContent = '';
   document.getElementById('add-companion-form').style.display = '';
 }
@@ -3445,6 +3449,138 @@ async function deleteCompanion(name) {
   } catch (err) {
     toast(err.message, 'error');
   }
+}
+
+// Precompute CRC32 table for Tavern PNG card generation
+const crcTable = [];
+for (let n = 0; n < 256; n++) {
+  let c = n;
+  for (let k = 0; k < 8; k++) {
+    if (c & 1) {
+      c = 0xedb88320 ^ (c >>> 1);
+    } else {
+      c = c >>> 1;
+    }
+  }
+  crcTable[n] = c;
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeTavernMetadata(pngBytes, characterData) {
+  const dataView = new DataView(pngBytes.buffer);
+  
+  if (pngBytes[0] !== 0x89 || pngBytes[1] !== 0x50 || pngBytes[2] !== 0x4E || pngBytes[3] !== 0x47) {
+    throw new Error("Invalid PNG file.");
+  }
+  
+  let offset = 8;
+  const ihdrLen = dataView.getUint32(offset, false);
+  const ihdrType = String.fromCharCode(pngBytes[offset+4], pngBytes[offset+5], pngBytes[offset+6], pngBytes[offset+7]);
+  if (ihdrType !== 'IHDR') {
+    throw new Error("IHDR chunk not found at expected offset.");
+  }
+  
+  const insertIndex = offset + 8 + ihdrLen + 4; // after IHDR length, type, data, and CRC
+  
+  const jsonString = JSON.stringify({ data: characterData }); // SillyTavern V2 format (wrapper data key)
+  const keyword = new TextEncoder().encode("chara");
+  const jsonBytes = new TextEncoder().encode(jsonString);
+  
+  const chunkData = new Uint8Array(keyword.length + 1 + jsonBytes.length);
+  chunkData.set(keyword, 0);
+  chunkData[keyword.length] = 0; // null separator
+  chunkData.set(jsonBytes, keyword.length + 1);
+  
+  const chunkType = new Uint8Array([116, 69, 88, 116]); // 'tEXt'
+  
+  const typeAndData = new Uint8Array(chunkType.length + chunkData.length);
+  typeAndData.set(chunkType, 0);
+  typeAndData.set(chunkData, chunkType.length);
+  
+  const crcVal = crc32(typeAndData);
+  
+  const chunkLengthBytes = new Uint8Array(4);
+  new DataView(chunkLengthBytes.buffer).setUint32(0, chunkData.length, false);
+  
+  const crcBytes = new Uint8Array(4);
+  new DataView(crcBytes.buffer).setUint32(0, crcVal, false);
+  
+  const totalNewChunkLength = 4 + 4 + chunkData.length + 4;
+  const newPngBytes = new Uint8Array(pngBytes.length + totalNewChunkLength);
+  
+  newPngBytes.set(pngBytes.slice(0, insertIndex), 0);
+  newPngBytes.set(chunkLengthBytes, insertIndex);
+  newPngBytes.set(chunkType, insertIndex + 4);
+  newPngBytes.set(chunkData, insertIndex + 8);
+  newPngBytes.set(crcBytes, insertIndex + 8 + chunkData.length);
+  newPngBytes.set(pngBytes.slice(insertIndex), insertIndex + totalNewChunkLength);
+  
+  return newPngBytes;
+}
+
+function triggerTavernExport() {
+  document.getElementById('tavern-export-file-input').value = '';
+  document.getElementById('tavern-export-file-input').click();
+}
+
+function handleTavernExport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const name = document.getElementById('c-name').value.trim();
+  const voiceId = document.getElementById('c-voice').value.trim();
+  const description = document.getElementById('c-desc').value.trim();
+  const personality = document.getElementById('c-personality').value.trim();
+  const scenario = document.getElementById('c-scenario').value.trim();
+  const first_mes = document.getElementById('c-first').value.trim();
+  const system_prompt = document.getElementById('c-system').value.trim();
+
+  if (!name) {
+    toast("Name is required to export a character card.", "error");
+    return;
+  }
+
+  const characterData = {
+    name,
+    description,
+    personality,
+    scenario,
+    first_mes,
+    voiceId,
+    system_prompt
+  };
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const arrayBuffer = e.target.result;
+      const pngBytes = new Uint8Array(arrayBuffer);
+      
+      const newPngBytes = writeTavernMetadata(pngBytes, characterData);
+      
+      const blob = new Blob([newPngBytes], { type: "image/png" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${name.toLowerCase()}_tavern_card.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast(`Successfully exported Tavern Card for ${name}!`);
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function triggerTavernImport() {
