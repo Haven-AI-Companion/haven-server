@@ -1,7 +1,7 @@
-# 🌸 Ash Server
+# 🌸 Haven Server
 
 <p align="center">
-  <img src="docs/logo.png" alt="Ash Server — Secure AI Orchestrator" width="600">
+  <img src="wwwroot/static/haven_logo.png" alt="Haven Server — Secure AI Orchestrator" width="600">
 </p>
 
 > **Security-first, privacy-first, locally-running AI backend** — built as a hardened alternative to OpenClaw, powered by [gemma4-turbo](https://ollama.com/ssfdre38/gemma4-turbo).
@@ -12,11 +12,11 @@
 
 ---
 
-## Why Ash Server Exists
+## Why Haven Server Exists
 
 Self-hosted AI platforms like [OpenClaw](https://github.com/badlogic/lemmy) have grown rapidly — but without security foundations. The result is a class of real vulnerabilities:
 
-| Problem | OpenClaw | Ash Server |
+| Problem | OpenClaw | Haven Server |
 |---------|----------|------------|
 | Identity layer | ❌ None | ✅ JWT auth + RBAC roles |
 | External chat permissions | ❌ Anyone can invoke agent | ✅ Permission-gated by linked identity |
@@ -27,13 +27,13 @@ Self-hosted AI platforms like [OpenClaw](https://github.com/badlogic/lemmy) have
 | Discord/Slack/Telegram security | ❌ No gates | ✅ RBAC via identity linking |
 | Service deployment | ❌ Manual | ✅ Windows/Linux/macOS installer |
 
-Ash Server is not a wrapper around OpenClaw — it is a clean reimplementation in **C# / ASP.NET Core** with safety and trust built into every layer.
+Haven Server is not a wrapper around OpenClaw — it is a clean reimplementation in **C# / ASP.NET Core** with safety and trust built into every layer.
 
 ---
 
 ## Powered by Gemma 4 Turbo
 
-Ash Server ships with first-class support for [`ssfdre38/gemma4-turbo`](https://ollama.com/ssfdre38/gemma4-turbo) — a purpose-built quantization of Google's Gemma 4 family:
+Haven Server ships with first-class support for [`ssfdre38/gemma4-turbo`](https://ollama.com/ssfdre38/gemma4-turbo) — a purpose-built quantization of Google's Gemma 4 family:
 
 - **IQ4_XS** non-linear quantization applied to **original bf16 source weights** (not re-quantizing already-quantized weights)
 - Full **vision + multimodal** capabilities preserved
@@ -58,22 +58,22 @@ ollama run ssfdre38/gemma4-turbo   # pull and run e4b (recommended)
 
 ### Option A — Pre-built binary (recommended)
 
-Download from the [latest release](https://github.com/ssfdre38/ash-server/releases/latest):
+Download from the [latest release](https://github.com/ssfdre38/haven-server/releases/latest):
 
 | Platform | Download |
 |----------|----------|
-| **Windows (x64)** | `ash-server-*-windows-x64-setup.exe` |
-| **Linux (x64)**   | `ash-server-*-linux-x64.zip` |
-| **Linux (arm64)** | `ash-server-*-linux-arm64.zip` |
-| **macOS (Apple Silicon)** | `ash-server-*-osx-arm64.zip` |
-| **macOS (Intel)** | `ash-server-*-osx-x64.zip` |
+| **Windows (x64)** | `haven-server-*-windows-x64-setup.exe` |
+| **Linux (x64)**   | `haven-server-*-linux-x64.zip` |
+| **Linux (arm64)** | `haven-server-*-linux-arm64.zip` |
+| **macOS (Apple Silicon)** | `haven-server-*-osx-arm64.zip` |
+| **macOS (Intel)** | `haven-server-*-osx-x64.zip` |
 
 **Windows** — run the `.exe` installer as Administrator. Done.
 
 **Linux / macOS** — unzip and run the bundled install script:
 ```bash
-unzip ash-server-*-linux-x64.zip -d ash-server
-sudo bash ash-server/build/linux/install.sh ash-server/ash-server
+unzip haven-server-*-linux-x64.zip -d haven-server
+sudo bash haven-server/build/linux/install.sh haven-server/haven-server
 ```
 
 ---
@@ -84,16 +84,16 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download) and [Ollama](https
 
 **Linux / macOS:**
 ```bash
-git clone https://github.com/ssfdre38/ash-server
-sudo bash ash-server/install.sh          # build + install as system service
+git clone https://github.com/ssfdre38/haven-server
+sudo bash haven-server/install.sh          # build + install as system service
 # — or —
-bash ash-server/install.sh --run         # build + run in foreground (no root needed)
+bash haven-server/install.sh --run         # build + run in foreground (no root needed)
 ```
 
 **Windows** (PowerShell as Administrator):
 ```powershell
-git clone https://github.com/ssfdre38/ash-server
-cd ash-server
+git clone https://github.com/ssfdre38/haven-server
+cd haven-server
 .\install.ps1           # build + install as Windows Service
 # — or —
 .\install.ps1 -Run      # build + run in foreground (no admin needed)
@@ -110,7 +110,7 @@ Open **http://localhost:18799** — the first registered user becomes admin auto
 
 ```bash
 # Linux / macOS:
-sudo bash ash-server/install.sh --uninstall
+sudo bash haven-server/install.sh --uninstall
 
 # Windows (Administrator PowerShell):
 .\install.ps1 -Uninstall
@@ -120,10 +120,10 @@ sudo bash ash-server/install.sh --uninstall
 
 ```bash
 # Windows (run as Administrator):
-ash-server.exe install-service
+haven-server.exe install-service
 
 # Linux / macOS (run as root):
-sudo ash-server install-service
+sudo haven-server install-service
 ```
 
 Registers with the native service manager: **Windows SCM**, **systemd**, or **launchd**.
@@ -151,7 +151,7 @@ External Message (Discord / Slack / Telegram)
         ▼
   ┌─────────────────────────────┐
   │  IdentityResolver           │  Discord/Slack/Telegram user
-  │                             │  → linked ash-server account
+  │                             │  → linked haven-server account
   └────────────┬────────────────┘
                │ resolve
         ▼
@@ -221,20 +221,20 @@ External Message (Discord / Slack / Telegram)
 
 ## P2P AI Compute Grid & VPN Binding (v1.2)
 
-Ash Server version 1.2 introduces two powerful network-level capabilities to support decentralized, private, and distributed local AI architectures:
+Haven Server version 1.2 introduces two powerful network-level capabilities to support decentralized, private, and distributed local AI architectures:
 
 ### 1. P2P AI Compute Grid
-Ash Server features a built-in hub-and-spoke peer compute sharing system. Multiple instances of Ash Server can cluster together to distribute LLM inference work across different physical machines:
+Haven Server features a built-in hub-and-spoke peer compute sharing system. Multiple instances of Haven Server can cluster together to distribute LLM inference work across different physical machines:
 *   **Master Node (Orchestrator)**: Receives client requests, maintains connection pools, and routes tasks based on the capabilities, CPU/GPU, and memory parameters of connected workers.
 *   **Worker Node**: Connects to the Master via secure WebSockets to process local inference queries.
     *   *To start in Worker Mode:*
         ```bash
-        ash-server --worker --master http://<master-ip>:18799 --token <pairing-token>
+        haven-server --worker --master http://<master-ip>:18799 --token <pairing-token>
         ```
     *   *Auto-Pairing & Reconnection*: Dynamically authenticates with a one-time pairing token, stores a secure generated worker identity, and automatically reconnects with exponential backoff if the link drops.
 
 ### 2. Generalized VPN & Adapter Binding
-Rather than binding to all public interfaces (`0.0.0.0`) or being hardcoded to a single VPN, Ash Server features generic network interface auto-discovery and binding:
+Rather than binding to all public interfaces (`0.0.0.0`) or being hardcoded to a single VPN, Haven Server features generic network interface auto-discovery and binding:
 *   **Zero-Trust Mesh & Tunnel Support**: Natively scans and detects secure VPNs like **NetBird**, **Tailscale**, **Proton VPN**, **WireGuard**, **OpenVPN**, and custom adapters, resolving their statuses and IPs.
 *   **UI-Driven Interface Pinning**: Exposes active interfaces in the Admin Panel network tab. Administrators can select an interface (e.g. `"NetBird"`, `"Tailscale Tunnel"`, or `"ProtonVPN"`) to save `BindInterface` to config.
 *   **Resilient Startup**: Dynamically binds Kestrel to the chosen network IP. If the VPN interface drops or is disabled, the server automatically binds to localhost (`127.0.0.1`) for local-only safety rather than failing to boot.
@@ -243,10 +243,10 @@ Rather than binding to all public interfaces (`0.0.0.0`) or being hardcoded to a
 
 ## One-Click MCP App Store & Update System
 
-Ash Server introduces a state-of-the-art administrative experience with two native subsystems built into the core:
+Haven Server introduces a state-of-the-art administrative experience with two native subsystems built into the core:
 
 ### 1. One-Click MCP App Store
-Instead of manually typing NPM packages, arguments, and environment keys to configure tools, Ash Server features a fully integrated App Store:
+Instead of manually typing NPM packages, arguments, and environment keys to configure tools, Haven Server features a fully integrated App Store:
 *   **Git-based Registry**: Automatically pulls available packages from the community-driven, public repository at [ssfdre38/mcp-registry](https://github.com/ssfdre38/mcp-registry).
 *   **Dynamic Variable Substitution**: Renders customized input forms for required keys (like GitHub personal tokens or folder paths), formats them into command-line arguments and environment variables, writes them to SQLite, and dynamically boots the server instantly in the background.
 *   **Pre-built High-Fidelity Apps**: Includes out-of-the-box configurations for *Filesystem*, *Google Search*, *GitHub Integration*, *PostgreSQL*, *Puppeteer Browser*, and *SQLite Database Manager*.
@@ -296,7 +296,7 @@ Keeping a self-hosted AI orchestrator updated is traditionally complex, especial
 ## Project Structure
 
 ```
-ash-server/
+haven-server/
 ├── AI/              # Backend manager, Ollama + OpenAI-compat clients
 ├── Agent/           # Tool definitions + agent runner loop
 ├── Auth/            # JWT + BCrypt + permission evaluation
@@ -340,7 +340,7 @@ ash-server/
 
 | Project | Description |
 |---------|-------------|
-| **ash-server** | This — secure AI backend |
+| **haven-server** | This — secure AI backend |
 | [gemma4-turbo](https://ollama.com/ssfdre38/gemma4-turbo) | IQ4_XS Gemma 4 for Ollama — 17.3k+ downloads |
 | [ash-bot](https://github.com/ssfdre38/ash-bot) | .NET 10 Discord bot — Ash's personality, 20 built-in tools, long-term memory |
 | [Discord](https://discord.gg/DCYC2fFQQ6) | Join us on the G4Turbo.com Discord server.
