@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 # =============================================================================
-# Ash Server — Install from source (Windows)
+# Haven Server — Install from source (Windows)
 # =============================================================================
 # One-liner install (run PowerShell as Administrator):
-#   git clone https://github.com/ssfdre38/ash-server; cd ash-server; .\install.ps1
+#   git clone https://github.com/ssfdre38/haven-server; cd haven-server; .\install.ps1
 #
 # Or to just run without installing as a service:
 #   .\install.ps1 -Run
@@ -17,11 +17,11 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoDir  = $PSScriptRoot
 $OutDir   = Join-Path $RepoDir "build\dist\win-x64"
-$Binary   = Join-Path $OutDir "ash-server.exe"
+$Binary   = Join-Path $OutDir "haven-server.exe"
 
-function Info($msg)  { Write-Host "[ash-server] $msg" -ForegroundColor Cyan }
-function Ok($msg)    { Write-Host "[ash-server] $msg" -ForegroundColor Green }
-function Warn($msg)  { Write-Host "[ash-server] $msg" -ForegroundColor Yellow }
+function Info($msg)  { Write-Host "[haven-server] $msg" -ForegroundColor Cyan }
+function Ok($msg)    { Write-Host "[haven-server] $msg" -ForegroundColor Green }
+function Warn($msg)  { Write-Host "[haven-server] $msg" -ForegroundColor Yellow }
 function Die($msg)   { Write-Error "[error] $msg"; exit 1 }
 
 # ── Check for .NET SDK ─────────────────────────────────────────────────────────
@@ -62,13 +62,13 @@ if ($Uninstall) {
     if (Test-Path $Binary) {
         & $Binary uninstall-service
     }
-    Ok "Ash Server service removed."
+    Ok "Haven Server service removed."
     exit 0
 }
 
 # ── Build ──────────────────────────────────────────────────────────────────────
 Info "Building self-contained binary for win-x64…"
-dotnet publish "$RepoDir\ash-server-cs.csproj" `
+dotnet publish "$RepoDir\haven-server-cs.csproj" `
     -c Release `
     -r win-x64 `
     --self-contained true `
@@ -81,7 +81,7 @@ Ok "Build complete: $Binary"
 
 # ── --Run mode: start in the foreground ───────────────────────────────────────
 if ($Run) {
-    Info "Starting ash-server in the foreground (Ctrl+C to stop)…"
+    Info "Starting haven-server in the foreground (Ctrl+C to stop)…"
     Push-Location $OutDir
     & $Binary
     Pop-Location
@@ -100,9 +100,9 @@ Push-Location $OutDir
 Pop-Location
 
 Info "Starting service…"
-Start-Service -Name "ash-server" -ErrorAction SilentlyContinue
+Start-Service -Name "haven-server" -ErrorAction SilentlyContinue
 
-Ok "Ash Server installed and running."
+Ok "Haven Server installed and running."
 
 # ── Check for Tailscale Mesh VPN ───────────────────────────────────────────────
 if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) {
@@ -127,7 +127,7 @@ if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) {
 Write-Host ""
 Write-Host "  Web UI:   http://localhost:18799"
 Write-Host "  Admin:    http://localhost:18799/admin.html"
-Write-Host "  Logs:     Get-EventLog -LogName Application -Source ash-server -Newest 50"
-Write-Host "  Stop:     Stop-Service ash-server"
+Write-Host "  Logs:     Get-EventLog -LogName Application -Source haven-server -Newest 50"
+Write-Host "  Stop:     Stop-Service haven-server"
 Write-Host "  Remove:   .\install.ps1 -Uninstall  (as Administrator)"
 Write-Host ""

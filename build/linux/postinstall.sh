@@ -2,8 +2,8 @@
 # postinstall.sh - Runs after the Debian/RPM package is installed
 set -e
 
-SERVICE_USER="ash-server"
-INSTALL_DIR="/opt/ash-server"
+SERVICE_USER="haven-server"
+INSTALL_DIR="/opt/haven-server"
 
 # Create a dedicated system user if not already present
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
@@ -16,9 +16,9 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 # Invoke the self-contained C# service installer to register the systemd service
 # Run it in the directory context of the installation folder
 cd "$INSTALL_DIR"
-./ash-server install-service
+./haven-server install-service
 
 # Enable and start the registered systemd service
 systemctl daemon-reload
-systemctl enable ash-server
-systemctl start ash-server
+systemctl enable haven-server
+systemctl start haven-server

@@ -8,7 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$proj = "ash-server-cs.csproj"
+$proj = "haven-server-cs.csproj"
 
 $targets = @(
     @{ rid = "win-x64";     ext = ".exe" },
@@ -39,7 +39,7 @@ foreach ($t in $targets) {
     }
 
     # Zip the output
-    $zipName = "ash-server-$Version-$($t.rid).zip"
+    $zipName = "haven-server-$Version-$($t.rid).zip"
     $zipPath = Join-Path $OutDir $zipName
     if (Test-Path $zipPath) { Remove-Item $zipPath }
     Compress-Archive -Path "$out\*" -DestinationPath $zipPath

@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Ash Server — macOS Installer
+# Haven Server — macOS Installer
 # =============================================================================
 # Usage:
 #   sudo bash build/macos/install.sh [binary_path]
 #
 # What this script does:
-#   1. Installs the binary to  /usr/local/opt/ash-server/
+#   1. Installs the binary to  /usr/local/opt/haven-server/
 #   2. Copies default config/assets
-#   3. Creates a symlink       /usr/local/bin/ash-server
-#   4. Runs  ash-server install-service  (writes launchd plist)
+#   3. Creates a symlink       /usr/local/bin/haven-server
+#   4. Runs  haven-server install-service  (writes launchd plist)
 #   5. Loads the daemon
 # =============================================================================
 set -euo pipefail
 
-INSTALL_DIR="/usr/local/opt/ash-server"
-BIN_LINK="/usr/local/bin/ash-server"
-SERVICE_NAME="com.ash-server"
+INSTALL_DIR="/usr/local/opt/haven-server"
+BIN_LINK="/usr/local/bin/haven-server"
+SERVICE_NAME="com.haven-server"
 PLIST_PATH="/Library/LaunchDaemons/${SERVICE_NAME}.plist"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
-info()  { echo -e "${CYAN}[ash-server]${NC} $*"; }
-ok()    { echo -e "${GREEN}[ash-server]${NC} $*"; }
+info()  { echo -e "${CYAN}[haven-server]${NC} $*"; }
+ok()    { echo -e "${GREEN}[haven-server]${NC} $*"; }
 die()   { echo -e "${RED}[error]${NC} $*" >&2; exit 1; }
 
 # ── Root check ────────────────────────────────────────────────────────────────
@@ -29,9 +29,9 @@ die()   { echo -e "${RED}[error]${NC} $*" >&2; exit 1; }
 
 # ── Uninstall mode ────────────────────────────────────────────────────────────
 if [[ "${1:-}" == "--uninstall" ]]; then
-    info "Uninstalling Ash Server…"
+    info "Uninstalling Haven Server…"
     launchctl unload -w "$PLIST_PATH" 2>/dev/null || true
-    "$INSTALL_DIR/ash-server" uninstall-service 2>/dev/null || true
+    "$INSTALL_DIR/haven-server" uninstall-service 2>/dev/null || true
     rm -f "$BIN_LINK"
     echo ""
     echo "Files preserved at $INSTALL_DIR (database, config)."
@@ -51,10 +51,10 @@ elif [[ -d "$SCRIPT_DIR/../wwwroot" ]]; then
     SRC_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
 
-BINARY="${1:-$SRC_DIR/ash-server}"
-[[ -f "$BINARY" ]] || die "Binary not found: $BINARY\nUsage: sudo bash $0 /path/to/ash-server"
+BINARY="${1:-$SRC_DIR/haven-server}"
+[[ -f "$BINARY" ]] || die "Binary not found: $BINARY\nUsage: sudo bash $0 /path/to/haven-server"
 
-info "Installing Ash Server from: $BINARY"
+info "Installing Haven Server from: $BINARY"
 
 # ── Check for SQLite3 ─────────────────────────────────────────────────────────
 if ! command -v sqlite3 &>/dev/null; then
@@ -76,10 +76,10 @@ info "Installing to $INSTALL_DIR…"
 mkdir -p "$INSTALL_DIR"
 
 # Binary
-install -m 755 "$BINARY" "$INSTALL_DIR/ash-server"
+install -m 755 "$BINARY" "$INSTALL_DIR/haven-server"
 
 # macOS: clear quarantine bit so the binary runs without Gatekeeper prompts
-xattr -d com.apple.quarantine "$INSTALL_DIR/ash-server" 2>/dev/null || true
+xattr -d com.apple.quarantine "$INSTALL_DIR/haven-server" 2>/dev/null || true
 
 # appsettings.json.example (only if not already present)
 if [[ -f "$SRC_DIR/appsettings.json.example" && ! -f "$INSTALL_DIR/appsettings.json.example" ]]; then
@@ -98,18 +98,18 @@ if [[ -d "$SRC_DIR/personality" ]]; then
     cp -rn "$SRC_DIR/personality/." "$INSTALL_DIR/personality/" 2>/dev/null || true
 fi
 
-# Symlink so 'ash-server' works anywhere in the terminal
-ln -sf "$INSTALL_DIR/ash-server" "$BIN_LINK"
+# Symlink so 'haven-server' works anywhere in the terminal
+ln -sf "$INSTALL_DIR/haven-server" "$BIN_LINK"
 
 # ── Register and start daemon ─────────────────────────────────────────────────
 info "Registering launchd daemon…"
-"$INSTALL_DIR/ash-server" install-service
+"$INSTALL_DIR/haven-server" install-service
 
-ok "Ash Server installed and running."
+ok "Haven Server installed and running."
 echo ""
 echo "  Web UI:    http://localhost:18799"
 echo "  Admin:     http://localhost:18799/admin.html"
-echo "  Logs:      tail -f /var/log/ash-server/stdout.log"
+echo "  Logs:      tail -f /var/log/haven-server/stdout.log"
 echo "  Config:    $INSTALL_DIR/config.json"
 echo "  Stop:      sudo launchctl stop $SERVICE_NAME"
 echo "  Remove:    sudo bash $0 --uninstall"

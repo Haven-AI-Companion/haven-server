@@ -1,5 +1,5 @@
 # nfpm.yaml
-name: "ash-server"
+name: "haven-server"
 arch: "amd64"
 platform: "linux"
 version: "1.2.0"
@@ -7,27 +7,27 @@ section: "utils"
 priority: "extra"
 maintainer: "Daniel Elliott <ssfdre38@msn.com>"
 description: "Hardened, security-first locally-running AI orchestrator and C# API backend."
-homepage: "https://github.com/ssfdre38/ash-server"
+homepage: "https://github.com/ssfdre38/haven-server"
 license: "MIT"
 provides:
-  - ash-server
+  - haven-server
 depends:
   - sqlite3
 recommends:
   - tailscale
 contents:
-  - src: "build/dist/linux-x64/ash-server"
-    dst: "/opt/ash-server/ash-server"
+  - src: "build/dist/linux-x64/haven-server"
+    dst: "/opt/haven-server/haven-server"
     file_info:
       mode: 0755
   - src: "build/dist/linux-x64/wwwroot"
-    dst: "/opt/ash-server/wwwroot"
+    dst: "/opt/haven-server/wwwroot"
   - src: "build/dist/linux-x64/personality"
-    dst: "/opt/ash-server/personality"
+    dst: "/opt/haven-server/personality"
   - src: "build/dist/linux-x64/appsettings.json.example"
-    dst: "/opt/ash-server/appsettings.json.example"
-  - src: "/opt/ash-server/ash-server"
-    dst: "/usr/bin/ash-server"
+    dst: "/opt/haven-server/appsettings.json.example"
+  - src: "/opt/haven-server/haven-server"
+    dst: "/usr/bin/haven-server"
     type: "symlink"
 scripts:
   postinstall: "build/linux/postinstall.sh"

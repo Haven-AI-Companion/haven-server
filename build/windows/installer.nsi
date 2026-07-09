@@ -1,26 +1,26 @@
 ; ============================================================
-; Ash Server — Windows NSIS Installer
+; Haven Server — Windows NSIS Installer
 ; Build with:  makensis build\windows\installer.nsi
 ; Requires NSIS 3.x: https://nsis.sourceforge.io/
 ;
 ; Before running, publish the win-x64 binary:
-;   dotnet publish ash-server-cs.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o build\dist\win-x64
+;   dotnet publish haven-server-cs.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o build\dist\win-x64
 ; ============================================================
 
-!define PRODUCT_NAME      "Ash Server"
+!define PRODUCT_NAME      "Haven Server"
 !define PRODUCT_VERSION   "1.1.1"
-!define SERVICE_NAME      "ash-server"
-!define INSTALL_DIR       "$PROGRAMFILES64\Ash Server"
-!define UNINSTALL_REG     "Software\Microsoft\Windows\CurrentVersion\Uninstall\AshServer"
-!define PUBLISHER         "Ash Server Project"
-!define PRODUCT_URL       "https://github.com/ssfdre38/ash-server-cs"
+!define SERVICE_NAME      "haven-server"
+!define INSTALL_DIR       "$PROGRAMFILES64\Haven Server"
+!define UNINSTALL_REG     "Software\Microsoft\Windows\CurrentVersion\Uninstall\HavenServer"
+!define PUBLISHER         "Haven Server Project"
+!define PRODUCT_URL       "https://github.com/ssfdre38/haven-server-cs"
 
 ; Source directory (relative to THIS script file — build\windows\installer.nsi)
 !define SRC_DIR           "..\dist\win-x64"
 
 ; ── NSIS settings ────────────────────────────────────────────────────────────
 Name          "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile       "..\dist\ash-server-${PRODUCT_VERSION}-windows-x64-setup.exe"
+OutFile       "..\dist\haven-server-${PRODUCT_VERSION}-windows-x64-setup.exe"
 InstallDir    "${INSTALL_DIR}"
 InstallDirRegKey HKLM "${UNINSTALL_REG}" "InstallLocation"
 RequestExecutionLevel admin
@@ -31,8 +31,8 @@ Unicode True
 !include "LogicLib.nsh"
 
 !define MUI_ABORTWARNING
-!define MUI_ICON          "ash-server.ico"
-!define MUI_UNICON        "ash-server.ico"
+!define MUI_ICON          "haven-server.ico"
+!define MUI_UNICON        "haven-server.ico"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"
@@ -67,9 +67,9 @@ Section "Install" SEC_MAIN
 
     ; Start Menu shortcut (for manual start/stop)
     CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-    CreateShortCut  "$SMPROGRAMS\${PRODUCT_NAME}\Ash Server Admin.lnk" \
+    CreateShortCut  "$SMPROGRAMS\${PRODUCT_NAME}\Haven Server Admin.lnk" \
                     "http://localhost:18799/admin.html"
-    CreateShortCut  "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall Ash Server.lnk" \
+    CreateShortCut  "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall Haven Server.lnk" \
                     "$INSTDIR\uninstall.exe"
 
     ; Install bundled SQLite3 directly (zero-config, local scope visibility)
@@ -97,17 +97,17 @@ Section "Install" SEC_MAIN
     ${EndIf}
 
     ; Register and start the Windows service
-    nsExec::ExecToLog '"$INSTDIR\ash-server.exe" install-service'
+    nsExec::ExecToLog '"$INSTDIR\haven-server.exe" install-service'
     nsExec::ExecToLog 'sc.exe start ${SERVICE_NAME}'
 SectionEnd
 
 ; ── Uninstall section ─────────────────────────────────────────────────────────
 Section "Uninstall"
     ; Stop and remove service
-    nsExec::ExecToLog '"$INSTDIR\ash-server.exe" uninstall-service'
+    nsExec::ExecToLog '"$INSTDIR\haven-server.exe" uninstall-service'
 
     ; Remove files (preserve database and config.json so user data survives)
-    Delete "$INSTDIR\ash-server.exe"
+    Delete "$INSTDIR\haven-server.exe"
     Delete "$INSTDIR\sqlite3.exe"
     Delete "$INSTDIR\appsettings.json"
     Delete "$INSTDIR\uninstall.exe"
@@ -123,7 +123,7 @@ Section "Uninstall"
     ; Leave $INSTDIR itself (may still have ash_server.db / config.json)
     ; User can manually delete the folder if they want a clean uninstall
     MessageBox MB_ICONINFORMATION \
-        "Ash Server has been removed.$\r$\n\
+        "Haven Server has been removed.$\r$\n\
 Your database and config.json have been preserved at:$\r$\n\
 $INSTDIR$\r$\n$\r$\n\
 Delete that folder manually if you want a complete removal."

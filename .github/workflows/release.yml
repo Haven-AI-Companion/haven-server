@@ -17,19 +17,19 @@ jobs:
         include:
           - rid: win-x64
             os: windows-latest
-            binary: ash-server.exe
+            binary: haven-server.exe
           - rid: linux-x64
             os: ubuntu-latest
-            binary: ash-server
+            binary: haven-server
           - rid: linux-arm64
             os: ubuntu-latest
-            binary: ash-server
+            binary: haven-server
           - rid: osx-x64
             os: macos-latest
-            binary: ash-server
+            binary: haven-server
           - rid: osx-arm64
             os: macos-latest
-            binary: ash-server
+            binary: haven-server
 
     runs-on: ${{ matrix.os }}
 
@@ -43,13 +43,13 @@ jobs:
           dotnet-version: '10.x'
 
       - name: Restore
-        run: dotnet restore ash-server-cs.csproj
+        run: dotnet restore haven-server-cs.csproj
 
       - name: Publish (${{ matrix.rid }})
         run: |
           version="${{ github.ref_name }}"
           numeric="${version#v}"
-          dotnet publish ash-server-cs.csproj \
+          dotnet publish haven-server-cs.csproj \
             -c Release \
             -r ${{ matrix.rid }} \
             --self-contained true \
@@ -70,12 +70,12 @@ jobs:
         run: |
           version="${{ github.ref_name }}"
           rid="${{ matrix.rid }}"
-          zipname="ash-server-${version}-${rid}.zip"
+          zipname="haven-server-${version}-${rid}.zip"
           staging="build/dist/${rid}"
 
           # Ensure the Unix binary has the executable bit set before zipping
-          if [[ -f "$staging/ash-server" ]]; then
-            chmod +x "$staging/ash-server"
+          if [[ -f "$staging/haven-server" ]]; then
+            chmod +x "$staging/haven-server"
           fi
 
           # Include install scripts so the zip layout matches the README quick-start
@@ -166,7 +166,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: build/dist/ash-server-*-windows-x64-setup.exe
+          path: build/dist/haven-server-*-windows-x64-setup.exe
           retention-days: 1
 
   # ── Create GitHub Release and attach all assets ────────────────────────────
@@ -213,22 +213,22 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Ash Server ${{ github.ref_name }}"
+          name: "Haven Server ${{ github.ref_name }}"
           body: |
-            ## Ash Server ${{ github.ref_name }}
+            ## Haven Server ${{ github.ref_name }}
 
             ### Downloads
 
             | Platform | File |
             |----------|------|
-            | Windows (x64) installer | `ash-server-*-windows-x64-setup.exe` |
-            | Windows (x64) zip       | `ash-server-*-win-x64.zip` |
-            | Linux (x64)             | `ash-server-*-linux-x64.zip` |
-            | Linux (arm64)           | `ash-server-*-linux-arm64.zip` |
-            | macOS (Apple Silicon)   | `ash-server-*-osx-arm64.zip` |
-            | macOS (Intel)           | `ash-server-*-osx-x64.zip` |
-            | Debian / Ubuntu Package  | `ash-server_*_amd64.deb` |
-            | RedHat / Fedora Package  | `ash-server-*-1.x86_64.rpm` |
+            | Windows (x64) installer | `haven-server-*-windows-x64-setup.exe` |
+            | Windows (x64) zip       | `haven-server-*-win-x64.zip` |
+            | Linux (x64)             | `haven-server-*-linux-x64.zip` |
+            | Linux (arm64)           | `haven-server-*-linux-arm64.zip` |
+            | macOS (Apple Silicon)   | `haven-server-*-osx-arm64.zip` |
+            | macOS (Intel)           | `haven-server-*-osx-x64.zip` |
+            | Debian / Ubuntu Package  | `haven-server_*_amd64.deb` |
+            | RedHat / Fedora Package  | `haven-server-*-1.x86_64.rpm` |
 
             ### Quick install
 
@@ -237,23 +237,23 @@ jobs:
             **Native Linux Packages (Recommended)**
             *   **Debian / Ubuntu**:
                 ```bash
-                sudo apt install ./ash-server_*_amd64.deb
+                sudo apt install ./haven-server_*_amd64.deb
                 ```
             *   **Fedora / RedHat**:
                 ```bash
-                sudo dnf install ./ash-server-*.x86_64.rpm
+                sudo dnf install ./haven-server-*.x86_64.rpm
                 ```
 
             **Linux Zip Script**
             ```bash
-            unzip ash-server-*-linux-x64.zip -d ash-server
-            sudo bash ash-server/build/linux/install.sh ash-server/ash-server
+            unzip haven-server-*-linux-x64.zip -d haven-server
+            sudo bash haven-server/build/linux/install.sh haven-server/haven-server
             ```
 
             **macOS**
             ```bash
-            unzip ash-server-*-osx-arm64.zip -d ash-server
-            sudo bash ash-server/build/macos/install.sh ash-server/ash-server
+            unzip haven-server-*-osx-arm64.zip -d haven-server
+            sudo bash haven-server/build/macos/install.sh haven-server/haven-server
             ```
 
             After install, open **http://localhost:18799/admin.html** to configure.

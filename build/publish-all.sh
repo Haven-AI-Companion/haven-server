@@ -5,7 +5,7 @@ set -euo pipefail
 
 VERSION="${1:-1.0.0}"
 OUTDIR="build/dist"
-PROJ="ash-server-cs.csproj"
+PROJ="haven-server-cs.csproj"
 
 TARGETS=(
     "win-x64"
@@ -32,7 +32,7 @@ for rid in "${TARGETS[@]}"; do
         -o "$out"
 
     # Ensure executable bit + include install scripts + normalise Plugins casing
-    [[ -f "$out/ash-server" ]] && chmod +x "$out/ash-server"
+    [[ -f "$out/haven-server" ]] && chmod +x "$out/haven-server"
     mkdir -p "$out/build/linux"
     cp "$(dirname "$0")/linux/install.sh" "$out/build/linux/install.sh"
     chmod +x "$out/build/linux/install.sh"
@@ -46,7 +46,7 @@ for rid in "${TARGETS[@]}"; do
     fi
 
     # Zip the output
-    zipname="ash-server-${VERSION}-${rid}.zip"
+    zipname="haven-server-${VERSION}-${rid}.zip"
     zippath="$OUTDIR/$zipname"
     rm -f "$zippath"
     (cd "$out" && zip -r "../../$zipname" .)

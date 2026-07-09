@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Ash Server — Install from source (Linux / macOS)
+# Haven Server — Install from source (Linux / macOS)
 # =============================================================================
 # One-liner install:
-#   git clone https://github.com/ssfdre38/ash-server && sudo bash ash-server/install.sh
+#   git clone https://github.com/ssfdre38/haven-server && sudo bash haven-server/install.sh
 #
 # Or to just run without installing as a service:
-#   git clone https://github.com/ssfdre38/ash-server && bash ash-server/install.sh --run
+#   git clone https://github.com/ssfdre38/haven-server && bash haven-server/install.sh --run
 # =============================================================================
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="/opt/ash-server"
-SERVICE_USER="ash-server"
-SERVICE_NAME="ash-server"
+INSTALL_DIR="/opt/haven-server"
+SERVICE_USER="haven-server"
+SERVICE_NAME="haven-server"
 MODE="${1:-install}"   # install | --run | --uninstall
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info()  { echo -e "${CYAN}[ash-server]${NC} $*"; }
-ok()    { echo -e "${GREEN}[ash-server]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[ash-server]${NC} $*"; }
+info()  { echo -e "${CYAN}[haven-server]${NC} $*"; }
+ok()    { echo -e "${GREEN}[haven-server]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[haven-server]${NC} $*"; }
 die()   { echo -e "${RED}[error]${NC} $*" >&2; exit 1; }
 
 # ── Detect OS and architecture ────────────────────────────────────────────────
@@ -81,22 +81,22 @@ fi
 # ── Build ─────────────────────────────────────────────────────────────────────
 OUT="$REPO_DIR/build/dist/$RID"
 info "Building self-contained binary for $RID…"
-dotnet publish "$REPO_DIR/ash-server-cs.csproj" \
+dotnet publish "$REPO_DIR/haven-server-cs.csproj" \
     -c Release \
     -r "$RID" \
     --self-contained true \
     -p:PublishSingleFile=true \
     -p:EnableCompressionInSingleFile=true \
     -o "$OUT"
-BINARY="$OUT/ash-server"
+BINARY="$OUT/haven-server"
 chmod +x "$BINARY"
 ok "Build complete: $BINARY"
 
 # ── --run mode: just start in place, no service install ──────────────────────
 if [[ "$MODE" == "--run" ]]; then
-    info "Starting ash-server in the foreground (Ctrl+C to stop)…"
+    info "Starting haven-server in the foreground (Ctrl+C to stop)…"
     cd "$OUT"
-    exec ./ash-server
+    exec ./haven-server
 fi
 
 # ── --uninstall mode ──────────────────────────────────────────────────────────
@@ -105,13 +105,13 @@ if [[ "$MODE" == "--uninstall" ]]; then
     if [[ "$OS" == "Linux" ]]; then
         systemctl stop    "$SERVICE_NAME" 2>/dev/null || true
         systemctl disable "$SERVICE_NAME" 2>/dev/null || true
-        "$INSTALL_DIR/ash-server" uninstall-service 2>/dev/null || true
+        "$INSTALL_DIR/haven-server" uninstall-service 2>/dev/null || true
     elif [[ "$OS" == "Darwin" ]]; then
-        "$INSTALL_DIR/ash-server" uninstall-service 2>/dev/null || true
+        "$INSTALL_DIR/haven-server" uninstall-service 2>/dev/null || true
     fi
-    rm -f "/usr/local/bin/ash-server"
+    rm -f "/usr/local/bin/haven-server"
     warn "Files preserved at $INSTALL_DIR (database, config). Remove manually if needed."
-    ok "Ash Server removed."
+    ok "Haven Server removed."
     exit 0
 fi
 
