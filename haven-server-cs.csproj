@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ash_server_cs</RootNamespace>
-    <AssemblyName>ash-server</AssemblyName>
+    <AssemblyName>haven-server</AssemblyName>
     <!-- Single-file publish defaults (overridable per publish profile) -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>

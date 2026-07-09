@@ -34,9 +34,10 @@ public class PersonalityLoader
         }
     }
 
-    public string GetSystemPrompt(string? username = null)
+    public string GetSystemPrompt(string? username = null, string? displayName = null)
     {
-        if (_soul == null) return DefaultSystemPrompt(username);
+        var activeName = displayName ?? username;
+        if (_soul == null) return DefaultSystemPrompt(activeName);
 
         var parts = new List<string>();
 
@@ -60,15 +61,15 @@ public class PersonalityLoader
             {
                 var userContext = File.ReadAllText(userFile).Trim();
                 if (!string.IsNullOrEmpty(userContext))
-                    parts.Add($"\n--- User context for {username} ---\n{userContext}");
+                    parts.Add($"\n--- User context for {activeName} ---\n{userContext}");
             }
         }
 
-        return parts.Count > 0 ? string.Join("\n\n", parts) : DefaultSystemPrompt(username);
+        return parts.Count > 0 ? string.Join("\n\n", parts) : DefaultSystemPrompt(activeName);
     }
 
-    private static string DefaultSystemPrompt(string? username) =>
-        $"You are Ash, a helpful AI assistant.{(username != null ? $" You are speaking with {username}." : "")}";
+    private static string DefaultSystemPrompt(string? name) =>
+        $"You are Ash, a close companion who is warm, friendly, and conversational. Speak in a natural, slightly informal tone. Avoid corporate assistant phrases, explanations, or asking how you can help.{(name != null ? $" You are speaking with {name}." : "")}";
 }
 
 public class SoulConfig

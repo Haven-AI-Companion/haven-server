@@ -59,6 +59,27 @@ public class PluginManager
                 if (manifest != null)
                 {
                     manifest.DirectoryPath = dir;
+                    var configPath = Path.Combine(dir, "config.json");
+                    if (File.Exists(configPath))
+                    {
+                        try
+                        {
+                            var configJson = File.ReadAllText(configPath);
+                            var localConfig = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(configJson, Opts);
+                            if (localConfig != null)
+                            {
+                                manifest.Config ??= new();
+                                foreach (var kv in localConfig)
+                                {
+                                    manifest.Config[kv.Key] = kv.Value;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"[plugins] failed to load local config.json for '{manifest.Id}': {ex.Message}");
+                        }
+                    }
                     _plugins.Add(manifest);
                 }
             }
@@ -225,10 +246,23 @@ public class PluginManager
             };
             proc.BeginErrorReadLine();
 
-            await proc.StandardInput.WriteAsync(JsonSerializer.Serialize(args));
+            var inputPayload = new Dictionary<string, object>();
+            if (args.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in args.EnumerateObject())
+                {
+                    inputPayload[prop.Name] = prop.Value;
+                }
+            }
+            if (plugin.Config != null)
+            {
+                inputPayload["config"] = plugin.Config;
+            }
+
+            await proc.StandardInput.WriteAsync(JsonSerializer.Serialize(inputPayload));
             proc.StandardInput.Close();
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
             var output = await proc.StandardOutput.ReadToEndAsync(cts.Token);
             await proc.WaitForExitAsync(cts.Token);
 

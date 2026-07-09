@@ -14,3 +14,4 @@ run_out.txt
 wwwroot/uploads/
 build/dist/
 ash_server_test.db*
+/plugins/haven-tools/

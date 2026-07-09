@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ash Chat</title>
+<title>Haven Chat</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <link rel="apple-touch-icon" href="/static/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -60,6 +60,13 @@
   .model-select-wrap::after { content: ''; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--text-muted); pointer-events: none; }
   .model-select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 7px 30px 7px 10px; border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; appearance: none; cursor: pointer; transition: border-color 0.15s; }
   .model-select:hover, .model-select:focus { border-color: var(--accent); outline: none; }
+
+  /* Companion selector */
+  .companion-select-wrap { position: relative; }
+  .companion-select-wrap::after { content: ''; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--text-muted); pointer-events: none; }
+  .companion-select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 7px 30px 7px 10px; border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; appearance: none; cursor: pointer; transition: border-color 0.15s; }
+  .companion-select:hover, .companion-select:focus { border-color: var(--accent); outline: none; }
+  .companion-select option { background: var(--surface); color: var(--text); }
 
   /* New chat button */
   .new-chat-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; margin-top: 12px; background: var(--accent-dim); border: 1px solid var(--accent-glow); color: var(--accent); border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
@@ -315,9 +322,9 @@
 <div id="login-overlay">
   <div class="login-card">
     <div class="login-logo">
-      <div class="login-logo-icon"><img src="/static/icon.png" alt="Ash Server"></div>
+      <div class="login-logo-icon"><img src="/static/haven_logo.png" alt="Haven Server" style="width:100%;height:100%;object-fit:contain;"></div>
       <div>
-        <div class="login-logo-text">Ash</div>
+        <div class="login-logo-text">Haven</div>
         <div class="login-logo-sub">Sign in to continue</div>
       </div>
     </div>
@@ -347,8 +354,8 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-logo">
-        <div class="sidebar-logo-icon"><img src="/static/icon.png" alt="Ash" style="width:100%;height:100%;object-fit:contain;"></div>
-        <span class="sidebar-logo-text">Ash</span>
+        <div class="sidebar-logo-icon"><img src="/static/haven_logo.png" alt="Haven" style="width:100%;height:100%;object-fit:contain;"></div>
+        <span class="sidebar-logo-text">Haven</span>
         <span class="sidebar-logo-badge" id="version-badge">v2</span>
       </div>
       <div class="model-select-wrap">
@@ -360,6 +367,14 @@
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         New conversation
       </button>
+    </div>
+    <div class="sidebar-section-label">Active Companion</div>
+    <div style="padding: 0 16px 12px 16px;">
+      <div class="companion-select-wrap">
+        <select class="companion-select" id="companion-select" onchange="onCompanionChange()">
+          <option value="">Default (Ash)</option>
+        </select>
+      </div>
     </div>
     <div class="sidebar-section-label">Conversations</div>
     <div class="sidebar-search">
@@ -392,7 +407,7 @@
       </button>
       <div class="status-dot" id="status-dot"></div>
       <div>
-        <div class="header-title" id="chat-title">Ash</div>
+        <div class="header-title" id="chat-title">Haven</div>
         <div class="header-subtitle" id="chat-model-label">Select a model</div>
       </div>
       <div class="header-actions">
@@ -418,8 +433,8 @@
       <div class="messages-inner" id="messages-inner">
         <div class="welcome" id="welcome-screen">
           <div class="welcome-icon">🌸</div>
-          <div class="welcome-title">Hey, I'm Ash</div>
-          <div class="welcome-sub">Your local AI assistant. Ask me anything — I'm running entirely on your machine.</div>
+          <div class="welcome-title">Hey, I'm your Companion</div>
+          <div class="welcome-sub">Your local AI companion. Ask me anything — running entirely on your machine.</div>
           <div class="welcome-chips">
             <div class="chip" onclick="quickPrompt('Explain how transformers work')">Explain transformers</div>
             <div class="chip" onclick="quickPrompt('Write a Python function to sort a list of dicts')">Python code</div>
@@ -439,7 +454,7 @@
           <button class="attach-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach file">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12.5 6.5l-6 6a3.5 3.5 0 01-4.95-4.95l6-6a2 2 0 012.83 2.83l-6 6a.5.5 0 01-.71-.71l5.3-5.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <textarea class="input-field" id="input-field" placeholder="Message Ash…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <textarea class="input-field" id="input-field" placeholder="Message Companion…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
           <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14L14 8 2 2v4.5l8 1.5-8 1.5V14z" fill="currentColor"/></svg>
           </button>
@@ -499,9 +514,9 @@
       <div class="settings-section" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
         <div class="settings-label">Mobile Companion</div>
         <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:8px;">
-          Connect the PocketAsh mobile app to chat on your device.
+          Connect the Haven mobile app to chat on your device.
         </div>
-        <button class="save-btn" style="background:var(--accent); color:#fff; border:none;" onclick="showMobilePairingModal()">Connect PocketAsh</button>
+        <button class="save-btn" style="background:var(--accent); color:#fff; border:none;" onclick="showMobilePairingModal()">Connect Haven Mobile</button>
       </div>
     </div>
 
@@ -524,12 +539,12 @@
 <div class="modal-overlay" id="mobile-pair-modal" style="display:none; z-index:10000;" onclick="closeMobilePairingOnBg(event)">
   <div class="modal" style="max-width:440px; text-align:center;">
     <div class="modal-header">
-      <span class="modal-title">Connect PocketAsh</span>
+      <span class="modal-title">Connect Haven Mobile</span>
       <button class="modal-close" onclick="closeMobilePairingModal()">×</button>
     </div>
     <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
       <p style="font-size:13px; color:var(--text-muted); text-align:left; margin:0;">
-        Scan the QR code with PocketAsh or enter the pairing details manually in the app to establish a secure connection.
+        Scan the QR code with Haven or enter the pairing details manually in the app to establish a secure connection.
       </p>
       
       <div style="display:flex; flex-direction:column; align-items:center; gap:16px; background:var(--bg); padding:16px; border-radius:8px; border:1px solid var(--border);">
@@ -696,6 +711,7 @@ async function initApp() {
   document.getElementById('user-avatar').textContent = currentUser.username[0].toUpperCase();
   if (currentUser.is_admin) document.getElementById('admin-btn').style.display = '';
   loadModels();
+  loadCompanions();
   loadConversations();
   connectWebSocket();
   document.getElementById('input-field').addEventListener('input', updateSendBtn);
@@ -942,7 +958,10 @@ function sendMessage() {
   scrollBottom();
 
   // Send: include file content appended to message for AI context
-  const fullContent = fileContext ? (text + fileContext) : text;
+  let fullContent = fileContext ? (text + fileContext) : text;
+  if (selectedCompanion && selectedCompanion.systemPrompt) {
+    fullContent = `${selectedCompanion.systemPrompt}\n\n${currentUser?.username || 'user'}: ${fullContent}`;
+  }
   const agentMode = document.getElementById('agent-mode-toggle')?.checked || false;
   const payload = { content: fullContent, model: selectedModel, conversation_id: activeConvId, agent_mode: agentMode };
   if (imageBase64List.length > 0) payload.images = imageBase64List;
@@ -973,9 +992,13 @@ function appendMessage(role, content, streaming, images, timestamp) {
   const row = document.createElement('div');
   row.className = `msg-row ${role}`;
 
-  const avatarInit = role === 'assistant' ? '🌸' : (currentUser?.username?.[0]?.toUpperCase() || 'U');
+  const avatarInit = role === 'assistant' 
+    ? (selectedCompanion ? selectedCompanion.name[0].toUpperCase() : '🌸') 
+    : (currentUser?.username?.[0]?.toUpperCase() || 'U');
   const avatarClass = role === 'assistant' ? 'ash' : 'user-av';
-  const name = role === 'assistant' ? 'Ash' : (currentUser?.username || 'You');
+  const name = role === 'assistant' 
+    ? (selectedCompanion ? selectedCompanion.name : 'Ash') 
+    : (currentUser?.username || 'You');
   const ts = parseSqliteDate(timestamp) || new Date();
   const time = ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
 
@@ -1528,6 +1551,46 @@ function copyPairingCode() {
   if (!pairingCode) return;
   navigator.clipboard.writeText(pairingCode);
   toast('Pairing code copied to clipboard!', 'success');
+}
+
+let companions = [];
+let selectedCompanion = null;
+
+async function loadCompanions() {
+  const sel = document.getElementById('companion-select');
+  try {
+    const res = await fetch('/api/companions', { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) throw new Error();
+    companions = await res.json();
+    sel.innerHTML = '<option value="">Default (Ash)</option>';
+    companions.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.textContent = c.name;
+      sel.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("Failed to load companions:", err);
+  }
+}
+
+function onCompanionChange() {
+  const name = document.getElementById('companion-select').value;
+  selectedCompanion = companions.find(c => c.name === name) || null;
+  
+  const chatTitle = document.getElementById('chat-title');
+  const welcomeTitle = document.querySelector('.welcome-title');
+  const inputField = document.getElementById('input-field');
+  
+  if (selectedCompanion) {
+    if (chatTitle) chatTitle.textContent = selectedCompanion.name;
+    if (welcomeTitle) welcomeTitle.textContent = `Hey, I'm ${selectedCompanion.name}`;
+    if (inputField) inputField.placeholder = `Message ${selectedCompanion.name}…`;
+  } else {
+    if (chatTitle) chatTitle.textContent = 'Haven';
+    if (welcomeTitle) welcomeTitle.textContent = "Hey, I'm Ash";
+    if (inputField) inputField.placeholder = 'Message Ash…';
+  }
 }
 </script>
 </body>

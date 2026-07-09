@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.RateLimiting;
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
@@ -6,6 +7,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using AshServer.AI;
+using AshServer.Models;
 using AshServer.Auth;
 using AshServer.Chat;
 using AshServer.Data;
@@ -82,7 +84,7 @@ public class Program
         }
 
         // ── Native service hosting (auto-detects OS) ─────────────────────────
-        builder.Host.UseWindowsService(opts => opts.ServiceName = "ash-server");
+        builder.Host.UseWindowsService(opts => opts.ServiceName = "haven-server");
         builder.Host.UseSystemd();
 
         // ── Config ──────────────────────────────────────────────────────────
@@ -187,7 +189,24 @@ public class Program
         }
 
         // ── Services ────────────────────────────────────────────────────────
-        var dbPath = builder.Configuration["DatabasePath"] ?? "ash_server.db";
+        var dbPath = builder.Configuration["DatabasePath"] ?? "haven_server.db";
+        if (dbPath == "haven_server.db")
+        {
+            var oldDb = "ash_server.db";
+            if (!File.Exists(dbPath) && File.Exists(oldDb))
+            {
+                try
+                {
+                    File.Copy(oldDb, dbPath);
+                    Console.WriteLine("[startup] Migrated database from 'ash_server.db' to 'haven_server.db'.");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[startup] Failed to migrate database: {ex.Message}");
+                    dbPath = oldDb; // Fallback
+                }
+            }
+        }
         var db = new Database(dbPath);
         db.Initialize();
         builder.Services.AddSingleton(db);
@@ -200,7 +219,7 @@ public class Program
             return;
         }
 
-        var personalityDir = builder.Configuration["PersonalityDir"] ?? "personality";
+        var personalityDir = builder.Configuration["PersonalityDir"] ?? builder.Configuration["personality:path"] ?? "personality";
         var personality = new PersonalityLoader(personalityDir);
         personality.Load();
         builder.Services.AddSingleton(personality);
@@ -381,6 +400,200 @@ public class Program
             await grid.HandleWorkerConnectionAsync(webSocket, ctx);
         });
 
+        // ── Voice Call WebSocket endpoint ────────────────────────────────────
+        // Protocol: 1) Client sends configuration handshake {"token":"...", "systemPrompt":"...", "voiceId":"..."}
+        //           2) Client sends binary WAV audio chunks
+        //           3) Server responds with transcription {"type":"transcription","text":"..."}
+        //              then companion text reply {"type":"speech_text","text":"..."}
+        //              then binary WAV audio bytes for TTS
+        app.Map("/ws/voice/{characterId}", async (HttpContext ctx, string characterId, BackendManager backends, IConfiguration config) =>
+        {
+            if (!ctx.WebSockets.IsWebSocketRequest) { ctx.Response.StatusCode = 400; return; }
+
+            var requireAuth = builder.Configuration.GetValue("RequireAuth", true);
+            var ws = await ctx.WebSockets.AcceptWebSocketAsync();
+
+            // ── Handshake (First message) ──
+            var firstMsgBuf = new byte[8192];
+            using var firstMsgMs = new MemoryStream();
+            WebSocketReceiveResult firstMsgResult;
+            do
+            {
+                firstMsgResult = await ws.ReceiveAsync(firstMsgBuf, CancellationToken.None);
+                if (firstMsgResult.MessageType == WebSocketMessageType.Close) return;
+                firstMsgMs.Write(firstMsgBuf, 0, firstMsgResult.Count);
+            } while (!firstMsgResult.EndOfMessage);
+
+            string? jwtToken = null;
+            string systemPrompt = "You are a helpful assistant.";
+            string voiceId = "en_US-amy-medium";
+            string characterName = "Companion";
+
+            try
+            {
+                using var doc = JsonDocument.Parse(firstMsgMs.ToArray());
+                if (doc.RootElement.TryGetProperty("token", out var t)) jwtToken = t.GetString();
+                if (doc.RootElement.TryGetProperty("systemPrompt", out var sp)) systemPrompt = sp.GetString() ?? systemPrompt;
+                if (doc.RootElement.TryGetProperty("voiceId", out var vi)) voiceId = vi.GetString() ?? voiceId;
+                if (doc.RootElement.TryGetProperty("characterName", out var cn)) characterName = cn.GetString() ?? characterName;
+            }
+            catch { }
+
+            // ── Auth Validation ──
+            if (requireAuth)
+            {
+                if (string.IsNullOrEmpty(jwtToken))
+                {
+                    await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "unauthorized", CancellationToken.None);
+                    return;
+                }
+                try
+                {
+                    var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+                    tokenHandler.ValidateToken(jwtToken, new TokenValidationParameters
+                    {
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+                        ValidateIssuer = false,
+                        ValidateAudience = false,
+                    }, out _);
+                }
+                catch
+                {
+                    await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "unauthorized", CancellationToken.None);
+                    return;
+                }
+            }
+
+            // ── Setup paths ──
+            var whisperExe = @"C:\Users\admin\whisper-cpp\Release\whisper-cli.exe";
+            var whisperModel = @"C:\Users\admin\whisper-cpp\models\ggml-base.en.bin";
+            var piperExe = @"C:\Users\admin\piper\piper\piper.exe";
+            var piperModel = $@"C:\Users\admin\piper\piper\models\{voiceId}.onnx";
+            var piperConfig = $@"C:\Users\admin\piper\piper\models\{voiceId}.onnx.json";
+
+            if (!File.Exists(piperModel))
+            {
+                piperModel = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx";
+                piperConfig = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx.json";
+            }
+
+            var modelId = config["DefaultModel"] ?? "default";
+            var history = new List<ChatMessage> { new ChatMessage("system", systemPrompt) };
+
+            // ── Main Receive & Process Loop ──
+            while (ws.State == WebSocketState.Open)
+            {
+                using var audioMs = new MemoryStream();
+                var recvBuf = new byte[8192];
+                WebSocketReceiveResult recvResult;
+                do
+                {
+                    recvResult = await ws.ReceiveAsync(recvBuf, CancellationToken.None);
+                    if (recvResult.MessageType == WebSocketMessageType.Close) return;
+                    if (recvResult.MessageType == WebSocketMessageType.Binary)
+                        audioMs.Write(recvBuf, 0, recvResult.Count);
+                } while (!recvResult.EndOfMessage);
+
+                if (audioMs.Length == 0) continue;
+
+                var tmpWav = Path.Combine(Path.GetTempPath(), $"voice_{Guid.NewGuid():N}.wav");
+                await File.WriteAllBytesAsync(tmpWav, audioMs.ToArray());
+
+                try
+                {
+                    // ── 1. Transcription ──
+                    string transcription = "";
+                    if (File.Exists(whisperExe) && File.Exists(whisperModel))
+                    {
+                        var whisperProc = new Process
+                        {
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = whisperExe,
+                                Arguments = $"-m \"{whisperModel}\" -f \"{tmpWav}\" --output-txt --no-timestamps -l en",
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            }
+                        };
+                        whisperProc.Start();
+                        var whisperOut = await whisperProc.StandardOutput.ReadToEndAsync();
+                        await whisperProc.WaitForExitAsync();
+                        transcription = whisperOut.Trim().Split('\n').LastOrDefault(l => l.Trim().Length > 0) ?? "";
+                        transcription = System.Text.RegularExpressions.Regex.Replace(transcription, @"\[.*?\]", "").Trim();
+                    }
+                    else
+                    {
+                        transcription = "[Whisper not available]";
+                    }
+
+                    // Stream transcription to client
+                    var transcriptionMsg = JsonSerializer.Serialize(new { type = "transcription", text = transcription });
+                    await ws.SendAsync(
+                        Encoding.UTF8.GetBytes(transcriptionMsg),
+                        WebSocketMessageType.Text, true, CancellationToken.None);
+
+                    if (string.IsNullOrWhiteSpace(transcription)) continue;
+
+                    history.Add(new ChatMessage("user", transcription));
+                    if (history.Count > 40)
+                    {
+                        history.RemoveRange(1, 2);
+                    }
+
+                    // ── 2. LLM response ──
+                    var replyBuilder = new StringBuilder();
+                    await foreach (var token in backends.StreamChat(modelId, history))
+                    {
+                        replyBuilder.Append(token);
+                    }
+
+                    var replyText = replyBuilder.ToString().Trim();
+                    replyText = System.Text.RegularExpressions.Regex.Replace(replyText, @"<thought>[\s\S]*?</thought>", "").Trim();
+
+                    history.Add(new ChatMessage("assistant", replyText));
+
+                    // Stream companion text reply to client
+                    var speechMsg = JsonSerializer.Serialize(new { type = "speech_text", text = replyText });
+                    await ws.SendAsync(
+                        Encoding.UTF8.GetBytes(speechMsg),
+                        WebSocketMessageType.Text, true, CancellationToken.None);
+
+                    // ── 3. TTS synthesis ──
+                    if (File.Exists(piperExe) && File.Exists(piperModel) && replyText.Length > 0)
+                    {
+                        var ttsOut = Path.Combine(Path.GetTempPath(), $"tts_{Guid.NewGuid():N}.wav");
+                        var escaped = replyText.Replace("\"", "\\\"").Replace("\n", " ");
+                        var piperProc = new Process
+                        {
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = "cmd.exe",
+                                Arguments = $"/c echo {escaped} | \"{piperExe}\" -m \"{piperModel}\" -c \"{piperConfig}\" -f \"{ttsOut}\"",
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            }
+                        };
+                        piperProc.Start();
+                        await piperProc.WaitForExitAsync();
+
+                        if (File.Exists(ttsOut))
+                        {
+                            var audioBytes = await File.ReadAllBytesAsync(ttsOut);
+                            await ws.SendAsync(audioBytes, WebSocketMessageType.Binary, true, CancellationToken.None);
+                            File.Delete(ttsOut);
+                        }
+                    }
+                }
+                finally
+                {
+                    if (File.Exists(tmpWav)) File.Delete(tmpWav);
+                }
+            }
+        });
+
         // ── Fallback: serve chat.html for /chat and / ───────────────────────
         app.MapFallbackToFile("index.html");
 
@@ -403,7 +616,7 @@ public class Program
         }
 
         Console.WriteLine($"""
-            🌸 Ash Server (C#) starting on http://{host}:{port}
+            🌸 Haven Server (C#) starting on http://{host}:{port}
                Database: {dbPath}
                Personality: {personalityDir}
             """);

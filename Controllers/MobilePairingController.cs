@@ -127,6 +127,13 @@ public class MobilePairingController : ControllerBase
         // 4. Issue a long-lived JWT token (365 days / 1 year)
         var token = GenerateLongLivedToken(user);
         
+        var deviceName = req.DeviceName?.Trim();
+        if (string.IsNullOrEmpty(deviceName))
+        {
+            deviceName = "Haven Mobile";
+        }
+        await _db.AddPairedDevice(token, user.Id, deviceName);
+        
         _log.LogInformation("Successfully paired mobile device for user '{Username}' (ID: {UserId})", user.Username, user.Id);
 
         return Ok(new

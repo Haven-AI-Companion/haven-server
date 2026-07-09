@@ -11,6 +11,7 @@ public class PluginManifest
     [JsonPropertyName("description")] public string Description { get; set; } = "";
     [JsonPropertyName("enabled")]     public bool   Enabled     { get; set; } = true;
     [JsonPropertyName("builtin")]     public bool   Builtin     { get; set; } = false;
+    [JsonPropertyName("config")]      public Dictionary<string, JsonElement>? Config { get; set; } = [];
     [JsonPropertyName("tools")]       public List<PluginTool> Tools { get; set; } = [];
 
     [JsonIgnore] public string DirectoryPath { get; set; } = "";

@@ -183,6 +183,15 @@ public class Database
                 expires_at  TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS paired_devices (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                token       TEXT NOT NULL,
+                user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                device_name TEXT NOT NULL,
+                paired_at   TEXT NOT NULL,
+                last_seen   TEXT NOT NULL
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
                 content,
                 conversation_id UNINDEXED,
@@ -345,9 +354,9 @@ public class Database
 
     // ── Conversations ──────────────────────────────────────────────────────
 
-    public Task<string> CreateConversation(int userId, string title = "New Conversation") => Task.Run(() =>
+    public Task<string> CreateConversation(int userId, string title = "New Conversation", string? customId = null) => Task.Run(() =>
     {
-        var id = Guid.NewGuid().ToString();
+        var id = customId ?? Guid.NewGuid().ToString();
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "INSERT INTO conversations (id, user_id, title) VALUES ($id, $u, $t)";
@@ -1112,5 +1121,66 @@ public class Database
         upd.Parameters.AddWithValue("$code", code);
         upd.ExecuteNonQuery();
         return (uid, prov);
+    });
+
+    public Task AddPairedDevice(string token, int userId, string deviceName) => Task.Run(() =>
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        var sql = "INSERT INTO paired_devices (token, user_id, device_name, paired_at, last_seen) VALUES (@token, @userId, @deviceName, @now, @now)";
+        using var cmd = new SqliteCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@token", token);
+        cmd.Parameters.AddWithValue("@userId", userId);
+        cmd.Parameters.AddWithValue("@deviceName", deviceName);
+        cmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("o"));
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<List<object>> GetPairedDevices() => Task.Run(() =>
+    {
+        var list = new List<object>();
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        var sql = @"
+            SELECT pd.id, pd.token, pd.user_id, pd.device_name, pd.paired_at, pd.last_seen, u.username 
+            FROM paired_devices pd
+            JOIN users u ON pd.user_id = u.id
+            ORDER BY pd.paired_at DESC";
+        using var cmd = new SqliteCommand(sql, conn);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            list.Add(new {
+                id = reader.GetInt32(0),
+                token = reader.GetString(1),
+                userId = reader.GetInt32(2),
+                deviceName = reader.GetString(3),
+                pairedAt = reader.GetString(4),
+                lastSeen = reader.GetString(5),
+                username = reader.GetString(6)
+            });
+        }
+        return list;
+    });
+
+    public Task DeletePairedDevice(int id) => Task.Run(() =>
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        var sql = "DELETE FROM paired_devices WHERE id = @id";
+        using var cmd = new SqliteCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task UpdatePairedDeviceLastSeen(string token) => Task.Run(() =>
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        var sql = "UPDATE paired_devices SET last_seen = @now WHERE token = @token";
+        using var cmd = new SqliteCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@token", token);
+        cmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("o"));
+        cmd.ExecuteNonQuery();
     });
 }

@@ -93,6 +93,17 @@ public class ChatHandler
                     else if (root.TryGetProperty("message", out var mg)) userMessage = mg.GetString()?.Trim() ?? "";
                     var modelId = (root.TryGetProperty("model", out var m) ? m.GetString() : null) ?? _config["DefaultModel"] ?? "";
 
+                    var customSystemPrompt = "";
+                    if (userMessage.StartsWith("You are ") && userMessage.Contains("\n\n"))
+                    {
+                        int lastDoubleNewline = userMessage.LastIndexOf("\n\n");
+                        if (lastDoubleNewline > 0)
+                        {
+                            customSystemPrompt = userMessage.Substring(0, lastDoubleNewline).Trim();
+                            userMessage = userMessage.Substring(lastDoubleNewline + 2).Trim();
+                        }
+                    }
+
                     // Gate: agent_mode
                     var agentMode = root.TryGetProperty("agent_mode", out var am) && am.GetBoolean();
                     if (agentMode && !HasPerm(AshServer.Auth.Permissions.AgentMode))
@@ -163,7 +174,9 @@ public class ChatHandler
 
                     await SendJson(ws, new { type = "typing", content = true }, cts.Token);
 
-                    var systemPrompt = _personality.GetSystemPrompt(username);
+                    var systemPrompt = !string.IsNullOrEmpty(customSystemPrompt)
+                        ? customSystemPrompt
+                        : _personality.GetSystemPrompt(username);
                     var messages = new List<ChatMessage> { new("system", systemPrompt) };
                     // Don't pass images on history replay — only the current message
                     lock (history)

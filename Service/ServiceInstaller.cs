@@ -11,9 +11,9 @@ namespace AshServer.Service;
 /// </summary>
 public static class ServiceInstaller
 {
-    private const string ServiceName  = "ash-server";
-    private const string DisplayName  = "Ash Server";
-    private const string Description  = "Ash AI server — REST/WebSocket API, Discord bot, MCP integration.";
+    private const string ServiceName  = "haven-server";
+    private const string DisplayName  = "Haven Server";
+    private const string Description  = "Haven AI server — REST/WebSocket API, Discord bot, MCP integration.";
 
     // Resolved once at call time so install always points at the real binary.
     private static string ExePath => Process.GetCurrentProcess().MainModule?.FileName
@@ -23,7 +23,7 @@ public static class ServiceInstaller
 
     public static void Install()
     {
-        Console.WriteLine($"[ash-server] Installing service on {OsName()}…");
+        Console.WriteLine($"[haven-server] Installing service on {OsName()}…");
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             InstallWindows();
@@ -37,7 +37,7 @@ public static class ServiceInstaller
 
     public static void Uninstall()
     {
-        Console.WriteLine($"[ash-server] Uninstalling service on {OsName()}…");
+        Console.WriteLine($"[haven-server] Uninstalling service on {OsName()}…");
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             UninstallWindows();
@@ -82,7 +82,7 @@ public static class ServiceInstaller
             $"failure {ServiceName} reset= 86400 " +
             $"actions= restart/5000/restart/5000/restart/5000");
 
-        Console.WriteLine($"[ash-server] Service installed. Start with:  sc.exe start {ServiceName}");
+        Console.WriteLine($"[haven-server] Service installed. Start with:  sc.exe start {ServiceName}");
     }
 
     private static void UninstallWindows()
@@ -90,7 +90,7 @@ public static class ServiceInstaller
         RequireAdmin();
         Run("sc.exe", $"stop {ServiceName}");
         Run("sc.exe", $"delete {ServiceName}");
-        Console.WriteLine($"[ash-server] Service removed.");
+        Console.WriteLine($"[haven-server] Service removed.");
     }
 
     // ── Linux (systemd) ───────────────────────────────────────────────────
@@ -101,7 +101,7 @@ public static class ServiceInstaller
     {
         RequireRoot();
 
-        var workDir = Path.GetDirectoryName(ExePath) ?? "/opt/ash-server";
+        var workDir = Path.GetDirectoryName(ExePath) ?? "/opt/haven-server";
         var unit = $"""
 [Unit]
 Description={Description}
@@ -114,7 +114,7 @@ ExecStart={ExePath}
 WorkingDirectory={workDir}
 Restart=on-failure
 RestartSec=5
-User=ash-server
+User=haven-server
 # Uncomment if you want a dedicated user:
 # DynamicUser=true
 
@@ -131,9 +131,9 @@ WantedBy=multi-user.target
         Run("systemctl", "daemon-reload");
         Run("systemctl", $"enable {ServiceName}");
 
-        Console.WriteLine($"[ash-server] systemd unit installed at {SystemdUnitPath}");
-        Console.WriteLine($"[ash-server] Start with:  sudo systemctl start {ServiceName}");
-        Console.WriteLine($"[ash-server] Logs  with:  journalctl -u {ServiceName} -f");
+        Console.WriteLine($"[haven-server] systemd unit installed at {SystemdUnitPath}");
+        Console.WriteLine($"[haven-server] Start with:  sudo systemctl start {ServiceName}");
+        Console.WriteLine($"[haven-server] Logs  with:  journalctl -u {ServiceName} -f");
     }
 
     private static void UninstallLinux()
@@ -143,7 +143,7 @@ WantedBy=multi-user.target
         Run("systemctl", $"disable {ServiceName}");
         if (File.Exists(SystemdUnitPath)) File.Delete(SystemdUnitPath);
         Run("systemctl", "daemon-reload");
-        Console.WriteLine($"[ash-server] systemd unit removed.");
+        Console.WriteLine($"[haven-server] systemd unit removed.");
     }
 
     // ── macOS (launchd) ──────────────────────────────────────────────────
@@ -155,7 +155,7 @@ WantedBy=multi-user.target
     {
         RequireRoot();
 
-        var workDir = Path.GetDirectoryName(ExePath) ?? "/usr/local/opt/ash-server";
+        var workDir = Path.GetDirectoryName(ExePath) ?? "/usr/local/opt/haven-server";
         var logDir  = $"/var/log/{ServiceName}";
         Directory.CreateDirectory(logDir);
 
@@ -203,9 +203,9 @@ WantedBy=multi-user.target
         Run("chmod", $"644 {PlistPath}");
         Run("launchctl", $"load -w {PlistPath}");
 
-        Console.WriteLine($"[ash-server] launchd daemon installed at {PlistPath}");
-        Console.WriteLine($"[ash-server] Start with:  sudo launchctl start {LaunchDaemonLabel}");
-        Console.WriteLine($"[ash-server] Logs  with:  tail -f {logDir}/stdout.log");
+        Console.WriteLine($"[haven-server] launchd daemon installed at {PlistPath}");
+        Console.WriteLine($"[haven-server] Start with:  sudo launchctl start {LaunchDaemonLabel}");
+        Console.WriteLine($"[haven-server] Logs  with:  tail -f {logDir}/stdout.log");
     }
 
     private static void UninstallMacOs()
@@ -213,7 +213,7 @@ WantedBy=multi-user.target
         RequireRoot();
         Run("launchctl", $"unload -w {PlistPath}");
         if (File.Exists(PlistPath)) File.Delete(PlistPath);
-        Console.WriteLine($"[ash-server] launchd daemon removed.");
+        Console.WriteLine($"[haven-server] launchd daemon removed.");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

@@ -59,7 +59,11 @@ public class OllamaBackend : IAiBackend
             messages = messages.Select(m => m.Images?.Count > 0
                 ? (object)new { role = m.Role, content = m.Content, images = m.Images }
                 : new { role = m.Role, content = m.Content }),
-            stream = true
+            stream = true,
+            options = new
+            {
+                stop = BackendManager.GetStopSequences(messages)
+            }
         });
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/api/chat")
@@ -101,7 +105,11 @@ public class OllamaBackend : IAiBackend
             model,
             messages = messages.Select(m => new { role = m.Role, content = m.Content }),
             tools,
-            stream = false
+            stream = false,
+            options = new
+            {
+                stop = BackendManager.GetStopSequences(messages)
+            }
         });
 
         var content = new StringContent(payload, Encoding.UTF8, "application/json");
@@ -147,7 +155,8 @@ public class OpenAiCompatBackend : IAiBackend
         {
             model,
             messages = messages.Select(m => new { role = m.Role, content = m.Content }),
-            stream = true
+            stream = true,
+            stop = BackendManager.GetStopSequences(messages)
         });
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
@@ -163,25 +172,70 @@ public class OpenAiCompatBackend : IAiBackend
         using var reader = new StreamReader(stream);
 
         string? line;
+        bool inReasoning = false;
         while ((line = await reader.ReadLineAsync(ct)) != null && !ct.IsCancellationRequested)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
             if (line.StartsWith("data: "))
             {
                 var data = line[6..].Trim();
-                if (data == "[DONE]") yield break;
+                if (data == "[DONE]")
+                {
+                    if (inReasoning)
+                    {
+                        yield return "</thought>\n";
+                    }
+                    yield break;
+                }
                 JsonDocument doc;
                 try { doc = JsonDocument.Parse(data); }
                 catch { continue; }
                 using (doc)
                 {
-                    var text = doc.RootElement
+                    var delta = doc.RootElement
                         .GetProperty("choices")[0]
-                        .GetProperty("delta")
-                        .TryGetProperty("content", out var c) ? c.GetString() : null;
-                    if (!string.IsNullOrEmpty(text)) yield return text;
+                        .GetProperty("delta");
+
+                    string? reasoning = delta.TryGetProperty("reasoning_content", out var r) ? r.GetString() : null;
+                    string? content = delta.TryGetProperty("content", out var c) ? c.GetString() : null;
+
+                    if (!string.IsNullOrEmpty(reasoning))
+                    {
+                        if (!inReasoning)
+                        {
+                            inReasoning = true;
+                            yield return "<thought>" + reasoning;
+                        }
+                        else
+                        {
+                            yield return reasoning;
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(content))
+                    {
+                        if (inReasoning)
+                        {
+                            inReasoning = false;
+                            if (content.TrimStart().StartsWith("<thought>"))
+                            {
+                                yield return content;
+                            }
+                            else
+                            {
+                                yield return "</thought>\n" + content;
+                            }
+                        }
+                        else
+                        {
+                            yield return content;
+                        }
+                    }
                 }
             }
+        }
+        if (inReasoning)
+        {
+            yield return "</thought>\n";
         }
     }
 
@@ -192,7 +246,8 @@ public class OpenAiCompatBackend : IAiBackend
             model,
             messages = messages.Select(m => new { role = m.Role, content = m.Content }),
             tools,
-            stream = false
+            stream = false,
+            stop = BackendManager.GetStopSequences(messages)
         });
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
@@ -639,6 +694,76 @@ public class BackendManager
         var (backend, modelName) = await Resolve(modelId);
         await foreach (var token in backend.StreamChat(modelName, messages).WithCancellation(ct))
             yield return token;
+    }
+
+    internal static List<string> GetStopSequences(List<ChatMessage> messages)
+    {
+        var stops = new List<string>
+        {
+            "<|im_end|>",
+            "<|im_start|>",
+            "<end_of_turn>",
+            "<start_of_turn>",
+            "<|eot_id|>",
+            "\nuser",
+            "\nassistant",
+            "\nsystem",
+            "\nUser:",
+            "\nAssistant:",
+            "\nSystem:",
+            "\nuser:",
+            "\nassistant:"
+        };
+
+        foreach (var msg in messages)
+        {
+            if (string.IsNullOrEmpty(msg.Content)) continue;
+
+            // Pattern 1: User name prefix in chat lines, e.g. "Daniel: hey"
+            var lines = msg.Content.Split('\n');
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim();
+                var colonIdx = trimmed.IndexOf(':');
+                if (colonIdx > 0 && colonIdx < 30) // limit name length to 30 chars
+                {
+                    var nameCandidate = trimmed.Substring(0, colonIdx).Trim();
+                    // Verify it looks like a valid name (alphanumeric/spaces/dashes)
+                    if (System.Text.RegularExpressions.Regex.IsMatch(nameCandidate, @"^[a-zA-Z0-9_\-\s]+$"))
+                    {
+                        var stopSeq = nameCandidate + ":";
+                        if (!stops.Contains(stopSeq)) stops.Add(stopSeq);
+                        var stopSeqNl = "\n" + stopSeq;
+                        if (!stops.Contains(stopSeqNl)) stops.Add(stopSeqNl);
+                    }
+                }
+            }
+
+            // Pattern 2: System prompt patterns, e.g. "The user's name is Daniel.", "You are speaking with Daniel.", "Roleplay as Nova.", "You are Nova."
+            if (msg.Role == "system" || msg.Role == "user")
+            {
+                var matches = System.Text.RegularExpressions.Regex.Matches(msg.Content, 
+                    @"(?:The user's name is|speaking with|speaking to|address the user as|You are|Roleplay as)\s+([a-zA-Z0-9_\-]+)", 
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                
+                foreach (System.Text.RegularExpressions.Match match in matches)
+                {
+                    if (match.Groups.Count > 1)
+                    {
+                        var name = match.Groups[1].Value.Trim();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            var stopSeq = name + ":";
+                            if (!stops.Contains(stopSeq)) stops.Add(stopSeq);
+                            var stopSeqNl = "\n" + stopSeq;
+                            if (!stops.Contains(stopSeqNl)) stops.Add(stopSeqNl);
+                        }
+                    }
+                }
+            }
+        }
+
+        return stops;
     }
 }
 

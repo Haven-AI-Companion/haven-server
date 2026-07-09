@@ -194,11 +194,11 @@ public class ConversationsController : ControllerBase
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"# {conv.Title}");
-        sb.AppendLine($"> Exported from Ash Server — {conv.CreatedAt}");
+        sb.AppendLine($"> Exported from Haven Server — {conv.CreatedAt}");
         sb.AppendLine();
         foreach (var m in messages)
         {
-            sb.AppendLine(m.Role == "user" ? "**You:**" : "**Ash:**");
+            sb.AppendLine(m.Role == "user" ? "**You:**" : "**Companion:**");
             sb.AppendLine();
             sb.AppendLine(m.Content);
             sb.AppendLine();
@@ -275,12 +275,23 @@ public class ModelsController : ControllerBase
         Response.Headers["Connection"] = "keep-alive";
 
         var username = User.FindFirstValue(ClaimTypes.Name) ?? "User";
-        var systemPrompt = _personality.GetSystemPrompt(username);
-        
+        var systemPrompt = _personality.GetSystemPrompt(username, req.DisplayName);
+        var promptText = req.Prompt;
+
+        if (promptText.StartsWith("You are ") && promptText.Contains("\n\n"))
+        {
+            int lastDoubleNewline = promptText.LastIndexOf("\n\n");
+            if (lastDoubleNewline > 0)
+            {
+                systemPrompt = promptText.Substring(0, lastDoubleNewline).Trim();
+                promptText = promptText.Substring(lastDoubleNewline + 2).Trim();
+            }
+        }
+
         var messages = new List<ChatMessage>
         {
             new ChatMessage("system", systemPrompt),
-            new ChatMessage("user", req.Prompt, req.Image != null ? new List<string>{ req.Image } : null)
+            new ChatMessage("user", promptText, req.Image != null ? new List<string>{ req.Image } : null)
         };
 
         var responseText = new System.Text.StringBuilder();
@@ -297,8 +308,20 @@ public class ModelsController : ControllerBase
             if (responseText.Length > 0)
             {
                 var userId = UserId;
-                var conversationId = await _db.CreateConversation(userId);
-                await _db.AddMessage(conversationId, "user", req.Prompt);
+                var conversationId = req.ConversationId;
+                if (!string.IsNullOrEmpty(conversationId))
+                {
+                    var existing = await _db.GetConversation(conversationId, userId);
+                    if (existing == null)
+                    {
+                        await _db.CreateConversation(userId, customId: conversationId);
+                    }
+                }
+                else
+                {
+                    conversationId = await _db.CreateConversation(userId);
+                }
+                await _db.AddMessage(conversationId, "user", promptText);
                 await _db.AddMessage(conversationId, "assistant", responseText.ToString());
             }
         }
@@ -317,6 +340,164 @@ public class ModelsController : ControllerBase
             .Where(p => p.Enabled)
             .Select(p => new { p.Id, p.Name, p.Description, tool_count = p.Tools.Count })
     });
+
+    public class ExecuteToolRequest
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("tool")]
+        public string Tool { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonPropertyName("arguments")]
+        public System.Text.Json.JsonElement Arguments { get; set; }
+    }
+
+    [HttpPost("tools/execute")]
+    [Authorize]
+    public async Task<IActionResult> ExecuteToolEndpoint([FromBody] ExecuteToolRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Tool))
+            return BadRequest(new { error = "tool is required" });
+            
+        try
+        {
+            var result = await _plugins.ExecuteTool(req.Tool, req.Arguments);
+            return Ok(new { result });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    public class TtsRequest
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("text")]
+        public string Text { get; set; } = "";
+
+        [System.Text.Json.Serialization.JsonPropertyName("voice")]
+        public string Voice { get; set; } = "en_US-amy-medium";
+    }
+
+    [HttpPost("tts")]
+    [Authorize]
+    public async Task<IActionResult> GenerateTts([FromBody] TtsRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Text))
+            return BadRequest(new { error = "Text is required" });
+
+        try
+        {
+            var filename = $"tts_{Guid.NewGuid().ToString("N")[..12]}.wav";
+            var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadsDir = Path.Combine(webRoot, "uploads");
+            if (!Directory.Exists(uploadsDir))
+                Directory.CreateDirectory(uploadsDir);
+                
+            var outputPath = Path.Combine(uploadsDir, filename);
+
+            var voiceName = req.Voice ?? "en_US-amy-medium";
+            bool isKokoro = voiceName.StartsWith("kokoro_") || 
+                            voiceName.Equals("af_sarah") || 
+                            voiceName.Equals("af_bella") || 
+                            voiceName.Equals("af_nicole") || 
+                            voiceName.Equals("af_sky") || 
+                            voiceName.Equals("am_adam") || 
+                            voiceName.Equals("am_michael") || 
+                            voiceName.Equals("bf_emma") || 
+                            voiceName.Equals("bf_isabella") || 
+                            voiceName.Equals("bm_george") || 
+                            voiceName.Equals("bm_lewis");
+
+            if (isKokoro)
+            {
+                var pythonExe = @"C:\Users\admin\AppData\Local\Python\pythoncore-3.14-64\python.exe";
+                var kokoroScript = @"C:\Users\admin\piper\piper\kokoro_tts.py";
+                
+                if (!System.IO.File.Exists(pythonExe))
+                    return StatusCode(500, new { error = "python.exe was not found on the server." });
+                if (!System.IO.File.Exists(kokoroScript))
+                    return StatusCode(500, new { error = "kokoro_tts.py script was not found on the server." });
+
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = pythonExe,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                };
+                psi.ArgumentList.Add(kokoroScript);
+                psi.ArgumentList.Add("--text");
+                psi.ArgumentList.Add(req.Text);
+                psi.ArgumentList.Add("--voice");
+                psi.ArgumentList.Add(voiceName);
+                psi.ArgumentList.Add("--output");
+                psi.ArgumentList.Add(outputPath);
+
+                using (var process = System.Diagnostics.Process.Start(psi))
+                {
+                    if (process == null)
+                        throw new Exception("Failed to start Kokoro TTS process.");
+
+                    var stderr = await process.StandardError.ReadToEndAsync();
+                    await process.WaitForExitAsync();
+
+                    if (process.ExitCode != 0)
+                    {
+                        throw new Exception($"Kokoro TTS process exited with code {process.ExitCode}. Stderr: {stderr}");
+                    }
+                }
+            }
+            else
+            {
+                var modelPath = $@"C:\Users\admin\piper\piper\models\{voiceName}.onnx";
+                var configPath = $@"C:\Users\admin\piper\piper\models\{voiceName}.onnx.json";
+
+                if (!System.IO.File.Exists(modelPath))
+                {
+                    modelPath = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx";
+                    configPath = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx.json";
+                }
+
+                var piperExe = @"C:\Users\admin\piper\piper\piper.exe";
+                if (!System.IO.File.Exists(piperExe))
+                    return StatusCode(500, new { error = "piper.exe was not found on the server." });
+
+                var escapedText = req.Text.Replace("\"", "\"\"");
+                
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c chcp 65001 >nul && echo {escapedText} | \"{piperExe}\" -m \"{modelPath}\" -c \"{configPath}\" -f \"{outputPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true
+                };
+
+                using (var process = System.Diagnostics.Process.Start(psi))
+                {
+                    if (process == null)
+                        throw new Exception("Failed to start TTS generator process.");
+
+                    var stderr = await process.StandardError.ReadToEndAsync();
+                    await process.WaitForExitAsync();
+
+                    if (process.ExitCode != 0)
+                    {
+                        throw new Exception($"TTS generation process exited with code {process.ExitCode}. Stderr: {stderr}");
+                    }
+                }
+            }
+
+            if (!System.IO.File.Exists(outputPath))
+                throw new Exception("TTS output file was not created.");
+
+            return Ok(new { url = $"/uploads/{filename}" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
 
     [HttpPost("upload")]
     [Authorize]
@@ -592,6 +773,12 @@ public class AdminController : ControllerBase
         var activeModel  = allModels.Count > 0 ? allModels[0].Name : (_config["DefaultModel"] ?? "");
         var backendName  = allModels.Count > 0 ? allModels[0].BackendName : "none";
 
+        // Query real-time process resources
+        var proc = Process.GetCurrentProcess();
+        var ramUsageMb = Math.Round((double)proc.WorkingSet64 / (1024 * 1024), 2);
+        var threadCount = proc.Threads.Count;
+        var gcMemMb = Math.Round((double)GC.GetTotalMemory(false) / (1024 * 1024), 2);
+
         return Ok(new
         {
             total_users          = totalUsers,
@@ -605,9 +792,28 @@ public class AdminController : ControllerBase
                 backend          = backendName,
                 personality_path = personalityDir,
                 plugins_loaded   = _plugins.LoadedCount,
-                plugins_enabled  = _plugins.EnabledCount
+                plugins_enabled  = _plugins.EnabledCount,
+                ram_usage_mb     = ramUsageMb,
+                threads_count    = threadCount,
+                gc_memory_mb     = gcMemMb
             }
         });
+    }
+
+    [HttpGet("devices")]
+    public async Task<IActionResult> GetPairedDevices()
+    {
+        if (!IsAdmin) return Forbid();
+        var devices = await _db.GetPairedDevices();
+        return Ok(devices);
+    }
+
+    [HttpDelete("devices/{id}")]
+    public async Task<IActionResult> DeletePairedDevice(int id)
+    {
+        if (!IsAdmin) return Forbid();
+        await _db.DeletePairedDevice(id);
+        return Ok(new { ok = true });
     }
 
     [HttpGet("users")]
@@ -956,6 +1162,7 @@ public class AdminController : ControllerBase
         var list = _plugins.Plugins.Select(p => new
         {
             p.Id, p.Name, p.Version, p.Description, p.Enabled, p.Builtin,
+            p.Config,
             tool_count = p.Tools.Count,
             tools = p.Tools.Select(t => new { t.Name, t.Description, handler_type = t.Handler.Type })
         });
@@ -971,6 +1178,30 @@ public class AdminController : ControllerBase
         if (plugin.Builtin) return BadRequest(new { error = "Built-in plugins cannot be toggled" });
         _plugins.SetEnabled(id, !plugin.Enabled);
         return Ok(new { ok = true, id, enabled = plugin.Enabled });
+    }
+
+    [HttpPost("plugins/{id}/config")]
+    public IActionResult SavePluginConfig(string id, [FromBody] Dictionary<string, JsonElement> newConfig)
+    {
+        if (!IsAdmin) return Forbid();
+        var plugin = _plugins.Plugins.FirstOrDefault(p => p.Id == id);
+        if (plugin == null) return NotFound(new { error = "Plugin not found" });
+        if (plugin.Builtin) return BadRequest(new { error = "Built-in plugins cannot be configured" });
+
+        try
+        {
+            var configPath = Path.Combine(plugin.DirectoryPath, "config.json");
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            var jsonString = JsonSerializer.Serialize(newConfig, options);
+            System.IO.File.WriteAllText(configPath, jsonString);
+
+            plugin.Config = newConfig;
+            return Ok(new { ok = true, id, config = newConfig });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to save plugin config: {ex.Message}" });
+        }
     }
 
     [HttpPost("plugins/reload")]
@@ -1894,4 +2125,120 @@ public class ChatRequest
     public string? Image { get; set; }
     public bool Stream { get; set; }
     public string? Model { get; set; }
+    public string? ConversationId { get; set; }
+    public string? DisplayName { get; set; }
+}
+
+// ── Companions endpoint (read folder of companions) ─────────────────────────
+
+[ApiController]
+[Route("api/companions")]
+[Authorize]
+public class CompanionsController : ControllerBase
+{
+    private readonly IConfiguration _config;
+
+    public CompanionsController(IConfiguration config)
+    {
+        _config = config;
+    }
+
+    [HttpGet]
+    public IActionResult ListCompanions()
+    {
+        var relativePath = _config["personality:path"] ?? "personality";
+        var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+        
+        if (!Directory.Exists(baseDir))
+        {
+            Directory.CreateDirectory(baseDir);
+        }
+
+        var list = new List<object>();
+        foreach (var file in Directory.GetFiles(baseDir, "*.json"))
+        {
+            try
+            {
+                var content = System.IO.File.ReadAllText(file);
+                using var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement.Clone();
+                list.Add(root);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[companions] Failed to parse {Path.GetFileName(file)}: {ex.Message}");
+            }
+        }
+        return Ok(list);
+    }
+
+    [HttpPost]
+    public IActionResult SaveCompanion([FromBody] CompanionConfig req)
+    {
+        if (req == null || string.IsNullOrWhiteSpace(req.Name))
+            return BadRequest(new { error = "Companion name is required." });
+
+        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+        var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+        if (!Directory.Exists(baseDir))
+        {
+            Directory.CreateDirectory(baseDir);
+        }
+
+        // Validate name to avoid path traversal
+        var cleanName = string.Concat(req.Name.Split(Path.GetInvalidFileNameChars())).Trim();
+        if (string.IsNullOrWhiteSpace(cleanName))
+            return BadRequest(new { error = "Invalid companion name." });
+
+        var filePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+        
+        try
+        {
+            var json = JsonSerializer.Serialize(req, new JsonSerializerOptions { WriteIndented = true });
+            System.IO.File.WriteAllText(filePath, json);
+            return Ok(new { ok = true, message = $"Companion '{req.Name}' saved successfully." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to save companion: {ex.Message}" });
+        }
+    }
+
+    [HttpDelete("{name}")]
+    public IActionResult DeleteCompanion(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(new { error = "Companion name is required." });
+
+        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+        var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+
+        // Validate name to avoid path traversal
+        var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+        var filePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+
+        if (!System.IO.File.Exists(filePath))
+            return NotFound(new { error = $"Companion '{name}' not found." });
+
+        try
+        {
+            System.IO.File.Delete(filePath);
+            return Ok(new { ok = true, message = $"Companion '{name}' deleted successfully." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to delete companion: {ex.Message}" });
+        }
+    }
+}
+
+public class CompanionConfig
+{
+    public string Name { get; set; } = string.Empty;
+    public string? VoiceId { get; set; }
+    public string? Description { get; set; }
+    public string? Personality { get; set; }
+    public string? Scenario { get; set; }
+    public string? FirstMessage { get; set; }
+    public string? SystemPrompt { get; set; }
 }

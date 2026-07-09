@@ -120,7 +120,11 @@ public class UpdateManager
         {
             // Binary might not be extension-matched in custom zips, look for any match
             newExeSource = Directory.GetFiles(extractDir)
-                .FirstOrDefault(f => string.Equals(Path.GetFileNameWithoutExtension(f), "ash-server", StringComparison.OrdinalIgnoreCase)) ?? newExeSource;
+                .FirstOrDefault(f => {
+                    var name = Path.GetFileNameWithoutExtension(f);
+                    return string.Equals(name, "haven-server", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(name, "ash-server", StringComparison.OrdinalIgnoreCase);
+                }) ?? newExeSource;
         }
 
         File.Copy(newExeSource, currentExePath, true);
@@ -176,7 +180,7 @@ public class UpdateManager
             if (isService)
             {
                 // Service Mode: Stop and start the service
-                cmdArgs = "/c timeout /t 2 & sc stop ash-server & sc start ash-server";
+                cmdArgs = "/c timeout /t 2 & sc stop haven-server & sc start haven-server";
             }
             else
             {
@@ -197,7 +201,7 @@ public class UpdateManager
 
             if (isSystemd)
             {
-                shellCmd = "sleep 2 && sudo systemctl restart ash-server";
+                shellCmd = "sleep 2 && sudo systemctl restart haven-server";
             }
             else
             {
@@ -218,7 +222,7 @@ public class UpdateManager
 
             if (isLaunchd)
             {
-                shellCmd = "sleep 2 && launchctl stop ash-server && launchctl start ash-server";
+                shellCmd = "sleep 2 && launchctl stop haven-server && launchctl start haven-server";
             }
             else
             {

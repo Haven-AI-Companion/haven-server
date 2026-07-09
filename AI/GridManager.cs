@@ -114,53 +114,53 @@ public class GridManager
 
         ConnectedWorker? worker = null;
 
-        if (!string.IsNullOrEmpty(token))
-        {
-            // Initial pairing flow
-            if (!await ValidatePairingTokenAsync(token))
-            {
-                await ws.CloseAsync(WebSocketCloseStatus.ProtocolError, "Invalid or expired pairing token", CancellationToken.None);
-                return;
-            }
-
-            var newId = Guid.NewGuid().ToString("N");
-            var newSecret = Guid.NewGuid().ToString("N");
-            name = string.IsNullOrEmpty(name) ? $"Worker-{newId[..4]}" : name;
-
-            await RegisterWorkerNodeAsync(newId, name, newSecret);
-
-            // Send credentials back to worker
-            var credsPayload = JsonSerializer.Serialize(new { type = "paired", id = newId, secret = newSecret, name });
-            var bytes = Encoding.UTF8.GetBytes(credsPayload);
-            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
-
-            worker = new ConnectedWorker { Id = newId, Name = name, WebSocket = ws };
-            _activeWorkers[newId] = worker;
-        }
-        else if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(secret))
-        {
-            // Standard reconnect flow
-            if (!await ValidateWorkerCredentialsAsync(id, secret))
-            {
-                await ws.CloseAsync(WebSocketCloseStatus.ProtocolError, "Invalid worker credentials", CancellationToken.None);
-                return;
-            }
-
-            worker = new ConnectedWorker { Id = id, Name = string.IsNullOrEmpty(name) ? $"Worker-{id[..4]}" : name, WebSocket = ws };
-            _activeWorkers[id] = worker;
-        }
-        else
-        {
-            await ws.CloseAsync(WebSocketCloseStatus.ProtocolError, "Missing authentication parameters", CancellationToken.None);
-            return;
-        }
-
-        Console.WriteLine($"[grid] Worker '{worker.Name}' connected successfully.");
-
-        // Listen loop for incoming messages from the worker (heartbeats, inference token streams)
-        var buffer = new byte[1024 * 32];
         try
         {
+            if (!string.IsNullOrEmpty(token))
+            {
+                // Initial pairing flow
+                if (!await ValidatePairingTokenAsync(token))
+                {
+                    try { await ws.CloseAsync(WebSocketCloseStatus.ProtocolError, "Invalid or expired pairing token", CancellationToken.None); } catch {}
+                    return;
+                }
+
+                var newId = Guid.NewGuid().ToString("N");
+                var newSecret = Guid.NewGuid().ToString("N");
+                name = string.IsNullOrEmpty(name) ? $"Worker-{newId[..4]}" : name;
+
+                await RegisterWorkerNodeAsync(newId, name, newSecret);
+
+                // Send credentials back to worker
+                var credsPayload = JsonSerializer.Serialize(new { type = "paired", id = newId, secret = newSecret, name });
+                var bytes = Encoding.UTF8.GetBytes(credsPayload);
+                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+
+                worker = new ConnectedWorker { Id = newId, Name = name, WebSocket = ws };
+                _activeWorkers[newId] = worker;
+            }
+            else if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(secret))
+            {
+                // Standard reconnect flow
+                if (!await ValidateWorkerCredentialsAsync(id, secret))
+                {
+                    try { await ws.CloseAsync(WebSocketCloseStatus.ProtocolError, "Invalid worker credentials", CancellationToken.None); } catch {}
+                    return;
+                }
+
+                worker = new ConnectedWorker { Id = id, Name = string.IsNullOrEmpty(name) ? $"Worker-{id[..4]}" : name, WebSocket = ws };
+                _activeWorkers[id] = worker;
+            }
+            else
+            {
+                try { await ws.CloseAsync(WebSocketCloseStatus.ProtocolError, "Missing authentication parameters", CancellationToken.None); } catch {}
+                return;
+            }
+
+            Console.WriteLine($"[grid] Worker '{worker.Name}' connected successfully.");
+
+            // Listen loop for incoming messages from the worker (heartbeats, inference token streams)
+            var buffer = new byte[1024 * 32];
             while (ws.State == WebSocketState.Open)
             {
                 var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
@@ -196,12 +196,16 @@ public class GridManager
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[grid] Connection error on worker '{worker.Name}': {ex.Message}");
+            var wName = worker?.Name ?? (string.IsNullOrEmpty(name) ? "Unknown" : name);
+            Console.Error.WriteLine($"[grid] Connection error on worker '{wName}': {ex.Message}");
         }
         finally
         {
-            _activeWorkers.TryRemove(worker.Id, out _);
-            Console.WriteLine($"[grid] Worker '{worker.Name}' disconnected.");
+            if (worker != null)
+            {
+                _activeWorkers.TryRemove(worker.Id, out _);
+                Console.WriteLine($"[grid] Worker '{worker.Name}' disconnected.");
+            }
         }
     }
 

@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ash Admin</title>
+<title>Haven Admin</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-<link rel="apple-touch-icon" href="/static/icon.png">
+<link rel="apple-touch-icon" href="/static/haven_logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -195,8 +195,8 @@ select.form-input{cursor:pointer}
   <aside class="sidebar">
     <div class="sidebar-head">
       <div class="logo">
-        <div class="logo-icon"><img src="/static/icon.png" alt="Ash" style="width:100%;height:100%;object-fit:contain;"></div>
-        <span class="logo-name">Ash Admin</span>
+        <div class="logo-icon"><img src="/static/haven_logo.png" alt="Haven" style="width:100%;height:100%;object-fit:contain;"></div>
+        <span class="logo-name">Haven Admin</span>
         <span class="logo-badge">v2</span>
       </div>
     </div>
@@ -223,9 +223,13 @@ select.form-input{cursor:pointer}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
         Compute Grid
       </button>
-      <button class="nav-item" data-tab="chat-providers" data-title="Third-Party Chat" data-sub="Discord, Slack, Telegram connection settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        Third-Party Chat
+      <button class="nav-item" data-tab="companions" data-title="Companion Manager" data-sub="Manage AI companion profiles (CRUD)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Companion Manager
+      </button>
+      <button class="nav-item" data-tab="devices" data-title="Mobile Devices" data-sub="Manage paired mobile device connections">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        Mobile Devices
       </button>
       <div class="nav-section">Monitor</div>
       <button class="nav-item" data-tab="analytics" data-title="Analytics" data-sub="Usage patterns and activity">
@@ -240,14 +244,7 @@ select.form-input{cursor:pointer}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
         MCP Servers
       </button>
-      <button class="nav-item" data-tab="channels" data-title="Chat Channels" data-sub="External chat channel permissions">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        Chat Channels
-      </button>
-      <button class="nav-item" data-tab="audit" data-title="Audit Log" data-sub="External chat activity log">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        Audit Log
-      </button>
+      <!-- Removed legacy chat channels and audit buttons -->
       <div class="nav-section">System</div>
       <button class="nav-item" data-tab="config" data-title="Configuration" data-sub="Server settings and AI defaults">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
@@ -281,7 +278,7 @@ select.form-input{cursor:pointer}
         <div style="flex:1;">
           <h3 style="font-size:14px; font-weight:600; color:#f59e0b; margin:0 0 4px 0;">Public Network Exposure Detected!</h3>
           <p style="font-size:12.5px; color:var(--text-muted); margin:0; line-height:1.5;">
-            Your Ash Server is currently listening on all network interfaces and is accessible via a public IP address. To prevent brute-force or scanner attacks:
+            Your Haven Server is currently listening on all network interfaces and is accessible via a public IP address. To prevent brute-force or scanner attacks:
             <br>
             1. Configure <strong>"Host": "127.0.0.1"</strong> or bind to your private mesh VPN IP (like Tailscale) in <code style="background:var(--surface2); padding:1px 5px; border-radius:3px;">config.json</code>.
             2. Run a secure mesh VPN (Tailscale) on the host for private, encrypted remote access.
@@ -307,7 +304,7 @@ select.form-input{cursor:pointer}
             <div style="font-size:32px;line-height:1;">⚠️</div>
             <div style="flex:1;">
               <div class="card-title" style="color:var(--warning);margin-bottom:6px;">No AI Backend Detected</div>
-              <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Ash can't find a running AI backend. You need Ollama (or another compatible server) to use chat.</p>
+              <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Haven can't find a running AI backend. You need Llama Server or Ollama to use chat.</p>
               <div style="font-size:13px;margin-bottom:12px;">
                 <strong>Quick setup with Ollama:</strong>
                 <ol style="margin:8px 0 0 18px;line-height:2;">
@@ -338,6 +335,9 @@ select.form-input{cursor:pointer}
             <tr><td>Backend</td><td id="server-backend" class="mono txt-muted">—</td></tr>
             <tr><td>Personality Path</td><td id="server-personality" class="mono txt-muted">—</td></tr>
             <tr><td>Plugins Enabled</td><td id="server-plugins-enabled">—</td></tr>
+            <tr><td>Process RAM Usage</td><td id="server-ram-usage">—</td></tr>
+            <tr><td>System Threads</td><td id="server-threads">—</td></tr>
+            <tr><td>GC Allocated Memory</td><td id="server-gc-mem">—</td></tr>
           </table>
         </div>
 
@@ -588,6 +588,55 @@ select.form-input{cursor:pointer}
         <div class="card">
           <div class="card-title">Connected Backends <button class="btn btn-sm btn-primary" onclick="toggleAddForm()">+ Add Backend</button></div>
           <div id="backends-list"><div class="empty"><div class="empty-icon">🤖</div><p class="txt-muted">No backends configured yet. Add one above, or <a href="https://ollama.com/download" target="_blank" style="color:var(--accent);">install Ollama</a> and it will be detected automatically.</p></div></div>
+        </div>
+      </div>
+      <!-- Companions -->
+      <div class="tab-content" id="companions">
+        <div class="add-form" id="add-companion-form" style="display:none; margin-bottom: 20px;">
+          <div class="add-form-title" id="companion-form-title">New Companion</div>
+          <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group"><label class="form-label">Name</label><input type="text" id="c-name" class="form-input" placeholder="Hasaji"></div>
+            <div class="form-group"><label class="form-label">Voice ID</label><input type="text" id="c-voice" class="form-input" placeholder="en_US-kristin-medium"></div>
+          </div>
+          <div class="form-group" style="margin-top: 12px;"><label class="form-label">Description</label><input type="text" id="c-desc" class="form-input" placeholder="A short overview of this companion..."></div>
+          <div class="form-group" style="margin-top: 12px;"><label class="form-label">Personality</label><textarea id="c-personality" class="form-input" placeholder="Personality description..." rows="2"></textarea></div>
+          <div class="form-group" style="margin-top: 12px;"><label class="form-label">Scenario</label><textarea id="c-scenario" class="form-input" placeholder="Scenario setting..." rows="2"></textarea></div>
+          <div class="form-group" style="margin-top: 12px;"><label class="form-label">First Message</label><textarea id="c-first" class="form-input" placeholder="First greeting message..." rows="2"></textarea></div>
+          <div class="form-group" style="margin-top: 12px;"><label class="form-label">System Prompt</label><textarea id="c-system" class="form-input" placeholder="System instructions for the LLM..." rows="4"></textarea></div>
+          <div id="add-companion-status" style="margin-top:8px; margin-bottom:8px; font-size:12px;"></div>
+          <div class="row-gap" style="margin-top: 16px; display: flex; gap: 8px;">
+            <button class="btn btn-primary" onclick="saveCompanion()">Save Companion</button>
+            <button class="btn" onclick="hideCompanionForm()">Cancel</button>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+            AI Companions
+            <button class="btn btn-sm btn-primary" onclick="showAddCompanionForm()">+ Add Companion</button>
+          </div>
+          <div id="companions-list" class="table-wrap">
+            <div class="empty">
+              <div class="empty-icon">🎭</div>
+              <p class="txt-muted">No companions loaded. Add a new companion above.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile Devices -->
+      <div class="tab-content" id="devices">
+        <div class="card">
+          <div class="card-title">Paired Mobile Devices</div>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:12px;">
+            List of mobile companion apps linked to your Haven Server. Revoking a device removes its session token instantly.
+          </p>
+          <div id="devices-list" class="table-wrap">
+            <div class="empty">
+              <div class="empty-icon">📱</div>
+              <p class="txt-muted">No mobile devices paired yet.</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1287,7 +1336,7 @@ function formatDateTime(dateStr, fallback = '—') {
       if (d.require_auth && token === 'noauth') { window.location.href = '/'; return; }
     }
   } catch {}
-  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles(); loadAllIdentities(); loadChannels(); loadChatProviders(); loadMeshNetworkStatus(); checkPublicExposure();
+  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles(); loadAllIdentities(); loadCompanions(); loadPairedDevices(); loadMeshNetworkStatus(); checkPublicExposure();
   const raw = token !== 'noauth' ? token.split('.')[1] : null;
   if (raw) {
     try {
@@ -1333,6 +1382,9 @@ async function loadStats() {
     document.getElementById('server-backend').textContent         = s.server?.backend || '\u2014';
     document.getElementById('server-personality').textContent     = s.server?.personality_path || '\u2014';
     document.getElementById('server-plugins-enabled').textContent = s.server?.plugins_enabled ?? '\u2014';
+    document.getElementById('server-ram-usage').textContent       = s.server?.ram_usage_mb ? `${s.server.ram_usage_mb} MB` : '\u2014';
+    document.getElementById('server-threads').textContent         = s.server?.threads_count ?? '\u2014';
+    document.getElementById('server-gc-mem').textContent          = s.server?.gc_memory_mb ? `${s.server.gc_memory_mb} MB` : '\u2014';
     // Show setup banner when no model is detected
     const banner = document.getElementById('setup-banner');
     if (banner) banner.style.display = s.server?.model ? 'none' : '';
@@ -1672,22 +1724,93 @@ async function loadPlugins() {
     const data = await resp.json();
     const list = document.getElementById('plugins-list');
     if (data.plugins?.length) {
-      list.innerHTML = data.plugins.map(p => `
-        <div class="plugin-row" style="flex-wrap:wrap;gap:8px">
-          <div style="flex:1;min-width:200px">
-            <div class="plugin-name">${esc(p.name)} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">v${esc(p.version ?? '?')}</span>${p.builtin ? ' <span style="font-size:10px;color:var(--accent);font-weight:600">BUILT-IN</span>' : ''}</div>
-            <div class="plugin-meta">${esc(p.description ?? '')}</div>
-            <div class="plugin-meta" style="margin-top:3px">${p.tool_count} tool(s): ${(p.tools ?? []).map(t => `<code style="font-size:10px">${esc(t.name)}</code>`).join(', ')}</div>
+      list.innerHTML = data.plugins.map(p => {
+        const configKeys = Object.keys(p.config || {});
+        const configSection = configKeys.length ? `
+          <div class="plugin-config" style="margin-top: 12px; background: rgba(0,0,0,0.12); padding: 12px; border-radius: 6px; width: 100%; border: 1px solid var(--border);">
+            <div style="font-weight: 600; font-size: 11px; margin-bottom: 8px; text-transform: uppercase; color: var(--text-muted); display:flex; align-items:center; gap:6px;">
+              <span>⚙️ Configuration Settings</span>
+            </div>
+            <table class="data-table" style="background: transparent; margin-bottom: 8px; width: 100%;">
+              <tbody>
+                ${Object.entries(p.config || {}).map(([key, val]) => `
+                  <tr>
+                    <td style="width: 180px; font-weight: 500; font-family: monospace; border-bottom: none; padding: 4px 8px 4px 0; color: var(--text-muted);">${esc(key)}</td>
+                    <td style="border-bottom: none; padding: 4px 0;">
+                      <input type="text" class="form-input config-val-input" data-plugin="${esc(p.id)}" data-key="${esc(key)}" value="${esc(typeof val === 'object' ? JSON.stringify(val) : val)}" style="width: 100%; padding: 4px 8px; font-size: 12px;">
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <div style="text-align: right;">
+              <button class="btn btn-sm btn-primary" onclick="savePluginConfig('${esc(p.id)}')">Save Configuration</button>
+            </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="badge ${p.enabled ? 'badge-success' : 'badge-muted'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
-            ${p.builtin ? '' : `<button class="btn btn-sm" onclick="togglePlugin('${esc(p.id)}', ${p.enabled})">${p.enabled ? 'Disable' : 'Enable'}</button>`}
-          </div>
-        </div>`).join('');
+        ` : '';
+
+        return `
+          <div class="plugin-row" style="flex-wrap:wrap;gap:8px">
+            <div style="flex:1;min-width:200px">
+              <div class="plugin-name">${esc(p.name)} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">v${esc(p.version ?? '?')}</span>${p.builtin ? ' <span style="font-size:10px;color:var(--accent);font-weight:600">BUILT-IN</span>' : ''}</div>
+              <div class="plugin-meta">${esc(p.description ?? '')}</div>
+              <div class="plugin-meta" style="margin-top:3px">${p.tool_count} tool(s): ${(p.tools ?? []).map(t => `<code style="font-size:10px">${esc(t.name)}</code>`).join(', ')}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="badge ${p.enabled ? 'badge-success' : 'badge-muted'}">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+              ${p.builtin ? '' : `<button class="btn btn-sm" onclick="togglePlugin('${esc(p.id)}', ${p.enabled})">${p.enabled ? 'Disable' : 'Enable'}</button>`}
+            </div>
+            ${configSection}
+          </div>`;
+      }).join('');
     } else {
       list.innerHTML = '<div class="empty"><div class="empty-icon">🔌</div>No plugins installed. Add a <code>plugins/{id}/plugin.json</code> file and click Reload.</div>';
     }
   } catch (err) { console.error('loadPlugins:', err); }
+}
+
+async function savePluginConfig(pluginId) {
+  try {
+    const inputs = document.querySelectorAll(`.config-val-input[data-plugin="${pluginId}"]`);
+    const newConfig = {};
+    inputs.forEach(input => {
+      const key = input.getAttribute('data-key');
+      const rawVal = input.value.trim();
+      
+      let parsedVal = rawVal;
+      try {
+        if (rawVal === 'true') parsedVal = true;
+        else if (rawVal === 'false') parsedVal = false;
+        else if (!isNaN(rawVal) && rawVal !== '') parsedVal = Number(rawVal);
+        else if (rawVal.startsWith('{') || rawVal.startsWith('[')) {
+          parsedVal = JSON.parse(rawVal);
+        }
+      } catch (e) {
+        // use raw string value if parsing fails
+      }
+      newConfig[key] = parsedVal;
+    });
+
+    const resp = await fetch(`/api/admin/plugins/${pluginId}/config`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(newConfig)
+    });
+    
+    if (resp.ok) {
+      showToast('Plugin configuration saved successfully!', 'success');
+      await loadPlugins();
+    } else {
+      const err = await resp.json();
+      showToast(`Error: ${err.error || 'Failed to save config'}`, 'error');
+    }
+  } catch (err) {
+    console.error('savePluginConfig:', err);
+    showToast(`Error: ${err.message}`, 'error');
+  }
 }
 
 async function togglePlugin(id, currentlyEnabled) {
@@ -2231,6 +2354,8 @@ async function addBackend() {
     const payload = {
       name: name,
       type: type,
+      base_url: base_url,
+      api_key: api_key || null,
       baseUrl: base_url,
       apiKey: api_key || null
     };
@@ -3186,6 +3311,203 @@ function setGridUIRole(role) {
     workerBtn.classList.add('btn-primary');
     masterCard.style.display = 'none';
     workerCard.style.display = '';
+  }
+}
+
+let companions = [];
+
+async function loadCompanions() {
+  const container = document.getElementById('companions-list');
+  try {
+    const res = await fetch('/api/companions', { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) throw new Error();
+    companions = await res.json();
+    if (!companions.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">🎭</div><p class="txt-muted">No companions loaded. Add a new companion above.</p></div>';
+      return;
+    }
+    let html = `
+      <table class="table" style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border);">
+            <th style="padding: 10px;">Name</th>
+            <th style="padding: 10px;">Voice ID</th>
+            <th style="padding: 10px;">Description</th>
+            <th style="padding: 10px; text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    companions.forEach(c => {
+      html += `
+        <tr style="border-bottom: 1px solid var(--border);">
+          <td style="padding: 10px; font-weight: 600; color: #fff;">${escHtml(c.name)}</td>
+          <td style="padding: 10px; color: var(--text-muted);">${escHtml(c.voiceId || '—')}</td>
+          <td style="padding: 10px; color: var(--text-muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(c.description || '—')}</td>
+          <td style="padding: 10px; text-align: right;">
+            <button class="btn btn-sm btn-primary" onclick="editCompanion('${escHtml(c.name)}')">Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteCompanion('${escHtml(c.name)}')">Delete</button>
+          </td>
+        </tr>
+      `;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><p class="txt-muted">Failed to load companions.</p></div>';
+  }
+}
+
+function showAddCompanionForm() {
+  document.getElementById('companion-form-title').textContent = "New Companion";
+  document.getElementById('c-name').value = '';
+  document.getElementById('c-name').disabled = false;
+  document.getElementById('c-voice').value = '';
+  document.getElementById('c-desc').value = '';
+  document.getElementById('c-personality').value = '';
+  document.getElementById('c-scenario').value = '';
+  document.getElementById('c-first').value = '';
+  document.getElementById('c-system').value = '';
+  document.getElementById('add-companion-status').textContent = '';
+  document.getElementById('add-companion-form').style.display = '';
+}
+
+function hideCompanionForm() {
+  document.getElementById('add-companion-form').style.display = 'none';
+}
+
+function editCompanion(name) {
+  const c = companions.find(item => item.name === name);
+  if (!c) return;
+  document.getElementById('companion-form-title').textContent = "Edit Companion";
+  document.getElementById('c-name').value = c.name;
+  document.getElementById('c-name').disabled = true;
+  document.getElementById('c-voice').value = c.voiceId || '';
+  document.getElementById('c-desc').value = c.description || '';
+  document.getElementById('c-personality').value = c.personality || '';
+  document.getElementById('c-scenario').value = c.scenario || '';
+  document.getElementById('c-first').value = c.firstMessage || '';
+  document.getElementById('c-system').value = c.systemPrompt || '';
+  document.getElementById('add-companion-status').textContent = '';
+  document.getElementById('add-companion-form').style.display = '';
+}
+
+async function saveCompanion() {
+  const name = document.getElementById('c-name').value.trim();
+  const voice = document.getElementById('c-voice').value.trim();
+  const desc = document.getElementById('c-desc').value.trim();
+  const personality = document.getElementById('c-personality').value.trim();
+  const scenario = document.getElementById('c-scenario').value.trim();
+  const first = document.getElementById('c-first').value.trim();
+  const system = document.getElementById('c-system').value.trim();
+  
+  if (!name) {
+    document.getElementById('add-companion-status').innerHTML = '<span style="color:var(--error);">Name is required</span>';
+    return;
+  }
+  
+  const payload = { name, voiceId: voice, description: desc, personality, scenario, firstMessage: first, systemPrompt: system };
+  
+  try {
+    const res = await fetch('/api/companions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify(payload)
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Failed to save companion');
+    toast(d.message || 'Companion saved!');
+    hideCompanionForm();
+    loadCompanions();
+  } catch (err) {
+    document.getElementById('add-companion-status').innerHTML = `<span style="color:var(--error);">${err.message}</span>`;
+  }
+}
+
+async function deleteCompanion(name) {
+  if (!confirm(`Are you sure you want to delete companion '${name}'?`)) return;
+  try {
+    const res = await fetch(`/api/companions/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Failed to delete companion');
+    toast(d.message || 'Companion deleted!');
+    loadCompanions();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+let pairedDevices = [];
+
+async function loadPairedDevices() {
+  const container = document.getElementById('devices-list');
+  try {
+    const res = await fetch('/api/admin/devices', { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) throw new Error();
+    pairedDevices = await res.json();
+    if (!pairedDevices.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">📱</div><p class="txt-muted">No mobile devices paired yet.</p></div>';
+      return;
+    }
+    let html = `
+      <table class="table" style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border);">
+            <th style="padding: 10px;">Device Name</th>
+            <th style="padding: 10px;">User</th>
+            <th style="padding: 10px;">Paired At</th>
+            <th style="padding: 10px;">Last Seen</th>
+            <th style="padding: 10px; text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    pairedDevices.forEach(d => {
+      const pairedDate = formatDateTime(d.pairedAt);
+      const lastSeenDate = formatDateTime(d.lastSeen);
+      html += `
+        <tr style="border-bottom: 1px solid var(--border);">
+          <td style="padding: 10px; font-weight: 600; color: #fff;">${escHtml(d.deviceName)}</td>
+          <td style="padding: 10px; color: var(--text-muted);">${escHtml(d.username)}</td>
+          <td style="padding: 10px; color: var(--text-muted); font-size:12.5px;">${pairedDate}</td>
+          <td style="padding: 10px; color: var(--text-muted); font-size:12.5px;">${lastSeenDate}</td>
+          <td style="padding: 10px; text-align: right;">
+            <button class="btn btn-sm btn-danger" onclick="revokeDevice(${d.id})">Revoke Link</button>
+          </td>
+        </tr>
+      `;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><p class="txt-muted">Failed to load paired devices.</p></div>';
+  }
+}
+
+async function revokeDevice(id) {
+  if (!confirm('Are you sure you want to revoke this device\'s pairing token? They will be logged out immediately.')) return;
+  try {
+    const res = await fetch(`/api/admin/devices/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Failed to revoke device link');
+    toast('Device link revoked!');
+    loadPairedDevices();
+  } catch (err) {
+    toast(err.message, 'error');
   }
 }
 
