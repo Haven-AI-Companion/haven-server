@@ -1198,6 +1198,25 @@ select.form-input{cursor:pointer}
           <div id="backup-status" style="margin-top:12px;font-size:13px;"></div>
         </div>
 
+        <!-- Haven Backup Action Card -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Create Haven Backup Package (.haven)</div>
+          <p class="txt-muted" style="font-size:13px;margin-bottom:14px;">Bundles the SQLite database, custom companions, and all uploaded media files into a single unified .haven archive package.</p>
+          <button class="btn btn-primary" onclick="createHavenBackup()">Create Unified Package</button>
+          <div id="haven-backup-status" style="margin-top:12px;font-size:13px;"></div>
+        </div>
+
+        <!-- Restore Haven Package Card -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Restore Haven Package (.haven)</div>
+          <p class="txt-muted" style="font-size:13px;margin-bottom:14px;">Upload a previously exported .haven package to restore the database, companions, and media files. <strong style="color:var(--danger-color, #ef4444);">Warning: This will overwrite your current server state!</strong></p>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="file" id="haven-restore-file" accept=".haven" style="font-size:13px;" />
+            <button class="btn btn-danger" onclick="restoreHavenPackage()">Upload & Restore</button>
+          </div>
+          <div id="haven-restore-status" style="margin-top:12px;font-size:13px;"></div>
+        </div>
+
         <!-- Existing Backups Card -->
         <div class="card">
           <div class="card-title">Manage Backups</div>
@@ -2259,6 +2278,64 @@ async function deleteBackup(filename) {
     loadDatabaseStatus();
   } catch (err) {
     alert(`Failed to delete backup: ${err.message}`);
+  }
+}
+
+async function createHavenBackup() {
+  const statusDiv = document.getElementById('haven-backup-status');
+  if (!statusDiv) return;
+  
+  statusDiv.innerHTML = '<span class="txt-muted">Creating unified backup package (.haven)...</span>';
+  try {
+    const resp = await fetch('/api/admin/backup/haven', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    if (!resp.ok) throw new Error(await resp.text());
+    const result = await resp.json();
+    
+    toast(`Unified package created: ${result.filename} (${(result.size / 1024 / 1024).toFixed(2)} MB)`);
+    statusDiv.innerHTML = `<span class="txt-success">\u2713 ${result.message} \u2014 <strong>${result.filename}</strong></span>`;
+    loadDatabaseStatus();
+  } catch (err) {
+    toast('Backup failed: ' + err.message, 'error');
+    statusDiv.innerHTML = `<span class="txt-error">Backup failed: ${err.message}</span>`;
+  }
+}
+
+async function restoreHavenPackage() {
+  const fileInput = document.getElementById('haven-restore-file');
+  const statusDiv = document.getElementById('haven-restore-status');
+  if (!fileInput || !statusDiv) return;
+
+  const file = fileInput.files[0];
+  if (!file) {
+    alert("Please select a .haven file to restore.");
+    return;
+  }
+
+  if (!confirm(`Are you absolutely sure you want to restore "${file.name}"? This will overwrite your active database, companions list, and media uploads. The server state will be reset.`)) {
+    return;
+  }
+
+  statusDiv.innerHTML = '<span class="txt-danger">Restoring Haven state... Do not close this page or stop the server.</span>';
+  
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const resp = await fetch('/api/admin/restore/haven', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
+    });
+
+    if (!resp.ok) throw new Error(await resp.text());
+    const result = await resp.json();
+
+    toast("System state restored successfully!");
+    statusDiv.innerHTML = `<span class="txt-success">\u2713 ${result.message} Page will reload shortly.</span>`;
+    setTimeout(() => location.reload(), 2500);
+  } catch (err) {
+    toast('Restore failed: ' + err.message, 'error');
+    statusDiv.innerHTML = `<span class="txt-error">Restore failed: ${err.message}</span>`;
   }
 }
 
