@@ -68,6 +68,18 @@ public class ChatHandler
             }
         }
 
+        async Task TrySend(object data, CancellationToken token)
+        {
+            if (ws.State == WebSocketState.Open)
+            {
+                try
+                {
+                    await SafeSend(data, token);
+                }
+                catch {}
+            }
+        }
+
         // Permission helper — admins bypass all checks; deny-by-default when permissions unknown
         bool HasPerm(string perm) => isAdmin || (permissions?.Contains(perm) ?? false);
 
@@ -186,7 +198,7 @@ public class ChatHandler
                             history.RemoveRange(0, history.Count - MaxHistoryMessages);
                     }
 
-                    await SafeSend(new { type = "typing", content = true }, cts.Token);
+                    await TrySend(new { type = "typing", content = true }, cts.Token);
 
                     var systemPrompt = !string.IsNullOrEmpty(customSystemPrompt)
                         ? customSystemPrompt
@@ -212,7 +224,7 @@ public class ChatHandler
                                 await Task.Delay(5000, timerCts.Token);
                                 if (!timerCts.Token.IsCancellationRequested)
                                 {
-                                    await SafeSend(new { type = "typing", content = true }, timerCts.Token);
+                                    await TrySend(new { type = "typing", content = true }, timerCts.Token);
                                 }
                             }
                         }
@@ -220,46 +232,49 @@ public class ChatHandler
                         catch (Exception) {}
                     });
 
+                    using var generationCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+                    var genToken = generationCts.Token;
+
                     try
                     {
                         if (agentMode)
                         {
                             var (backend, modelName) = await _backends.Resolve(modelId);
                             var runner = new AgentRunner(backend, modelName, _plugins, _mcp, _rag);
-                            await foreach (var evt in runner.Run(messages).WithCancellation(cts.Token))
+                            await foreach (var evt in runner.Run(messages).WithCancellation(genToken))
                             {
                                 switch (evt.Type)
                                 {
                                     case "stream_token":
                                         responseText += evt.Content ?? "";
-                                        await SafeSend(new { type = "token", content = evt.Content }, cts.Token);
+                                        await TrySend(new { type = "token", content = evt.Content }, cts.Token);
                                         break;
                                     case "tool_call":
-                                        await SafeSend(new { type = "agent_tool_call", tool = evt.ToolName, args = evt.ToolArgs, iteration = evt.Iteration }, cts.Token);
+                                        await TrySend(new { type = "agent_tool_call", tool = evt.ToolName, args = evt.ToolArgs, iteration = evt.Iteration }, cts.Token);
                                         break;
                                     case "tool_result":
-                                        await SafeSend(new { type = "agent_tool_result", tool = evt.ToolName, result = evt.ToolResult, iteration = evt.Iteration }, cts.Token);
+                                        await TrySend(new { type = "agent_tool_result", tool = evt.ToolName, result = evt.ToolResult, iteration = evt.Iteration }, cts.Token);
                                         break;
                                     case "final":
                                         // responseText already accumulated from stream_token events
                                         break;
                                     case "error":
-                                        await SafeSend(new { type = "error", content = evt.Content }, cts.Token);
+                                        await TrySend(new { type = "error", content = evt.Content }, cts.Token);
                                         break;
                                 }
                             }
                         }
                         else
                         {
-                            await foreach (var token in _backends.StreamChat(modelId, messages).WithCancellation(cts.Token))
+                            await foreach (var token in _backends.StreamChat(modelId, messages).WithCancellation(genToken))
                             {
                                 responseText += token;
-                                await SafeSend(new { type = "token", content = token }, cts.Token);
+                                await TrySend(new { type = "token", content = token }, cts.Token);
                             }
                         }
 
-                        await SafeSend(new { type = "typing", content = false }, cts.Token);
-                        await SafeSend(new { type = "done" }, cts.Token);
+                        await TrySend(new { type = "typing", content = false }, cts.Token);
+                        await TrySend(new { type = "done" }, cts.Token);
 
                         if (!string.IsNullOrEmpty(responseText))
                         {
@@ -267,19 +282,22 @@ public class ChatHandler
                             lock (history) { history.Add(new ChatMessage("assistant", responseText)); }
                         }
                     }
-                    catch (OperationCanceledException) { break; }
+                    catch (OperationCanceledException)
+                    {
+                        if (genToken.IsCancellationRequested) break;
+                    }
                     catch (InvalidOperationException ex)
                     {
                         // Configuration errors (e.g. no backend configured) — surface the message directly.
                         _log.LogWarning("[chat] Configuration error for user {User}: {Message}", username, ex.Message);
-                        await SafeSend(new { type = "error", content = ex.Message }, cts.Token);
-                        await SafeSend(new { type = "typing", content = false }, cts.Token);
+                        await TrySend(new { type = "error", content = ex.Message }, cts.Token);
+                        await TrySend(new { type = "typing", content = false }, cts.Token);
                     }
                     catch (Exception ex)
                     {
                         _log.LogError(ex, "[chat] Error processing message for user {User}", username);
-                        await SafeSend(new { type = "error", content = "An error occurred while processing your message." }, cts.Token);
-                        await SafeSend(new { type = "typing", content = false }, cts.Token);
+                        await TrySend(new { type = "error", content = "An error occurred while processing your message." }, cts.Token);
+                        await TrySend(new { type = "typing", content = false }, cts.Token);
                     }
                     finally
                     {
