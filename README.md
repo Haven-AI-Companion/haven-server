@@ -48,7 +48,7 @@ graph TD
 
 ### 1. Requirements
 *   [.NET 10.0 Runtime / SDK](https://dotnet.microsoft.com/download)
-*   A local LLM host (e.g., [Ollama](https://ollama.ai) or llama.cpp) running a chat-capable model.
+*   A local LLM host (e.g., [Ollama](https://ollama.ai) or llama.cpp) running our recommended **[Gemma 4 E4b Merged (Turbo) GGUF](https://huggingface.co/ssfdre38/gemma4-e4b-merged-iq4xs-turbo)**.
 *   *(Optional)* A Stable Diffusion local API server (e.g., `sd-server.exe`) for companion image generation.
 
 ### 2. Configure Server Settings
