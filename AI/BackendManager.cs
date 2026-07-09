@@ -62,7 +62,9 @@ public class OllamaBackend : IAiBackend
             stream = true,
             options = new
             {
-                stop = BackendManager.GetStopSequences(messages)
+                stop = BackendManager.GetStopSequences(messages),
+                num_predict = 4096,
+                temperature = 0.7f
             }
         });
 
@@ -108,7 +110,9 @@ public class OllamaBackend : IAiBackend
             stream = false,
             options = new
             {
-                stop = BackendManager.GetStopSequences(messages)
+                stop = BackendManager.GetStopSequences(messages),
+                num_predict = 4096,
+                temperature = 0.7f
             }
         });
 
@@ -156,7 +160,9 @@ public class OpenAiCompatBackend : IAiBackend
             model,
             messages = messages.Select(m => new { role = m.Role, content = m.Content }),
             stream = true,
-            stop = BackendManager.GetStopSequences(messages)
+            stop = BackendManager.GetStopSequences(messages),
+            max_tokens = 4096,
+            temperature = 0.7f
         });
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
@@ -247,7 +253,9 @@ public class OpenAiCompatBackend : IAiBackend
             messages = messages.Select(m => new { role = m.Role, content = m.Content }),
             tools,
             stream = false,
-            stop = BackendManager.GetStopSequences(messages)
+            stop = BackendManager.GetStopSequences(messages),
+            max_tokens = 4096,
+            temperature = 0.7f
         });
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")

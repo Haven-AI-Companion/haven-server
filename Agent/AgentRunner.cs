@@ -180,6 +180,16 @@ public class AgentRunner
                 yield break;
             }
 
+            if (!string.IsNullOrEmpty(content))
+            {
+                var formattedContent = content;
+                if (!content.TrimStart().StartsWith("<thought", StringComparison.OrdinalIgnoreCase))
+                {
+                    formattedContent = $"<thought>{content}</thought>";
+                }
+                yield return new AgentEvent("stream_token", Content: formattedContent + "\n", Iteration: iteration);
+            }
+
             working.Add(new ChatMessage("assistant", content));
 
             foreach (var tc in toolCallsEl.EnumerateArray())

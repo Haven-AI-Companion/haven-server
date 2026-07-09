@@ -53,6 +53,20 @@ public class ChatHandler
     {
         string? conversationId = null;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+        using var sendLock = new System.Threading.SemaphoreSlim(1, 1);
+
+        async Task SafeSend(object data, CancellationToken token)
+        {
+            await sendLock.WaitAsync(token);
+            try
+            {
+                await SendJson(ws, data, token);
+            }
+            finally
+            {
+                sendLock.Release();
+            }
+        }
 
         // Permission helper — admins bypass all checks; deny-by-default when permissions unknown
         bool HasPerm(string perm) => isAdmin || (permissions?.Contains(perm) ?? false);
@@ -62,12 +76,12 @@ public class ChatHandler
             // Gate: api_access — if user has no chat access, reject immediately
             if (!HasPerm(AshServer.Auth.Permissions.ApiAccess))
             {
-                await SendJson(ws, new { type = "error", content = "Your account does not have chat access. Contact an administrator." }, cts.Token);
+                await SafeSend(new { type = "error", content = "Your account does not have chat access. Contact an administrator." }, cts.Token);
                 await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "forbidden", cts.Token);
                 return;
             }
 
-            await SendJson(ws, new { type = "auth_ok", user = username }, cts.Token);
+            await SafeSend(new { type = "auth_ok", user = username }, cts.Token);
 
             var buf = new byte[64 * 1024];
             while (ws.State == WebSocketState.Open)
@@ -109,7 +123,7 @@ public class ChatHandler
                     if (agentMode && !HasPerm(AshServer.Auth.Permissions.AgentMode))
                     {
                         agentMode = false;
-                        await SendJson(ws, new { type = "warning", content = "Agent mode is not available for your account." }, cts.Token);
+                        await SafeSend(new { type = "warning", content = "Agent mode is not available for your account." }, cts.Token);
                     }
 
                     // Images: base64 strings for vision models
@@ -143,7 +157,7 @@ public class ChatHandler
                     {
                         conversationId = await _db.CreateConversation(userId);
                         _convCache.Set(conversationId, new List<ChatMessage>(), CacheTtl);
-                        await SendJson(ws, new { type = "conversation_id", content = conversationId }, cts.Token);
+                        await SafeSend(new { type = "conversation_id", content = conversationId }, cts.Token);
                     }
 
                     try
@@ -156,7 +170,7 @@ public class ChatHandler
                         conversationId = await _db.CreateConversation(userId);
                         _convCache.Remove(conversationId);
                         _convCache.Set(conversationId, new List<ChatMessage>(), CacheTtl);
-                        await SendJson(ws, new { type = "conversation_id", content = conversationId }, cts.Token);
+                        await SafeSend(new { type = "conversation_id", content = conversationId }, cts.Token);
                         await _db.AddMessage(conversationId, "user", userMessage);
                     }
 
@@ -172,7 +186,7 @@ public class ChatHandler
                             history.RemoveRange(0, history.Count - MaxHistoryMessages);
                     }
 
-                    await SendJson(ws, new { type = "typing", content = true }, cts.Token);
+                    await SafeSend(new { type = "typing", content = true }, cts.Token);
 
                     var systemPrompt = !string.IsNullOrEmpty(customSystemPrompt)
                         ? customSystemPrompt
@@ -186,6 +200,26 @@ public class ChatHandler
                     }
 
                     var responseText = "";
+
+                    // Start a periodic background typing keep-alive task to prevent Kestrel/client timeout
+                    using var timerCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+                    var keepAliveTask = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            while (!timerCts.Token.IsCancellationRequested)
+                            {
+                                await Task.Delay(5000, timerCts.Token);
+                                if (!timerCts.Token.IsCancellationRequested)
+                                {
+                                    await SafeSend(new { type = "typing", content = true }, timerCts.Token);
+                                }
+                            }
+                        }
+                        catch (OperationCanceledException) {}
+                        catch (Exception) {}
+                    });
+
                     try
                     {
                         if (agentMode)
@@ -198,19 +232,19 @@ public class ChatHandler
                                 {
                                     case "stream_token":
                                         responseText += evt.Content ?? "";
-                                        await SendJson(ws, new { type = "token", content = evt.Content }, cts.Token);
+                                        await SafeSend(new { type = "token", content = evt.Content }, cts.Token);
                                         break;
                                     case "tool_call":
-                                        await SendJson(ws, new { type = "agent_tool_call", tool = evt.ToolName, args = evt.ToolArgs, iteration = evt.Iteration }, cts.Token);
+                                        await SafeSend(new { type = "agent_tool_call", tool = evt.ToolName, args = evt.ToolArgs, iteration = evt.Iteration }, cts.Token);
                                         break;
                                     case "tool_result":
-                                        await SendJson(ws, new { type = "agent_tool_result", tool = evt.ToolName, result = evt.ToolResult, iteration = evt.Iteration }, cts.Token);
+                                        await SafeSend(new { type = "agent_tool_result", tool = evt.ToolName, result = evt.ToolResult, iteration = evt.Iteration }, cts.Token);
                                         break;
                                     case "final":
                                         // responseText already accumulated from stream_token events
                                         break;
                                     case "error":
-                                        await SendJson(ws, new { type = "error", content = evt.Content }, cts.Token);
+                                        await SafeSend(new { type = "error", content = evt.Content }, cts.Token);
                                         break;
                                 }
                             }
@@ -220,12 +254,12 @@ public class ChatHandler
                             await foreach (var token in _backends.StreamChat(modelId, messages).WithCancellation(cts.Token))
                             {
                                 responseText += token;
-                                await SendJson(ws, new { type = "token", content = token }, cts.Token);
+                                await SafeSend(new { type = "token", content = token }, cts.Token);
                             }
                         }
 
-                        await SendJson(ws, new { type = "typing", content = false }, cts.Token);
-                        await SendJson(ws, new { type = "done" }, cts.Token);
+                        await SafeSend(new { type = "typing", content = false }, cts.Token);
+                        await SafeSend(new { type = "done" }, cts.Token);
 
                         if (!string.IsNullOrEmpty(responseText))
                         {
@@ -238,14 +272,19 @@ public class ChatHandler
                     {
                         // Configuration errors (e.g. no backend configured) — surface the message directly.
                         _log.LogWarning("[chat] Configuration error for user {User}: {Message}", username, ex.Message);
-                        await SendJson(ws, new { type = "error", content = ex.Message }, cts.Token);
-                        await SendJson(ws, new { type = "typing", content = false }, cts.Token);
+                        await SafeSend(new { type = "error", content = ex.Message }, cts.Token);
+                        await SafeSend(new { type = "typing", content = false }, cts.Token);
                     }
                     catch (Exception ex)
                     {
                         _log.LogError(ex, "[chat] Error processing message for user {User}", username);
-                        await SendJson(ws, new { type = "error", content = "An error occurred while processing your message." }, cts.Token);
-                        await SendJson(ws, new { type = "typing", content = false }, cts.Token);
+                        await SafeSend(new { type = "error", content = "An error occurred while processing your message." }, cts.Token);
+                        await SafeSend(new { type = "typing", content = false }, cts.Token);
+                    }
+                    finally
+                    {
+                        await timerCts.CancelAsync();
+                        try { await keepAliveTask; } catch {}
                     }
                 }
             }
