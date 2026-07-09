@@ -12,6 +12,7 @@
 
 *   **Multi-Companion Engine**:
     *   Loads and manages companion profiles (JSON configurations) dynamically.
+    *   Supports client-side parsing and importing of standard **[Tavern Character Cards (PNG)](TAVERN_CARDS.md)**.
     *   **Prompt-Split Logic**: Automatically parses incoming message payloads, separating custom companion instructions from user messages before passing them to the underlying LLM as clean system/user message blocks.
 *   **Secure Mobile Pairing**:
     *   Tracks long-lived pairing connections in a persistent SQLite database (`paired_devices`).
