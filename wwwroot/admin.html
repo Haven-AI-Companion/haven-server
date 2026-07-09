@@ -613,7 +613,11 @@ select.form-input{cursor:pointer}
         <div class="card">
           <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
             AI Companions
-            <button class="btn btn-sm btn-primary" onclick="showAddCompanionForm()">+ Add Companion</button>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm" onclick="triggerTavernImport()" style="background:var(--accent);color:var(--bg);">Import Tavern Card</button>
+              <button class="btn btn-sm btn-primary" onclick="showAddCompanionForm()">+ Add Companion</button>
+            </div>
+            <input type="file" id="tavern-file-input" accept="image/png" style="display:none" onchange="handleTavernImport(event)">
           </div>
           <div id="companions-list" class="table-wrap">
             <div class="empty">
@@ -3441,6 +3445,109 @@ async function deleteCompanion(name) {
   } catch (err) {
     toast(err.message, 'error');
   }
+}
+
+function triggerTavernImport() {
+  document.getElementById('tavern-file-input').value = '';
+  document.getElementById('tavern-file-input').click();
+}
+
+function handleTavernImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const buffer = e.target.result;
+      const data = new DataView(buffer);
+      const bytes = new Uint8Array(buffer);
+
+      if (bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4E || bytes[3] !== 0x47) {
+        throw new Error("Selected file is not a valid PNG image.");
+      }
+
+      let offset = 8;
+      let charData = null;
+
+      while (offset < bytes.length) {
+        if (offset + 8 > bytes.length) break;
+        const length = data.getUint32(offset, false);
+        const chunkType = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+
+        if (chunkType === 'tEXt') {
+          const chunkData = bytes.slice(offset + 8, offset + 8 + length);
+          let nullIdx = 0;
+          while (nullIdx < chunkData.length && chunkData[nullIdx] !== 0) nullIdx++;
+          const keyword = new TextDecoder('ascii').decode(chunkData.slice(0, nullIdx));
+          if (keyword === 'chara') {
+            const text = new TextDecoder('utf-8').decode(chunkData.slice(nullIdx + 1));
+            try {
+              charData = JSON.parse(text);
+            } catch (err) {
+              const decoded = atob(text.trim());
+              charData = JSON.parse(decoded);
+            }
+            break;
+          }
+        } else if (chunkType === 'iTXt') {
+          const chunkData = bytes.slice(offset + 8, offset + 8 + length);
+          let nullIdx = 0;
+          while (nullIdx < chunkData.length && chunkData[nullIdx] !== 0) nullIdx++;
+          const keyword = new TextDecoder('ascii').decode(chunkData.slice(0, nullIdx));
+          if (keyword === 'chara' || keyword === 'ccv3') {
+            let i = nullIdx + 1;
+            const compFlag = chunkData[i++];
+            const compMethod = chunkData[i++];
+            
+            while (i < chunkData.length && chunkData[i] !== 0) i++;
+            i++;
+            while (i < chunkData.length && chunkData[i] !== 0) i++;
+            i++;
+
+            const textBytes = chunkData.slice(i);
+            if (compFlag === 1) {
+              throw new Error("Compressed iTXt character card chunks are not supported in web browser yet.");
+            }
+            const text = new TextDecoder('utf-8').decode(textBytes);
+            charData = JSON.parse(text);
+            break;
+          }
+        }
+        offset += 8 + length + 4;
+      }
+
+      if (!charData) {
+        throw new Error("No character metadata ('chara' or 'ccv3') found in this PNG card. Make sure it is a Tavern-format character card.");
+      }
+
+      const info = charData.data || charData;
+      
+      document.getElementById('companion-form-title').textContent = "Imported Companion (Edit before saving)";
+      document.getElementById('c-name').value = info.name || '';
+      document.getElementById('c-name').disabled = false;
+      document.getElementById('c-voice').value = info.voiceId || '';
+      document.getElementById('c-desc').value = info.description || '';
+      document.getElementById('c-personality').value = info.personality || '';
+      document.getElementById('c-scenario').value = info.scenario || '';
+      document.getElementById('c-first').value = info.first_mes || '';
+      
+      let systemPrompt = info.system_prompt || '';
+      if (!systemPrompt) {
+        systemPrompt = `You are playing the character: ${info.name || 'Companion'}.\n`;
+        if (info.personality) systemPrompt += `Personality: ${info.personality}\n`;
+        if (info.scenario) systemPrompt += `Scenario/Setting: ${info.scenario}\n`;
+      }
+      document.getElementById('c-system').value = systemPrompt;
+
+      document.getElementById('add-companion-status').textContent = '';
+      document.getElementById('add-companion-form').style.display = '';
+      toast("Character card metadata parsed successfully!");
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function escHtml(str) {
