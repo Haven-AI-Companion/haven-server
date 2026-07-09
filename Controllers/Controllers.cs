@@ -9,6 +9,7 @@ using AshServer.Service;
 using System.Diagnostics;
 using System.Security.Claims;
 using System.Text.Json;
+using System.IO.Compression;
 
 namespace AshServer.Controllers;
 
@@ -1237,6 +1238,161 @@ public class AdminController : ControllerBase
         });
     }
 
+    [HttpPost("backup/haven")]
+    public async Task<IActionResult> BackupHaven()
+    {
+        if (!IsAdmin) return Forbid();
+        
+        var dbPath = _config["DatabasePath"] ?? "ash_server.db";
+        var fullPath = Path.GetFullPath(dbPath);
+        if (!System.IO.File.Exists(fullPath))
+            return NotFound(new { error = "Database file not found" });
+
+        var dir = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
+        var backupName = $"haven_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.haven";
+        var backupPath = Path.Combine(dir, backupName);
+
+        try
+        {
+            using (var zipStream = new FileStream(backupPath, FileMode.Create))
+            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create))
+            {
+                // 1. Add database
+                var tempDb = Path.GetTempFileName();
+                System.IO.File.Copy(fullPath, tempDb, true);
+                archive.CreateEntryFromFile(tempDb, "db.sqlite");
+                try { System.IO.File.Delete(tempDb); } catch {}
+
+                // 2. Add uploads
+                var uploadsDir = Path.Combine(_env.WebRootPath, "uploads");
+                if (Directory.Exists(uploadsDir))
+                {
+                    foreach (var file in Directory.GetFiles(uploadsDir, "*", SearchOption.AllDirectories))
+                    {
+                        var relativePath = Path.GetRelativePath(uploadsDir, file);
+                        archive.CreateEntryFromFile(file, Path.Combine("uploads", relativePath));
+                    }
+                }
+
+                // 3. Add companions
+                var personalityPath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+                var companionsDir = Path.Combine(AppContext.BaseDirectory, personalityPath, "companions");
+                if (Directory.Exists(companionsDir))
+                {
+                    foreach (var file in Directory.GetFiles(companionsDir, "*", SearchOption.AllDirectories))
+                    {
+                        var relativePath = Path.GetRelativePath(companionsDir, file);
+                        archive.CreateEntryFromFile(file, Path.Combine("companions", relativePath));
+                    }
+                }
+            }
+
+            var size = new FileInfo(backupPath).Length;
+            return Ok(new
+            {
+                ok = true,
+                filename = backupName,
+                size = size,
+                message = "Haven backup package created successfully."
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to create Haven backup package: {ex.Message}" });
+        }
+    }
+
+    [HttpPost("restore/haven")]
+    public async Task<IActionResult> RestoreHaven([FromForm] IFormFile file)
+    {
+        if (!IsAdmin) return Forbid();
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "No file uploaded." });
+
+        if (!file.FileName.EndsWith(".haven", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "Only .haven packages are supported." });
+
+        var dbPath = _config["DatabasePath"] ?? "ash_server.db";
+        var fullPath = Path.GetFullPath(dbPath);
+
+        // Save uploaded package to temp folder
+        var tempPackage = Path.GetTempFileName();
+        using (var fs = new FileStream(tempPackage, FileMode.Create))
+        {
+            await file.CopyToAsync(fs);
+        }
+
+        try
+        {
+            // Verify it contains db.sqlite
+            bool hasDb = false;
+            using (var archive = ZipFile.OpenRead(tempPackage))
+            {
+                hasDb = archive.Entries.Any(e => e.FullName.Equals("db.sqlite", StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!hasDb)
+            {
+                return BadRequest(new { error = "Invalid .haven package: missing db.sqlite database." });
+            }
+
+            // Close active connections to clear the SQLite file lock
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+            // Extract the database and folders
+            using (var archive = ZipFile.OpenRead(tempPackage))
+            {
+                // Delete existing WAL files to avoid corruption
+                var walPath = fullPath + "-wal";
+                var shmPath = fullPath + "-shm";
+                try { if (System.IO.File.Exists(walPath)) System.IO.File.Delete(walPath); } catch {}
+                try { if (System.IO.File.Exists(shmPath)) System.IO.File.Delete(shmPath); } catch {}
+
+                // Extract db
+                var dbEntry = archive.Entries.FirstOrDefault(e => e.FullName.Equals("db.sqlite", StringComparison.OrdinalIgnoreCase));
+                if (dbEntry != null)
+                {
+                    dbEntry.ExtractToFile(fullPath, overwrite: true);
+                }
+
+                // Extract uploads
+                var uploadsDir = Path.Combine(_env.WebRootPath, "uploads");
+                Directory.CreateDirectory(uploadsDir);
+                foreach (var entry in archive.Entries.Where(e => e.FullName.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (string.IsNullOrEmpty(entry.Name)) continue; // skip directories
+                    var relativePath = entry.FullName.Substring("uploads/".Length);
+                    var targetPath = Path.Combine(uploadsDir, relativePath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+                    entry.ExtractToFile(targetPath, overwrite: true);
+                }
+
+                // Extract companions
+                var personalityPath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+                var companionsDir = Path.Combine(AppContext.BaseDirectory, personalityPath, "companions");
+                Directory.CreateDirectory(companionsDir);
+                foreach (var entry in archive.Entries.Where(e => e.FullName.StartsWith("companions/", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (string.IsNullOrEmpty(entry.Name)) continue; // skip directories
+                    var relativePath = entry.FullName.Substring("companions/".Length);
+                    var targetPath = Path.Combine(companionsDir, relativePath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+                    entry.ExtractToFile(targetPath, overwrite: true);
+                }
+            }
+
+            return Ok(new { ok = true, message = "System state successfully restored from .haven package." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to restore .haven package: {ex.Message}" });
+        }
+        finally
+        {
+            try { System.IO.File.Delete(tempPackage); } catch {}
+        }
+    }
+
     [HttpGet("database/status")]
     public IActionResult GetDatabaseStatus()
     {
@@ -1255,7 +1411,8 @@ public class AdminController : ControllerBase
         var backupFiles = new List<object>();
         if (Directory.Exists(dir))
         {
-            var files = Directory.GetFiles(dir, "ash_server_backup_*.db");
+            var files = Directory.GetFiles(dir, "ash_server_backup_*.db")
+                .Concat(Directory.GetFiles(dir, "haven_backup_*.haven"));
             foreach (var f in files)
             {
                 var fi = new FileInfo(f);
@@ -1285,7 +1442,11 @@ public class AdminController : ControllerBase
         {
             return BadRequest(new { error = "Invalid filename" });
         }
-        if (!filename.StartsWith("ash_server_backup_") || !filename.EndsWith(".db"))
+        if (!filename.StartsWith("ash_server_backup_") && !filename.StartsWith("haven_backup_"))
+        {
+            return BadRequest(new { error = "Invalid backup file format" });
+        }
+        if (!filename.EndsWith(".db") && !filename.EndsWith(".haven"))
         {
             return BadRequest(new { error = "Invalid backup file format" });
         }
