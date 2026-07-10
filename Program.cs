@@ -534,20 +534,51 @@ public class Program
 
             var modelId = config["DefaultModel"] ?? "default";
             var history = new List<ChatMessage> { new ChatMessage("system", systemPrompt) };
+            string? lastCameraFrameBase64 = null;
 
             // ── Main Receive & Process Loop ──
             while (ws.State == WebSocketState.Open)
             {
                 using var audioMs = new MemoryStream();
+                using var textMs = new MemoryStream();
                 var recvBuf = new byte[8192];
                 WebSocketReceiveResult recvResult;
+                bool isText = false;
+
                 do
                 {
                     recvResult = await ws.ReceiveAsync(recvBuf, CancellationToken.None);
                     if (recvResult.MessageType == WebSocketMessageType.Close) return;
                     if (recvResult.MessageType == WebSocketMessageType.Binary)
+                    {
                         audioMs.Write(recvBuf, 0, recvResult.Count);
+                    }
+                    else if (recvResult.MessageType == WebSocketMessageType.Text)
+                    {
+                        isText = true;
+                        textMs.Write(recvBuf, 0, recvResult.Count);
+                    }
                 } while (!recvResult.EndOfMessage);
+
+                if (isText)
+                {
+                    try
+                    {
+                        var textStr = Encoding.UTF8.GetString(textMs.ToArray());
+                        using var doc = JsonDocument.Parse(textStr);
+                        if (doc.RootElement.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "camera_frame")
+                        {
+                            if (doc.RootElement.TryGetProperty("image", out var imgProp))
+                            {
+                                lastCameraFrameBase64 = imgProp.GetString();
+                                var ackMsg = JsonSerializer.Serialize(new { type = "camera_ack", status = "ok" });
+                                await ws.SendAsync(Encoding.UTF8.GetBytes(ackMsg), WebSocketMessageType.Text, true, CancellationToken.None);
+                            }
+                        }
+                    }
+                    catch { }
+                    continue;
+                }
 
                 if (audioMs.Length == 0) continue;
 
@@ -591,7 +622,9 @@ public class Program
 
                     if (string.IsNullOrWhiteSpace(transcription)) continue;
 
-                    history.Add(new ChatMessage("user", transcription));
+                    var imgList = lastCameraFrameBase64 != null ? new List<string> { lastCameraFrameBase64 } : null;
+                    history.Add(new ChatMessage("user", transcription, imgList));
+                    lastCameraFrameBase64 = null;
                     if (history.Count > 40)
                     {
                         history.RemoveRange(1, 2);
