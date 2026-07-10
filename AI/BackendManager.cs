@@ -32,6 +32,7 @@ public class OllamaBackend : IAiBackend
 {
     private readonly string _baseUrl;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
     public OllamaBackend(string baseUrl)
     {
@@ -53,74 +54,90 @@ public class OllamaBackend : IAiBackend
         string model, List<ChatMessage> messages,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var payload = JsonSerializer.Serialize(new
+        await _lock.WaitAsync(ct);
+        try
         {
-            model,
-            messages = messages.Select(m => m.Images?.Count > 0
-                ? (object)new { role = m.Role, content = m.Content, images = m.Images }
-                : new { role = m.Role, content = m.Content }),
-            stream = true,
-            options = new
+            var payload = JsonSerializer.Serialize(new
             {
-                stop = BackendManager.GetStopSequences(messages),
-                num_predict = 4096,
-                temperature = 0.7f
-            }
-        });
-
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/api/chat")
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-
-        using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-        resp.EnsureSuccessStatusCode();
-
-        using var stream = await resp.Content.ReadAsStreamAsync(ct);
-        using var reader = new StreamReader(stream);
-
-        string? line;
-        while ((line = await reader.ReadLineAsync(ct)) != null && !ct.IsCancellationRequested)
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            JsonDocument doc;
-            try { doc = JsonDocument.Parse(line); }
-            catch { continue; }
-            using (doc)
-            {
-                if (doc.RootElement.TryGetProperty("message", out var msg) &&
-                    msg.TryGetProperty("content", out var c))
+                model,
+                messages = messages.Select(m => m.Images?.Count > 0
+                    ? (object)new { role = m.Role, content = m.Content, images = m.Images }
+                    : new { role = m.Role, content = m.Content }),
+                stream = true,
+                options = new
                 {
-                    var text = c.GetString();
-                    if (!string.IsNullOrEmpty(text)) yield return text;
+                    stop = BackendManager.GetStopSequences(messages),
+                    num_predict = 4096,
+                    temperature = 0.7f
                 }
-                if (doc.RootElement.TryGetProperty("done", out var done) && done.GetBoolean())
-                    yield break;
+            });
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/api/chat")
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+
+            using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            resp.EnsureSuccessStatusCode();
+
+            using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var reader = new StreamReader(stream);
+
+            string? line;
+            while ((line = await reader.ReadLineAsync(ct)) != null && !ct.IsCancellationRequested)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                JsonDocument doc;
+                try { doc = JsonDocument.Parse(line); }
+                catch { continue; }
+                using (doc)
+                {
+                    if (doc.RootElement.TryGetProperty("message", out var msg) &&
+                        msg.TryGetProperty("content", out var c))
+                    {
+                        var text = c.GetString();
+                        if (!string.IsNullOrEmpty(text)) yield return text;
+                    }
+                    if (doc.RootElement.TryGetProperty("done", out var done) && done.GetBoolean())
+                        yield break;
+                }
             }
+        }
+        finally
+        {
+            _lock.Release();
         }
     }
 
     public async Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
     {
-        var payload = JsonSerializer.Serialize(new
+        await _lock.WaitAsync(ct);
+        try
         {
-            model,
-            messages = messages.Select(m => new { role = m.Role, content = m.Content }),
-            tools,
-            stream = false,
-            options = new
+            var payload = JsonSerializer.Serialize(new
             {
-                stop = BackendManager.GetStopSequences(messages),
-                num_predict = 4096,
-                temperature = 0.7f
-            }
-        });
+                model,
+                messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+                tools,
+                stream = false,
+                options = new
+                {
+                    stop = BackendManager.GetStopSequences(messages),
+                    num_predict = 4096,
+                    temperature = 0.7f
+                }
+            });
 
-        var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        var resp = await Http.PostAsync($"{_baseUrl}/api/chat", content);
-        resp.EnsureSuccessStatusCode();
-        var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-        return doc.RootElement.GetProperty("message").Clone();
+            var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            var resp = await Http.PostAsync($"{_baseUrl}/api/chat", content);
+            resp.EnsureSuccessStatusCode();
+            var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            return doc.RootElement.GetProperty("message").Clone();
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 }
 
@@ -131,6 +148,7 @@ public class OpenAiCompatBackend : IAiBackend
     private readonly string _baseUrl;
     private readonly string _apiKey;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
     public OpenAiCompatBackend(string baseUrl, string? apiKey)
     {
@@ -155,121 +173,137 @@ public class OpenAiCompatBackend : IAiBackend
         string model, List<ChatMessage> messages,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var payload = JsonSerializer.Serialize(new
+        await _lock.WaitAsync(ct);
+        try
         {
-            model,
-            messages = messages.Select(m => new { role = m.Role, content = m.Content }),
-            stream = true,
-            stop = BackendManager.GetStopSequences(messages),
-            max_tokens = 4096,
-            temperature = 0.7f
-        });
-
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-        if (_apiKey != "none") req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-
-        using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-        resp.EnsureSuccessStatusCode();
-
-        using var stream = await resp.Content.ReadAsStreamAsync(ct);
-        using var reader = new StreamReader(stream);
-
-        string? line;
-        bool inReasoning = false;
-        while ((line = await reader.ReadLineAsync(ct)) != null && !ct.IsCancellationRequested)
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            if (line.StartsWith("data: "))
+            var payload = JsonSerializer.Serialize(new
             {
-                var data = line[6..].Trim();
-                if (data == "[DONE]")
-                {
-                    if (inReasoning)
-                    {
-                        yield return "</thought>\n";
-                    }
-                    yield break;
-                }
-                JsonDocument doc;
-                try { doc = JsonDocument.Parse(data); }
-                catch { continue; }
-                using (doc)
-                {
-                    var delta = doc.RootElement
-                        .GetProperty("choices")[0]
-                        .GetProperty("delta");
+                model = string.IsNullOrEmpty(model) ? "model" : model,
+                messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+                stream = true,
+                stop = BackendManager.GetStopSequences(messages),
+                max_tokens = 4096,
+                temperature = 0.7f
+            });
 
-                    string? reasoning = delta.TryGetProperty("reasoning_content", out var r) ? r.GetString() : null;
-                    string? content = delta.TryGetProperty("content", out var c) ? c.GetString() : null;
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+            if (_apiKey != "none") req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
-                    if (!string.IsNullOrEmpty(reasoning))
-                    {
-                        if (!inReasoning)
-                        {
-                            inReasoning = true;
-                            yield return "<thought>" + reasoning;
-                        }
-                        else
-                        {
-                            yield return reasoning;
-                        }
-                    }
-                    else if (!string.IsNullOrEmpty(content))
+            using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            resp.EnsureSuccessStatusCode();
+
+            using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var reader = new StreamReader(stream);
+
+            string? line;
+            bool inReasoning = false;
+            while ((line = await reader.ReadLineAsync(ct)) != null && !ct.IsCancellationRequested)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (line.StartsWith("data: "))
+                {
+                    var data = line[6..].Trim();
+                    if (data == "[DONE]")
                     {
                         if (inReasoning)
                         {
-                            inReasoning = false;
-                            if (content.TrimStart().StartsWith("<thought>"))
+                            yield return "</thought>\n";
+                        }
+                        yield break;
+                    }
+                    JsonDocument doc;
+                    try { doc = JsonDocument.Parse(data); }
+                    catch { continue; }
+                    using (doc)
+                    {
+                        var delta = doc.RootElement
+                            .GetProperty("choices")[0]
+                            .GetProperty("delta");
+
+                        string? reasoning = delta.TryGetProperty("reasoning_content", out var r) ? r.GetString() : null;
+                        string? content = delta.TryGetProperty("content", out var c) ? c.GetString() : null;
+
+                        if (!string.IsNullOrEmpty(reasoning))
+                        {
+                            if (!inReasoning)
                             {
-                                yield return content;
+                                inReasoning = true;
+                                yield return "<thought>" + reasoning;
                             }
                             else
                             {
-                                yield return "</thought>\n" + content;
+                                yield return reasoning;
                             }
                         }
-                        else
+                        else if (!string.IsNullOrEmpty(content))
                         {
-                            yield return content;
+                            if (inReasoning)
+                            {
+                                inReasoning = false;
+                                if (content.TrimStart().StartsWith("<thought>"))
+                                {
+                                    yield return content;
+                                }
+                                else
+                                {
+                                    yield return "</thought>\n" + content;
+                                }
+                            }
+                            else
+                            {
+                                yield return content;
+                            }
                         }
                     }
                 }
             }
+            if (inReasoning)
+            {
+                yield return "</thought>\n";
+            }
         }
-        if (inReasoning)
+        finally
         {
-            yield return "</thought>\n";
+            _lock.Release();
         }
     }
 
     public async Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
     {
-        var payload = JsonSerializer.Serialize(new
+        await _lock.WaitAsync(ct);
+        try
         {
-            model,
-            messages = messages.Select(m => new { role = m.Role, content = m.Content }),
-            tools,
-            stream = false,
-            stop = BackendManager.GetStopSequences(messages),
-            max_tokens = 4096,
-            temperature = 0.7f
-        });
+            var payload = JsonSerializer.Serialize(new
+            {
+                model = string.IsNullOrEmpty(model) ? "model" : model,
+                messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+                tools,
+                stream = false,
+                stop = BackendManager.GetStopSequences(messages),
+                max_tokens = 4096,
+                temperature = 0.7f
+            });
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+            if (_apiKey != "none") req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+
+            var resp = await Http.SendAsync(req, ct);
+            resp.EnsureSuccessStatusCode();
+
+            var jsonStr = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = JsonDocument.Parse(jsonStr);
+            return doc.RootElement.GetProperty("choices")[0].GetProperty("message").Clone();
+        }
+        finally
         {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-        if (_apiKey != "none") req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-
-        var resp = await Http.SendAsync(req, ct);
-        resp.EnsureSuccessStatusCode();
-
-        var jsonStr = await resp.Content.ReadAsStringAsync(ct);
-        using var doc = JsonDocument.Parse(jsonStr);
-        return doc.RootElement.GetProperty("choices")[0].GetProperty("message").Clone();
+            _lock.Release();
+        }
     }
 }
 

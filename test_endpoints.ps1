@@ -7,11 +7,11 @@ $ErrorActionPreference = "Continue" # Prevent parser/terminating script crashes
 # Configuration
 $TestPort = 18798
 $BaseUrl = "http://localhost:$TestPort"
-$BinaryDir = "C:\Users\admin\source\ash-server-cs\bin\Debug\net10.0\win-x64"
-$BinaryPath = Join-Path $BinaryDir "ash-server.exe"
+$BinaryDir = "C:\Users\admin\ash-server\bin\Debug\net10.0\win-x64"
+$BinaryPath = Join-Path $BinaryDir "haven-server.exe"
 $ConfigPath = Join-Path $BinaryDir "config.json"
 $ConfigBakPath = Join-Path $BinaryDir "config.json.bak"
-$DbPath = Join-Path $PSScriptRoot "ash_server_test.db"
+$DbPath = Join-Path $PSScriptRoot "haven_server_test.db"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "   Ash Server Pre-Release Integration Test Runner         " -ForegroundColor Cyan
@@ -42,13 +42,29 @@ if (Test-Path $ConfigPath) {
 }
 
 # Create test configuration
-$TestConfig = @{
+$OriginalSecret = ""
+if (Test-Path $ConfigPath) {
+    try {
+        $OrigJson = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+        if ($OrigJson.Jwt -and $OrigJson.Jwt.Secret) {
+            $OriginalSecret = $OrigJson.Jwt.Secret
+        }
+    } catch {}
+}
+
+$TestConfigObj = @{
     "Port" = $TestPort
     "Host" = "127.0.0.1"
-    "DatabasePath" = "ash_server_test.db"
+    "DatabasePath" = "haven_server_test.db"
     "RequireAuth" = $true
     "AllowRegistration" = $true
-} | ConvertTo-Json
+}
+if ($OriginalSecret) {
+    $TestConfigObj["Jwt"] = @{ "Secret" = $OriginalSecret }
+} else {
+    $TestConfigObj["Jwt"] = @{ "Secret" = "TEST_SECRET_AT_LEAST_32_CHARS_LONG_FOR_SANDBOX" }
+}
+$TestConfig = $TestConfigObj | ConvertTo-Json
 
 [System.IO.File]::WriteAllText($ConfigPath, $TestConfig)
 Write-Host "[OK] Wrote sandboxed test config.json to $ConfigPath" -ForegroundColor Gray

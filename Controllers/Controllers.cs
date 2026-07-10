@@ -267,17 +267,31 @@ public class ModelsController : ControllerBase
 
     [HttpPost("chat")]
     [Authorize]
-    public async Task Chat([FromBody] ChatRequest req)
+    public async Task Chat([FromBody] ChatRequest req, CancellationToken cancellationToken)
     {
+        var promptText = req.Prompt ?? "";
+        Console.WriteLine($"[chat] Received request. Prompt length: {promptText.Length} chars.");
+        if (_config.GetValue("ai:DisableMemoryExtraction", false) && 
+            promptText.StartsWith("Extract key facts", StringComparison.OrdinalIgnoreCase))
+        {
+            Response.ContentType = "text/plain";
+            await Response.WriteAsync("NONE\n");
+            await Response.Body.FlushAsync();
+            return;
+        }
+
         var modelId = req.Model ?? _config["DefaultModel"] ?? "";
         
         Response.ContentType = "text/plain";
         Response.Headers["Cache-Control"] = "no-cache";
         Response.Headers["Connection"] = "keep-alive";
+        Response.Headers["Content-Encoding"] = "identity";
+
+        var bufferingFeature = HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>();
+        bufferingFeature?.DisableBuffering();
 
         var username = User.FindFirstValue(ClaimTypes.Name) ?? "User";
         var systemPrompt = _personality.GetSystemPrompt(username, req.DisplayName);
-        var promptText = req.Prompt;
 
         if (promptText.StartsWith("You are ") && promptText.Contains("\n\n"))
         {
@@ -298,7 +312,7 @@ public class ModelsController : ControllerBase
         var responseText = new System.Text.StringBuilder();
         try
         {
-            await foreach (var token in _backends.StreamChat(modelId, messages))
+            await foreach (var token in _backends.StreamChat(modelId, messages, cancellationToken))
             {
                 responseText.Append(token);
                 // Write token + newline so pocket-ash ReadLineAsync streams it smoothly

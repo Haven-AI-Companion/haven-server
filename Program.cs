@@ -184,6 +184,37 @@ public class Program
             if (!cfgRoot.ContainsKey("Jwt")) cfgRoot["Jwt"] = new System.Text.Json.Nodes.JsonObject();
             cfgRoot["Jwt"]!.AsObject()["Secret"] = jwtSecret;
             File.WriteAllText(genConfigPath, cfgRoot.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            
+            // Sync to project root config.json to survive clean builds during development (skip if testing)
+            var checkDbPath = builder.Configuration["DatabasePath"] ?? "haven_server.db";
+            if (!checkDbPath.Contains("_test", StringComparison.OrdinalIgnoreCase))
+            {
+                var currentDir = AppContext.BaseDirectory;
+                while (!string.IsNullOrEmpty(currentDir))
+                {
+                    try
+                    {
+                        var csprojFiles = Directory.GetFiles(currentDir, "*.csproj");
+                        if (csprojFiles.Length > 0)
+                        {
+                            var rootConfig = Path.Combine(currentDir, "config.json");
+                            if (File.Exists(rootConfig) && Path.GetFullPath(rootConfig) != Path.GetFullPath(genConfigPath))
+                            {
+                                var rootText = File.ReadAllText(rootConfig);
+                                var rootNode = System.Text.Json.Nodes.JsonNode.Parse(rootText)!.AsObject();
+                                if (!rootNode.ContainsKey("Jwt")) rootNode["Jwt"] = new System.Text.Json.Nodes.JsonObject();
+                                rootNode["Jwt"]!.AsObject()["Secret"] = jwtSecret;
+                                File.WriteAllText(rootConfig, rootNode.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                                Console.WriteLine($"[startup] Synced JWT secret back to root config.json to survive rebuilds.");
+                            }
+                            break;
+                        }
+                    }
+                    catch {}
+                    currentDir = Path.GetDirectoryName(currentDir);
+                }
+            }
+
             builder.Configuration["Jwt:Secret"] = jwtSecret; // sync in-memory config so AuthService uses same key
             Console.WriteLine("[startup] Generated new JWT secret and saved to config.json");
         }

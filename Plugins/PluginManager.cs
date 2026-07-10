@@ -225,16 +225,43 @@ public class PluginManager
             if (!File.Exists(resolvedCommand))
                 return $"Plugin tool '{tool.Name}' error: executable not found at '{resolvedCommand}'.";
 
-            var psi = new ProcessStartInfo(resolvedCommand,
-                string.Join(" ", tool.Handler.Args))
+            ProcessStartInfo psi;
+            if (OperatingSystem.IsWindows() &&
+                (resolvedCommand.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ||
+                 resolvedCommand.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)))
             {
-                WorkingDirectory       = plugin.DirectoryPath,
-                RedirectStandardInput  = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError  = true,
-                UseShellExecute        = false,
-                CreateNoWindow         = true
-            };
+                psi = new ProcessStartInfo("cmd.exe")
+                {
+                    WorkingDirectory       = plugin.DirectoryPath,
+                    RedirectStandardInput  = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true
+                };
+                psi.ArgumentList.Add("/c");
+                psi.ArgumentList.Add(resolvedCommand);
+                foreach (var arg in tool.Handler.Args)
+                {
+                    psi.ArgumentList.Add(arg);
+                }
+            }
+            else
+            {
+                psi = new ProcessStartInfo(resolvedCommand)
+                {
+                    WorkingDirectory       = plugin.DirectoryPath,
+                    RedirectStandardInput  = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true
+                };
+                foreach (var arg in tool.Handler.Args)
+                {
+                    psi.ArgumentList.Add(arg);
+                }
+            }
 
             using var proc = Process.Start(psi) ?? throw new Exception("Failed to start process");
             proc.ErrorDataReceived += (sender, e) =>

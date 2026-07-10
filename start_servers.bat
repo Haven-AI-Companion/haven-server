@@ -18,15 +18,15 @@ start "Stable Diffusion Server" sd-server.exe --model "C:\Users\admin\stable-dif
 echo [OK] SD Server launched in a new window.
 echo.
 
-:: 2. Start Ash Server
-echo [2/2] Starting Ash Server...
+:: 2. Start Haven Server
+echo [2/2] Starting Haven Server...
 cd /d "C:\Users\admin\ash-server"
-if not exist "bin\Debug\net10.0\win-x64\ash-server.exe" (
-    echo [ERROR] ash-server.exe not found in C:\Users\admin\ash-server\bin\Debug\net10.0\win-x64
+if not exist "bin\Debug\net10.0\win-x64\haven-server.exe" (
+    echo [ERROR] haven-server.exe not found in C:\Users\admin\ash-server\bin\Debug\net10.0\win-x64
     goto error
 )
-start "Ash Server" "bin\Debug\net10.0\win-x64\ash-server.exe"
-echo [OK] Ash Server launched in a new window.
+start "Haven Server" "bin\Debug\net10.0\win-x64\haven-server.exe"
+echo [OK] Haven Server launched in a new window.
 echo.
 
 echo ==========================================================
