@@ -96,6 +96,29 @@ public class Program
         // Configure Kestrel based on network settings in configuration
         builder.WebHost.ConfigureKestrel(options =>
         {
+            // Configure aggressive TCP Keep-Alives (10s time, 3s interval, 3 retries) on all incoming sockets
+            // to instantly tear down dead connections from app force-closes, NAT timeouts, or cellular drops
+            options.ConfigureEndpointDefaults(listenOptions =>
+            {
+                listenOptions.Use(next => async connectionContext =>
+                {
+                    var socketFeature = connectionContext.Features.Get<Microsoft.AspNetCore.Connections.Features.IConnectionSocketFeature>();
+                    if (socketFeature?.Socket != null)
+                    {
+                        var socket = socketFeature.Socket;
+                        try
+                        {
+                            socket.SetSocketOption(System.Net.Sockets.SocketOptionLevel.Socket, System.Net.Sockets.SocketOptionName.KeepAlive, true);
+                            socket.SetSocketOption(System.Net.Sockets.SocketOptionLevel.Tcp, System.Net.Sockets.SocketOptionName.TcpKeepAliveTime, 10);
+                            socket.SetSocketOption(System.Net.Sockets.SocketOptionLevel.Tcp, System.Net.Sockets.SocketOptionName.TcpKeepAliveInterval, 3);
+                            socket.SetSocketOption(System.Net.Sockets.SocketOptionLevel.Tcp, System.Net.Sockets.SocketOptionName.TcpKeepAliveRetryCount, 3);
+                        }
+                        catch {}
+                    }
+                    await next(connectionContext);
+                });
+            });
+
             var port = builder.Configuration.GetValue("Port", 18799);
             
             var bindInterface = builder.Configuration["BindInterface"]?.Trim();
