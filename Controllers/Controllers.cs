@@ -383,6 +383,49 @@ public class ModelsController : ControllerBase
         }
     }
 
+    [HttpGet("tts/voices")]
+    [AllowAnonymous]
+    public IActionResult ListVoices()
+    {
+        var list = new System.Collections.Generic.List<object>();
+
+        // 1. Static Kokoro voices supported by server python script
+        var kokoroVoices = new[]
+        {
+            new { id = "af_sarah", name = "Sarah (Female, Kokoro)", type = "kokoro" },
+            new { id = "af_bella", name = "Bella (Female, Kokoro)", type = "kokoro" },
+            new { id = "af_nicole", name = "Nicole (Female, Kokoro)", type = "kokoro" },
+            new { id = "af_sky", name = "Sky (Female, Kokoro)", type = "kokoro" },
+            new { id = "am_adam", name = "Adam (Male, Kokoro)", type = "kokoro" },
+            new { id = "am_michael", name = "Michael (Male, Kokoro)", type = "kokoro" },
+            new { id = "bf_emma", name = "Emma (Female UK, Kokoro)", type = "kokoro" },
+            new { id = "bf_isabella", name = "Isabella (Female UK, Kokoro)", type = "kokoro" },
+            new { id = "bm_george", name = "George (Male UK, Kokoro)", type = "kokoro" },
+            new { id = "bm_lewis", name = "Lewis (Male UK, Kokoro)", type = "kokoro" }
+        };
+        list.AddRange(kokoroVoices);
+
+        // 2. Scan Piper ONNX models directory
+        var modelsDir = @"C:\Users\admin\piper\piper\models";
+        if (System.IO.Directory.Exists(modelsDir))
+        {
+            try
+            {
+                var files = System.IO.Directory.GetFiles(modelsDir, "*.onnx");
+                foreach (var file in files)
+                {
+                    var id = System.IO.Path.GetFileNameWithoutExtension(file);
+                    var name = id.Replace("_", " ").Replace("-", " ");
+                    name = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name) + " (Piper)";
+                    list.Add(new { id = id, name = name, type = "piper" });
+                }
+            }
+            catch {}
+        }
+
+        return Ok(list);
+    }
+
     public class TtsRequest
     {
         [System.Text.Json.Serialization.JsonPropertyName("text")]
