@@ -135,59 +135,9 @@ public class HardwareProfiler
         Console.WriteLine($"[profiler] System profiled: {profile.CpuCores} CPU Cores, {profile.TotalRamGb:F1} GB RAM, CUDA GPU: {(profile.HasCuda ? "DETECTED" : "NOT DETECTED")}");
         Console.WriteLine($"[profiler] Recommended model size: {profile.RecommendedModelSize}, Threads: {profile.OptimalThreads}, GPU Layers: {profile.GpuLayers}");
 
-        // 2. Scan for local GGUF models in ./models
-        var modelsDir = Path.Combine(AppContext.BaseDirectory, "models");
-        if (!Directory.Exists(modelsDir))
-        {
-            Directory.CreateDirectory(modelsDir);
-        }
-
-        var ggufFiles = Directory.GetFiles(modelsDir, "*.gguf");
-        if (ggufFiles.Length == 0)
-        {
-            Console.WriteLine($"[profiler] No local GGUF models found in '{modelsDir}'. Local server will not auto-start.");
-            return;
-        }
-
-        var modelPath = ggufFiles[0]; // Auto-pick the first model
-        Console.WriteLine($"[profiler] Found local model: {Path.GetFileName(modelPath)}");
-
-        // 3. Locate llama-server executable
-        var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "llama-server.exe" : "llama-server";
-        var exePath = FindExecutable(exeName);
-
-        if (string.IsNullOrEmpty(exePath))
-        {
-            Console.WriteLine("[profiler] Warning: 'llama-server' executable not found in ./bin or system PATH. Cannot auto-start local backend.");
-            return;
-        }
-
-        // 4. Spawn llama-server in the background with --embedding enabled for local RAG
-        string args = $"-m \"{modelPath}\" -c 2048 -t {profile.OptimalThreads} -ngl {profile.GpuLayers} --port {LocalPort} --embedding";
-        Console.WriteLine($"[profiler] Spawning local backend: {exePath} {args}");
-
+        // Register the backend in the database if it doesn't exist
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = exePath,
-                Arguments = args,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            var binDir = Path.GetDirectoryName(exePath);
-            if (!string.IsNullOrEmpty(binDir))
-            {
-                startInfo.EnvironmentVariables["LD_LIBRARY_PATH"] = binDir;
-            }
-
-            _llamaProcess = new Process { StartInfo = startInfo };
-            _llamaProcess.Start();
-
-            // Register the backend in the database if it doesn't exist
             var backends = await _db.GetAllBackends();
             var localBackendUrl = $"http://127.0.0.1:{LocalPort}";
             var exists = backends.Any(b => b.BaseUrl.TrimEnd('/') == localBackendUrl);
@@ -197,14 +147,13 @@ public class HardwareProfiler
                 await _db.CreateBackend("Local Llama.cpp", "openai_compat", localBackendUrl, null);
                 Console.WriteLine("[profiler] Registered 'Local Llama.cpp' in the database.");
             }
-
-            // Start Stable Diffusion backend concurrently
-            await InitializeSdBackendAsync();
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[profiler] Failed to start llama-server: {ex.Message}");
+            Console.Error.WriteLine($"[profiler] Failed to register local backend in DB: {ex.Message}");
         }
+
+        Console.WriteLine("[profiler] Local auto-start sidecar management is disabled. Launch servers externally in their own console windows.");
     }
 
     private string? FindExecutable(string name)
@@ -239,78 +188,11 @@ public class HardwareProfiler
 
     public async Task InitializeSdBackendAsync()
     {
-        var sdDir = @"C:\Users\admin\stable-diffusion-cpp";
-        var exePath = Path.Combine(sdDir, "sd-server.exe");
-        if (!File.Exists(exePath))
-        {
-            Console.WriteLine($"[profiler] Stable Diffusion server executable not found at '{exePath}'. Skipping auto-start.");
-            return;
-        }
-
-        var modelPath = Path.Combine(sdDir, "models", "DreamShaper8_LCM_q8_0.gguf");
-        var taesdPath = Path.Combine(sdDir, "models", "taesd.safetensors");
-        if (!File.Exists(modelPath))
-        {
-            Console.WriteLine($"[profiler] Stable Diffusion model not found at '{modelPath}'. Skipping SD auto-start.");
-            return;
-        }
-
-        string args = $"--model \"{modelPath}\"";
-        if (File.Exists(taesdPath))
-        {
-            args += $" --taesd \"{taesdPath}\"";
-        }
-        args += " --listen-ip 127.0.0.1 --listen-port 8080 --steps 4 --sampling-method lcm --cfg-scale 1.5";
-
-        Console.WriteLine($"[profiler] Spawning local Stable Diffusion server: {exePath} {args}");
-        try
-        {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = exePath,
-                Arguments = args,
-                WorkingDirectory = sdDir,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            _sdProcess = new Process { StartInfo = startInfo };
-            _sdProcess.Start();
-            Console.WriteLine("[profiler] Stable Diffusion server started successfully.");
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[profiler] Failed to start Stable Diffusion server: {ex.Message}");
-        }
+        await Task.CompletedTask;
     }
 
     public void StopLocalBackend()
     {
-        try
-        {
-            if (_llamaProcess != null && !_llamaProcess.HasExited)
-            {
-                _llamaProcess.Kill(true);
-                _llamaProcess.Dispose();
-                _llamaProcess = null;
-                Console.WriteLine("[profiler] Stopped local llama-server process.");
-            }
-        }
-        catch { }
-
-        try
-        {
-            if (_sdProcess != null && !_sdProcess.HasExited)
-            {
-                _sdProcess.Kill(true);
-                _sdProcess.Dispose();
-                _sdProcess = null;
-                Console.WriteLine("[profiler] Stopped local Stable Diffusion server process.");
-            }
-        }
-        catch { }
     }
 
     // Win32 memory struct and P/Invoke
