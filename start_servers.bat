@@ -11,9 +11,11 @@ echo  (Llama and Stable Diffusion servers will be auto-managed
 echo  in the background as unified sidecars)
 echo.
 
-cd /d "C:\Users\admin\haven-server"
+:: Change directory to the folder containing this batch file
+cd /d "%~dp0"
+
 if not exist "bin\Debug\net10.0\win-x64\haven-server.exe" (
-    echo [ERROR] haven-server.exe not found in C:\Users\admin\haven-server\bin\Debug\net10.0\win-x64
+    echo [ERROR] haven-server.exe not found in bin\Debug\net10.0\win-x64
     goto error
 )
 
