@@ -7,7 +7,7 @@ $ErrorActionPreference = "Continue" # Prevent parser/terminating script crashes
 # Configuration
 $TestPort = 18798
 $BaseUrl = "http://localhost:$TestPort"
-$BinaryDir = "C:\Users\admin\ash-server\bin\Debug\net10.0\win-x64"
+$BinaryDir = "C:\Users\admin\haven-server\bin\Debug\net10.0\win-x64"
 $BinaryPath = Join-Path $BinaryDir "haven-server.exe"
 $ConfigPath = Join-Path $BinaryDir "config.json"
 $ConfigBakPath = Join-Path $BinaryDir "config.json.bak"

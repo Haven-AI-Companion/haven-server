@@ -12,12 +12,12 @@ $OllamaPort = 11434
 # Executable Paths (Supports both Dev and Production environments)
 $OllamaPath = "C:\Users\admin\AppData\Local\Programs\Ollama\ollama.exe"
 
-$DevServerPath = "C:\Users\admin\ash-server\bin\Debug\net10.0\win-x64\haven-server.exe"
+$DevServerPath = "C:\Users\admin\haven-server\bin\Debug\net10.0\win-x64\haven-server.exe"
 $ProdServerPath = "C:\Program Files\HavenServer\haven-server.exe"
 $ServerPath = if (Test-Path $ProdServerPath) { $ProdServerPath } else { $DevServerPath }
 $ServerDir = Split-Path $ServerPath
 
-$DevSDPath = "C:\Users\admin\ash-server\sd-server\sd-server.exe"
+$DevSDPath = "C:\Users\admin\haven-server\sd-server\sd-server.exe"
 $ProdSDPath = "C:\Program Files\HavenServer\sd-server\sd-server.exe"
 $SDPath = if (Test-Path $ProdSDPath) { $ProdSDPath } else { $DevSDPath }
 
