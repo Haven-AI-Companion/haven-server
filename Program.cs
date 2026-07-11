@@ -348,7 +348,13 @@ public class Program
 
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
         app.UseDefaultFiles();
-        app.UseStaticFiles();
+        var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+        provider.Mappings[".glb"] = "model/gltf-binary";
+        provider.Mappings[".vrm"] = "application/octet-stream";
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            ContentTypeProvider = provider
+        });
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseRateLimiter();
