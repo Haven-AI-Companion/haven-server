@@ -192,6 +192,48 @@ public class Database
                 last_seen   TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS companion_memories (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                companion_name TEXT NOT NULL,
+                content        TEXT NOT NULL,
+                category       TEXT NOT NULL,
+                created_at     TEXT DEFAULT (datetime('now')),
+                UNIQUE(user_id, companion_name, content)
+            );
+
+            CREATE TABLE IF NOT EXISTS companion_diaries (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                companion_name TEXT NOT NULL,
+                date_string    TEXT NOT NULL,
+                content        TEXT NOT NULL,
+                created_at     TEXT DEFAULT (datetime('now')),
+                UNIQUE(user_id, companion_name, date_string)
+            );
+
+            CREATE TABLE IF NOT EXISTS group_chats (
+                id              TEXT PRIMARY KEY,
+                user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name            TEXT NOT NULL,
+                character_names TEXT NOT NULL,
+                created_at      TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS group_messages (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id       TEXT NOT NULL REFERENCES group_chats(id) ON DELETE CASCADE,
+                sender         TEXT NOT NULL,
+                character_name TEXT,
+                content        TEXT NOT NULL,
+                created_at     TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_comp_memories ON companion_memories(user_id, companion_name);
+            CREATE INDEX IF NOT EXISTS idx_comp_diaries ON companion_diaries(user_id, companion_name);
+            CREATE INDEX IF NOT EXISTS idx_group_chats ON group_chats(user_id);
+            CREATE INDEX IF NOT EXISTS idx_group_messages ON group_messages(group_id);
+
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
                 content,
                 conversation_id UNINDEXED,
@@ -1181,6 +1223,140 @@ public class Database
         using var cmd = new SqliteCommand(sql, conn);
         cmd.Parameters.AddWithValue("@token", token);
         cmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("o"));
+        cmd.ExecuteNonQuery();
+    });
+
+    // ── Database Sync Helpers ──────────────────────────────────────────────
+
+    public Task<List<SyncMemory>> GetMemories(int userId, string companionName) => Task.Run(() =>
+    {
+        var list = new List<SyncMemory>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, user_id, companion_name, content, category, created_at FROM companion_memories WHERE user_id = $uid AND companion_name = $cname ORDER BY created_at DESC";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cname", companionName);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            list.Add(new SyncMemory(r.GetInt32(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5)));
+        }
+        return list;
+    });
+
+    public Task SaveMemory(int userId, string companionName, string content, string category) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT OR REPLACE INTO companion_memories (user_id, companion_name, content, category) VALUES ($uid, $cname, $content, $category)";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cname", companionName);
+        cmd.Parameters.AddWithValue("$content", content);
+        cmd.Parameters.AddWithValue("$category", category);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task DeleteMemory(int userId, string companionName, string content) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM companion_memories WHERE user_id = $uid AND companion_name = $cname AND content = $content";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cname", companionName);
+        cmd.Parameters.AddWithValue("$content", content);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<List<SyncDiary>> GetDiaries(int userId, string companionName) => Task.Run(() =>
+    {
+        var list = new List<SyncDiary>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, user_id, companion_name, date_string, content, created_at FROM companion_diaries WHERE user_id = $uid AND companion_name = $cname ORDER BY date_string DESC";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cname", companionName);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            list.Add(new SyncDiary(r.GetInt32(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5)));
+        }
+        return list;
+    });
+
+    public Task SaveDiary(int userId, string companionName, string dateString, string content) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT OR REPLACE INTO companion_diaries (user_id, companion_name, date_string, content) VALUES ($uid, $cname, $date, $content)";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cname", companionName);
+        cmd.Parameters.AddWithValue("$date", dateString);
+        cmd.Parameters.AddWithValue("$content", content);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<List<SyncGroup>> GetGroups(int userId) => Task.Run(() =>
+    {
+        var list = new List<SyncGroup>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, user_id, name, character_names, created_at FROM group_chats WHERE user_id = $uid ORDER BY created_at DESC";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            list.Add(new SyncGroup(r.GetString(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4)));
+        }
+        return list;
+    });
+
+    public Task SaveGroup(int userId, string id, string name, string characterNames) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT OR REPLACE INTO group_chats (id, user_id, name, character_names) VALUES ($id, $uid, $name, $chars)";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$name", name);
+        cmd.Parameters.AddWithValue("$chars", characterNames);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task DeleteGroup(int userId, string id) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM group_chats WHERE user_id = $uid AND id = $id";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<List<SyncGroupMessage>> GetGroupMessages(string groupId) => Task.Run(() =>
+    {
+        var list = new List<SyncGroupMessage>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, group_id, sender, character_name, content, created_at FROM group_messages WHERE group_id = $gid ORDER BY id ASC";
+        cmd.Parameters.AddWithValue("$gid", groupId);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            var charName = r.IsDBNull(3) ? null : r.GetString(3);
+            list.Add(new SyncGroupMessage(r.GetInt32(0), r.GetString(1), r.GetString(2), charName, r.GetString(4), r.GetString(5)));
+        }
+        return list;
+    });
+
+    public Task SaveGroupMessage(string groupId, string sender, string? characterName, string content) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT INTO group_messages (group_id, sender, character_name, content) VALUES ($gid, $sender, $char, $content)";
+        cmd.Parameters.AddWithValue("$gid", groupId);
+        cmd.Parameters.AddWithValue("$sender", sender);
+        cmd.Parameters.AddWithValue("$char", (object?)characterName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$content", content);
         cmd.ExecuteNonQuery();
     });
 }

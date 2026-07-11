@@ -12,31 +12,64 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 <style>
   :root {
-    --bg: #0f0f10;
-    --surface: #18181b;
-    --surface2: #1f1f23;
-    --border: #2a2a30;
-    --border2: #3a3a42;
-    --text: #e4e4e7;
-    --text-muted: #71717a;
-    --text-dim: #52525b;
-    --accent: #a78bfa;
-    --accent-dim: #7c3aed22;
-    --accent-glow: #a78bfa33;
-    --user-bg: #1d1d28;
-    --assistant-bg: #18181b;
-    --code-bg: #111115;
+    --bg: rgba(10, 6, 18, 0.4);
+    --surface: rgba(22, 18, 30, 0.45);
+    --surface2: rgba(30, 26, 42, 0.6);
+    --border: rgba(255, 255, 255, 0.08);
+    --border2: rgba(255, 255, 255, 0.15);
+    --text: #f4f4f5;
+    --text-muted: #a1a1aa;
+    --text-dim: #71717a;
+    --accent: #c084fc;
+    --accent-dim: rgba(168, 85, 247, 0.15);
+    --accent-glow: rgba(168, 85, 247, 0.25);
+    --user-bg: rgba(168, 85, 247, 0.12);
+    --assistant-bg: rgba(255, 255, 255, 0.04);
+    --code-bg: #0f0d15;
     --success: #34d399;
     --error: #f87171;
     --warning: #fbbf24;
-    --scrollbar: #2a2a30;
-    --scrollbar-hover: #3a3a42;
-    --radius: 14px;
-    --radius-sm: 8px;
-    --shadow: 0 4px 24px #00000066;
+    --scrollbar: rgba(255, 255, 255, 0.1);
+    --scrollbar-hover: rgba(255, 255, 255, 0.2);
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.6; }
+  html, body { 
+    height: 100%; 
+    font-family: 'Inter', sans-serif; 
+    background: linear-gradient(145deg, #0e071a 0%, #040207 100%); 
+    color: var(--text); 
+    font-size: 15px; 
+    line-height: 1.6; 
+    position: relative;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    top: -10%;
+    left: -10%;
+    width: 60%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+    z-index: -1;
+    pointer-events: none;
+    filter: blur(80px);
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -10%;
+    right: -10%;
+    width: 60%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(217, 70, 239, 0.1) 0%, transparent 70%);
+    z-index: -1;
+    pointer-events: none;
+    filter: blur(80px);
+  }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -45,7 +78,7 @@
 
   /* Layout */
   .app { display: flex; height: 100vh; overflow: hidden; }
-  .sidebar { width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; transition: transform 0.2s; }
+  .sidebar { width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; transition: transform 0.2s; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
   .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
   /* Sidebar header */
@@ -94,7 +127,7 @@
   .logout-btn:hover { border-color: var(--error); color: var(--error); }
 
   /* Main header */
-  .chat-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: var(--bg); }
+  .chat-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: var(--bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
   .header-menu-btn { display: none; background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; }
   .header-menu-btn:hover { color: var(--text); background: var(--surface2); }
   .header-title { font-size: 15px; font-weight: 600; }
@@ -112,7 +145,7 @@
 
   /* Welcome screen */
   .welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 40px 20px; text-align: center; }
-  .welcome-icon { width: 64px; height: 64px; background: linear-gradient(135deg, #7c3aed, #a78bfa); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 30px; margin-bottom: 20px; box-shadow: 0 8px 32px #7c3aed44; }
+  .welcome-icon { width: 64px; height: 64px; background: linear-gradient(135deg, #6366f1, #d946ef); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 30px; margin-bottom: 20px; box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4); }
   .welcome-title { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
   .welcome-sub { color: var(--text-muted); font-size: 15px; max-width: 400px; line-height: 1.7; }
   .welcome-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 24px; }
@@ -175,7 +208,7 @@
   .code-block code { font-family: 'JetBrains Mono', monospace !important; font-size: 13px !important; line-height: 1.6 !important; }
 
   /* Input area */
-  .input-area { padding: 16px 20px 20px; border-top: 1px solid var(--border); background: var(--bg); }
+  .input-area { padding: 16px 20px 20px; border-top: 1px solid var(--border); background: var(--bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
   .input-inner { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
   .input-box { display: flex; align-items: flex-end; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; transition: border-color 0.15s; }
   .input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
@@ -223,7 +256,7 @@
 
 
   /* Login overlay */
-  #login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; align-items: center; justify-content: center; }
+  #login-overlay { position: fixed; inset: 0; background: #0c0814; z-index: 100; display: flex; align-items: center; justify-content: center; }
   .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 40px; width: 100%; max-width: 380px; box-shadow: var(--shadow); }
   .login-logo { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; margin-bottom: 32px; }
   .login-logo-icon { width: 72px; height: 72px; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
@@ -250,7 +283,7 @@
 
   /* Settings modal */
   .modal-overlay { position: fixed; inset: 0; background: #00000088; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
-  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; width: 100%; max-width: 440px; box-shadow: var(--shadow); display: flex; flex-direction: column; max-height: 90vh; overflow: hidden; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; width: 100%; max-width: 440px; box-shadow: var(--shadow); display: flex; flex-direction: column; max-height: 90vh; overflow: hidden; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
   .modal-header { padding: 20px 20px 0; display: flex; align-items: center; justify-content: space-between; }
   .modal-title { font-size: 16px; font-weight: 600; }
   .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 20px; line-height: 1; padding: 4px; border-radius: 6px; transition: color 0.15s, background 0.15s; }

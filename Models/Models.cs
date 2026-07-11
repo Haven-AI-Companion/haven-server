@@ -239,3 +239,40 @@ public record SaveThirdPartyChatRequest(
     SaveSlackProviderRequest? Slack,
     SaveTelegramProviderRequest? Telegram
 );
+
+// ── Unified Database Sync DTOs ─────────────────────────────────────────────
+
+public record SyncMemory(
+    int Id,
+    int UserId,
+    string CompanionName,
+    string Content,
+    string Category,
+    string CreatedAt
+);
+
+public record SyncDiary(
+    int Id,
+    int UserId,
+    string CompanionName,
+    string DateString,
+    string Content,
+    string CreatedAt
+);
+
+public record SyncGroup(
+    string Id,
+    int UserId,
+    string Name,
+    string CharacterNames,
+    string CreatedAt
+);
+
+public record SyncGroupMessage(
+    int Id,
+    string GroupId,
+    string Sender,
+    string? CharacterName,
+    string Content,
+    string CreatedAt
+);

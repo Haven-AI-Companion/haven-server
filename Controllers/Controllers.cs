@@ -2459,4 +2459,5 @@ public class CompanionConfig
     public string? Scenario { get; set; }
     public string? FirstMessage { get; set; }
     public string? SystemPrompt { get; set; }
+    public string? ConversationId { get; set; }
 }
