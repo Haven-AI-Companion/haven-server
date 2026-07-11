@@ -362,6 +362,21 @@ public class Program
         var profiler = app.Services.GetRequiredService<HardwareProfiler>();
         await profiler.InitializeLocalBackendAsync();
 
+        // Register host lifetime events to ensure background sidecar processes (llama-server and sd-server) are killed cleanly on exit
+        var lifetime = app.Services.GetRequiredService<Microsoft.Extensions.Hosting.IHostApplicationLifetime>();
+        lifetime.ApplicationStopping.Register(() =>
+        {
+            Console.WriteLine("[lifetime] Application stopping. Initiating cleanup of local backend processes...");
+            try
+            {
+                profiler.StopLocalBackend();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[lifetime] Error during backend process cleanup: {ex.Message}");
+            }
+        });
+
         // ── WebSocket endpoint ──────────────────────────────────────────────
         app.Map("/ws/{sessionId}", async (HttpContext ctx, string sessionId, ChatHandler chat, Database dbSvc) =>
         {

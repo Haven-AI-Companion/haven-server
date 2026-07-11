@@ -25,6 +25,7 @@ public class HardwareProfiler
     private readonly Database _db;
     private readonly IConfiguration _config;
     private Process? _llamaProcess;
+    private Process? _sdProcess;
     private const int LocalPort = 11436;
 
     public HardwareProfiler(Database db, IConfiguration config)
@@ -196,6 +197,9 @@ public class HardwareProfiler
                 await _db.CreateBackend("Local Llama.cpp", "openai_compat", localBackendUrl, null);
                 Console.WriteLine("[profiler] Registered 'Local Llama.cpp' in the database.");
             }
+
+            // Start Stable Diffusion backend concurrently
+            await InitializeSdBackendAsync();
         }
         catch (Exception ex)
         {
@@ -213,6 +217,10 @@ public class HardwareProfiler
         var binPath = Path.Combine(AppContext.BaseDirectory, "bin", name);
         if (File.Exists(binPath)) return binPath;
 
+        // Check gemma4-turbo-family local path candidate
+        var gemmaTurboPath = Path.Combine(@"C:\Users\admin\gemma4-turbo-family\llama-cpp", name);
+        if (File.Exists(gemmaTurboPath)) return gemmaTurboPath;
+
         // Check system PATH
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
         var paths = pathEnv.Split(Path.PathSeparator);
@@ -229,6 +237,55 @@ public class HardwareProfiler
         return null;
     }
 
+    public async Task InitializeSdBackendAsync()
+    {
+        var sdDir = @"C:\Users\admin\stable-diffusion-cpp";
+        var exePath = Path.Combine(sdDir, "sd-server.exe");
+        if (!File.Exists(exePath))
+        {
+            Console.WriteLine($"[profiler] Stable Diffusion server executable not found at '{exePath}'. Skipping auto-start.");
+            return;
+        }
+
+        var modelPath = Path.Combine(sdDir, "models", "DreamShaper8_LCM_q8_0.gguf");
+        var taesdPath = Path.Combine(sdDir, "models", "taesd.safetensors");
+        if (!File.Exists(modelPath))
+        {
+            Console.WriteLine($"[profiler] Stable Diffusion model not found at '{modelPath}'. Skipping SD auto-start.");
+            return;
+        }
+
+        string args = $"--model \"{modelPath}\"";
+        if (File.Exists(taesdPath))
+        {
+            args += $" --taesd \"{taesdPath}\"";
+        }
+        args += " --listen-ip 127.0.0.1 --listen-port 8080 --steps 4 --sampling-method lcm --cfg-scale 1.5";
+
+        Console.WriteLine($"[profiler] Spawning local Stable Diffusion server: {exePath} {args}");
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = args,
+                WorkingDirectory = sdDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            _sdProcess = new Process { StartInfo = startInfo };
+            _sdProcess.Start();
+            Console.WriteLine("[profiler] Stable Diffusion server started successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[profiler] Failed to start Stable Diffusion server: {ex.Message}");
+        }
+    }
+
     public void StopLocalBackend()
     {
         try
@@ -239,6 +296,18 @@ public class HardwareProfiler
                 _llamaProcess.Dispose();
                 _llamaProcess = null;
                 Console.WriteLine("[profiler] Stopped local llama-server process.");
+            }
+        }
+        catch { }
+
+        try
+        {
+            if (_sdProcess != null && !_sdProcess.HasExited)
+            {
+                _sdProcess.Kill(true);
+                _sdProcess.Dispose();
+                _sdProcess = null;
+                Console.WriteLine("[profiler] Stopped local Stable Diffusion server process.");
             }
         }
         catch { }
