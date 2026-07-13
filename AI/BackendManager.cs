@@ -774,7 +774,6 @@ public class BackendManager
                     if (System.Text.RegularExpressions.Regex.IsMatch(nameCandidate, @"^[a-zA-Z0-9_\-\s]+$"))
                     {
                         var stopSeq = nameCandidate + ":";
-                        if (!stops.Contains(stopSeq)) stops.Add(stopSeq);
                         var stopSeqNl = "\n" + stopSeq;
                         if (!stops.Contains(stopSeqNl)) stops.Add(stopSeqNl);
                     }
@@ -796,7 +795,6 @@ public class BackendManager
                         if (!string.IsNullOrEmpty(name))
                         {
                             var stopSeq = name + ":";
-                            if (!stops.Contains(stopSeq)) stops.Add(stopSeq);
                             var stopSeqNl = "\n" + stopSeq;
                             if (!stops.Contains(stopSeqNl)) stops.Add(stopSeqNl);
                         }

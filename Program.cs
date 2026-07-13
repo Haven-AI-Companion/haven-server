@@ -659,7 +659,7 @@ public class Program
                     }
 
                     var replyText = replyBuilder.ToString().Trim();
-                    replyText = System.Text.RegularExpressions.Regex.Replace(replyText, @"<thought>[\s\S]*?</thought>", "").Trim();
+                    replyText = System.Text.RegularExpressions.Regex.Replace(replyText, @"<thought>[\s\S]*</thought>", "").Trim();
 
                     history.Add(new ChatMessage("assistant", replyText));
 

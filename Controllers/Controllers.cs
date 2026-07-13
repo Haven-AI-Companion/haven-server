@@ -265,6 +265,75 @@ public class ModelsController : ControllerBase
         default_model = _config["DefaultModel"] ?? ""
     });
 
+    [HttpGet("uploads")]
+    public IActionResult ListUploads()
+    {
+        try
+        {
+            var uploadsDir = Path.Combine(_env.WebRootPath, "uploads");
+            if (!Directory.Exists(uploadsDir))
+                return Ok(new List<string>());
+
+            var files = new DirectoryInfo(uploadsDir).GetFiles()
+                .Where(f => f.Extension.Equals(".webp", StringComparison.OrdinalIgnoreCase) || 
+                            f.Extension.Equals(".png", StringComparison.OrdinalIgnoreCase) || 
+                            f.Extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(f => f.LastWriteTime)
+                .Select(f => f.Name)
+                .ToList();
+
+            return Ok(files);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    private static string _pendingDevCommand = "";
+    private static string _devCommandOutput = "";
+
+    [HttpPost("developer/command")]
+    public IActionResult SetDevCommand([FromBody] DevCommandReq req)
+    {
+        _pendingDevCommand = req.Command ?? "";
+        _devCommandOutput = "";
+        return Ok(new { status = "Command queued." });
+    }
+
+    [HttpGet("developer/command")]
+    public IActionResult GetDevCommand()
+    {
+        var cmd = _pendingDevCommand;
+        _pendingDevCommand = ""; // Clear after retrieval
+        return Ok(new { command = cmd });
+    }
+
+    [HttpPost("developer/output")]
+    public IActionResult SetDevOutput([FromBody] DevOutputReq req)
+    {
+        _devCommandOutput = req.Output ?? "";
+        return Ok();
+    }
+
+    [HttpGet("developer/output")]
+    public IActionResult GetDevOutput()
+    {
+        return Ok(new { output = _devCommandOutput });
+    }
+
+    public class DevCommandReq
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("command")]
+        public string Command { get; set; } = "";
+    }
+
+    public class DevOutputReq
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("output")]
+        public string Output { get; set; } = "";
+    }
+
     [HttpPost("chat")]
     [Authorize]
     public async Task Chat([FromBody] ChatRequest req, CancellationToken cancellationToken)
