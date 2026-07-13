@@ -287,6 +287,7 @@ public class Program
         builder.Services.AddSingleton<RagService>();
         builder.Services.AddSingleton<GridManager>();
         builder.Services.AddHostedService<GridWorkerService>();
+        builder.Services.AddHostedService<AshServer.AI.ProactiveAgencyService>();
         builder.Services.AddSingleton<AshServer.Chat.IdentityResolver>();
         builder.Services.AddSingleton<AshServer.Chat.Discord.DiscordMessageRouter>();
         builder.Services.AddSingleton<AshServer.Middleware.ExternalRateLimiter>();

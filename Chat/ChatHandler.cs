@@ -24,6 +24,31 @@ public class ChatHandler
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(2);
     private const int MaxHistoryMessages = 40;
 
+    public static readonly ConcurrentDictionary<string, ConcurrentBag<WebSocket>> ActiveSockets = new();
+
+    public static async Task BroadcastToConversation(string conversationId, object data)
+    {
+        if (ActiveSockets.TryGetValue(conversationId, out var bag))
+        {
+            var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+            var bytes = Encoding.UTF8.GetBytes(json);
+            foreach (var ws in bag)
+            {
+                if (ws.State == WebSocketState.Open)
+                {
+                    try
+                    {
+                        await ws.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                    catch {}
+                }
+            }
+        }
+    }
+
     private readonly Database _db;
     private readonly BackendManager _backends;
     private readonly PersonalityLoader _personality;
@@ -172,6 +197,15 @@ public class ChatHandler
                         await SafeSend(new { type = "conversation_id", content = conversationId }, cts.Token);
                     }
 
+                    if (conversationId != null)
+                    {
+                        var bag = ActiveSockets.GetOrAdd(conversationId, _ => new ConcurrentBag<WebSocket>());
+                        if (!bag.Contains(ws))
+                        {
+                            bag.Add(ws);
+                        }
+                    }
+
                     try
                     {
                         await _db.AddMessage(conversationId, "user", userMessage);
@@ -311,6 +345,10 @@ public class ChatHandler
         catch (WebSocketException) { }
         finally
         {
+            if (conversationId != null && ActiveSockets.TryGetValue(conversationId, out var bag))
+            {
+                ActiveSockets[conversationId] = new ConcurrentBag<WebSocket>(bag.Where(s => s != ws));
+            }
             if (ws.State == WebSocketState.Open)
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
         }
