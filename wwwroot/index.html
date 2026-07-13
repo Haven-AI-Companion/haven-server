@@ -1136,6 +1136,9 @@ function parseMarkdown(text) {
   // Ordered lists
   html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
 
+  // Images
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<div class="msg-image-container" style="margin-top: 10px;"><img src="$2" alt="$1" style="max-width: 100%; max-height: 500px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: zoom-in;" onclick="viewImageFull(this)"></div>');
+
   // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 

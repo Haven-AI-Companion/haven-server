@@ -288,6 +288,12 @@ public class ChatHandler
                                         break;
                                     case "tool_result":
                                         await TrySend(new { type = "agent_tool_result", tool = evt.ToolName, result = evt.ToolResult, iteration = evt.Iteration }, cts.Token);
+                                        if (evt.ToolName == "generate_portrait" && !string.IsNullOrEmpty(evt.ToolResult) && evt.ToolResult.StartsWith("/uploads/"))
+                                        {
+                                            var imgMarkdown = $"\n\n![Generated Portrait]({evt.ToolResult})";
+                                            responseText += imgMarkdown;
+                                            await TrySend(new { type = "token", content = imgMarkdown }, cts.Token);
+                                        }
                                         break;
                                     case "final":
                                         // responseText already accumulated from stream_token events
