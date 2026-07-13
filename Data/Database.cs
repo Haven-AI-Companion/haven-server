@@ -192,6 +192,14 @@ public class Database
                 last_seen   TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS companion_repositories (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                url          TEXT UNIQUE NOT NULL,
+                name         TEXT NOT NULL DEFAULT 'Custom Repo',
+                last_synced  TEXT,
+                created_at   TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS companion_memories (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1357,6 +1365,56 @@ public class Database
         cmd.Parameters.AddWithValue("$sender", sender);
         cmd.Parameters.AddWithValue("$char", (object?)characterName ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$content", content);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<List<CompanionRepository>> GetRepositories() => Task.Run(() =>
+    {
+        var list = new List<CompanionRepository>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, url, name, last_synced, created_at FROM companion_repositories ORDER BY id ASC";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            list.Add(new CompanionRepository
+            {
+                Id = r.GetInt32(0),
+                Url = r.GetString(1),
+                Name = r.GetString(2),
+                LastSynced = r.IsDBNull(3) ? null : r.GetString(3),
+                CreatedAt = r.IsDBNull(4) ? null : r.GetString(4)
+            });
+        }
+        return list;
+    });
+
+    public Task AddRepository(string url, string name) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT OR IGNORE INTO companion_repositories (url, name) VALUES ($url, $name)";
+        cmd.Parameters.AddWithValue("$url", url);
+        cmd.Parameters.AddWithValue("$name", name);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task DeleteRepository(int id) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM companion_repositories WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task UpdateRepositoryLastSynced(int id, string lastSynced) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE companion_repositories SET last_synced = $ls WHERE id = $id";
+        cmd.Parameters.AddWithValue("$ls", lastSynced);
+        cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
     });
 }

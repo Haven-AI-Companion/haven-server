@@ -288,6 +288,8 @@ public class Program
         builder.Services.AddSingleton<GridManager>();
         builder.Services.AddHostedService<GridWorkerService>();
         builder.Services.AddHostedService<AshServer.AI.ProactiveAgencyService>();
+        builder.Services.AddSingleton<AshServer.AI.CompanionRegistrySyncService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<AshServer.AI.CompanionRegistrySyncService>());
         builder.Services.AddSingleton<AshServer.Chat.IdentityResolver>();
         builder.Services.AddSingleton<AshServer.Chat.Discord.DiscordMessageRouter>();
         builder.Services.AddSingleton<AshServer.Middleware.ExternalRateLimiter>();
