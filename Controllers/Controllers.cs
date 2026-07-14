@@ -2518,13 +2518,16 @@ public class CompanionsController : ControllerBase
     {
         var relativePath = _config["personality:path"] ?? "personality";
         var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+        var localDir = Path.Combine(baseDir, "local");
         
         if (!Directory.Exists(baseDir))
         {
             Directory.CreateDirectory(baseDir);
         }
 
-        var list = new List<object>();
+        var companionsMap = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Load default profiles
         foreach (var file in Directory.GetFiles(baseDir, "*.json"))
         {
             try
@@ -2532,14 +2535,48 @@ public class CompanionsController : ControllerBase
                 var content = System.IO.File.ReadAllText(file);
                 using var doc = JsonDocument.Parse(content);
                 var root = doc.RootElement.Clone();
-                list.Add(root);
+                if (root.TryGetProperty("name", out var nameProp))
+                {
+                    var name = nameProp.GetString();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        companionsMap[name] = root;
+                    }
+                }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[companions] Failed to parse {Path.GetFileName(file)}: {ex.Message}");
+                Console.Error.WriteLine($"[companions] Failed to parse default profile {Path.GetFileName(file)}: {ex.Message}");
             }
         }
-        return Ok(list);
+
+        // 2. Load local overrides
+        if (Directory.Exists(localDir))
+        {
+            foreach (var file in Directory.GetFiles(localDir, "*.json"))
+            {
+                try
+                {
+                    var content = System.IO.File.ReadAllText(file);
+                    using var doc = JsonDocument.Parse(content);
+                    var root = doc.RootElement.Clone();
+                    if (root.TryGetProperty("name", out var nameProp))
+                    {
+                        var name = nameProp.GetString();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            companionsMap[name] = root;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[companions] Failed to parse local override profile {Path.GetFileName(file)}: {ex.Message}");
+                }
+            }
+        }
+
+        return Ok(companionsMap.Values.ToList());
     }
 
     [HttpPost]
@@ -2550,9 +2587,11 @@ public class CompanionsController : ControllerBase
 
         var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
         var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
-        if (!Directory.Exists(baseDir))
+        var localDir = Path.Combine(baseDir, "local");
+        
+        if (!Directory.Exists(localDir))
         {
-            Directory.CreateDirectory(baseDir);
+            Directory.CreateDirectory(localDir);
         }
 
         // Validate name to avoid path traversal
@@ -2560,13 +2599,13 @@ public class CompanionsController : ControllerBase
         if (string.IsNullOrWhiteSpace(cleanName))
             return BadRequest(new { error = "Invalid companion name." });
 
-        var filePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+        var filePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
         
         try
         {
             var json = JsonSerializer.Serialize(req, new JsonSerializerOptions { WriteIndented = true });
             System.IO.File.WriteAllText(filePath, json);
-            return Ok(new { ok = true, message = $"Companion '{req.Name}' saved successfully." });
+            return Ok(new { ok = true, message = $"Companion '{req.Name}' saved locally successfully." });
         }
         catch (Exception ex)
         {
@@ -2582,17 +2621,30 @@ public class CompanionsController : ControllerBase
 
         var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
         var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+        var localDir = Path.Combine(baseDir, "local");
 
         // Validate name to avoid path traversal
         var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
-        var filePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
-
-        if (!System.IO.File.Exists(filePath))
-            return NotFound(new { error = $"Companion '{name}' not found." });
+        var localFilePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+        var baseFilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
 
         try
         {
-            System.IO.File.Delete(filePath);
+            bool deleted = false;
+            if (System.IO.File.Exists(localFilePath))
+            {
+                System.IO.File.Delete(localFilePath);
+                deleted = true;
+            }
+            if (System.IO.File.Exists(baseFilePath))
+            {
+                System.IO.File.Delete(baseFilePath);
+                deleted = true;
+            }
+
+            if (!deleted)
+                return NotFound(new { error = $"Companion '{name}' not found." });
+
             return Ok(new { ok = true, message = $"Companion '{name}' deleted successfully." });
         }
         catch (Exception ex)

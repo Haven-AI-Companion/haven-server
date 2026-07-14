@@ -19,3 +19,6 @@ ash_server_test.db*
 *.db*
 *.db-shm
 *.db-wal
+
+# Local companion overrides
+**/companions/local/
