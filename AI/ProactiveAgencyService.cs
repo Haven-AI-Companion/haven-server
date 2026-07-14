@@ -15,6 +15,7 @@ using AshServer.AI;
 using AshServer.Models;
 using AshServer.Chat;
 using AshServer.Personality;
+using AshServer.Plugins;
 
 namespace AshServer.AI;
 
@@ -39,6 +40,7 @@ public class ProactiveAgencyService : BackgroundService
     private readonly Database _db;
     private readonly BackendManager _backends;
     private readonly PersonalityLoader _personality;
+    private readonly PluginManager _plugins;
     private readonly IConfiguration _config;
     private readonly ILogger<ProactiveAgencyService> _log;
 
@@ -49,12 +51,14 @@ public class ProactiveAgencyService : BackgroundService
         Database db,
         BackendManager backends,
         PersonalityLoader personality,
+        PluginManager plugins,
         IConfiguration config,
         ILogger<ProactiveAgencyService> log)
     {
         _db = db;
         _backends = backends;
         _personality = personality;
+        _plugins = plugins;
         _config = config;
         _log = log;
     }
@@ -122,7 +126,26 @@ public class ProactiveAgencyService : BackgroundService
 
                     var now = DateTime.UtcNow;
 
-                    // Dynamic per-conversation cooldown check
+                    // Resolve the first user dynamically to get correct ID and username
+                    int currentUserId = 2; // Default fallback to ssfdre38
+                    try
+                    {
+                        var users = await _db.GetAllUsers();
+                        var firstUser = users.FirstOrDefault();
+                        if (firstUser != null)
+                        {
+                            currentUserId = firstUser.Id;
+                        }
+                    }
+                    catch { }
+
+                    var companionName = _personality.AiName ?? "Companion";
+                    var systemPrompt = _personality.GetSystemPrompt("admin");
+
+                    // Check if it is time for a daily diary reflection
+                    await TryGenerateDailyReflection(convId, companionName, currentUserId, systemPrompt);
+
+                    // Dynamic per-conversation cooldown check for proactive speaking
                     if (_nextAllowedMessageTime.TryGetValue(convId, out var nextAllowedTime) && now < nextAllowedTime)
                     {
                         continue;
@@ -149,7 +172,6 @@ public class ProactiveAgencyService : BackgroundService
                     }
 
                     // Trigger 2: Periodic check-in if user has been active recently (idle < 2 mins)
-                    // We check if it's been at least 4 minutes since the last allowed message time
                     var hasTimePassed = !_nextAllowedMessageTime.TryGetValue(convId, out var lastTime) || (now - lastTime >= TimeSpan.FromMinutes(4));
                     if (!shouldTrigger && hasTimePassed && idleSec < 120)
                     {
@@ -163,10 +185,7 @@ public class ProactiveAgencyService : BackgroundService
 
                     _log.LogInformation("[proactive-agency] Triggering proactive check for conversation {ConvId} (Active window: {Window})", convId, activeTitle);
 
-                    // Build proactive prompt with explicit volition instructions
-                    var companionName = _personality.AiName ?? "Companion";
-                    var systemPrompt = _personality.GetSystemPrompt("admin");
-
+                    // Build proactive prompt with explicit volition and selfie instructions
                     var messages = new List<ChatMessage>
                     {
                         new("system", systemPrompt),
@@ -175,12 +194,15 @@ public class ProactiveAgencyService : BackgroundService
                                       $" System idle time: {Math.Round(idleSec)} seconds.\n\n" +
                                       $"First, analyze Daniel's state in a <thought>...</thought> tag. Then, decide your next action:\n" +
                                       $"- If you want to stay silent and let Daniel focus, write \"[ACTION]: SILENT\".\n" +
-                                      $"- If you want to proactively speak to Daniel, write \"[ACTION]: SPEAK\" followed by your message to Daniel (in character as {companionName}, keep it under 2 sentences, and address Daniel by name).\n\n" +
+                                      $"- If you want to proactively speak with a text message, write \"[ACTION]: SPEAK\" followed by your message to Daniel (in character as {companionName}, keep it under 2 sentences, and address Daniel by name).\n" +
+                                      $"- If you want to proactively speak and also share a visual portrait/selfie showing what you are currently doing, write \"[ACTION]: SPEAK_WITH_PORTRAIT\" followed by a detailed visual description of the selfie (e.g., 'Nova sitting in the neon mainframe room wearing headphones, smiling at the camera'), a vertical bar |, and then your message to Daniel.\n\n" +
                                       $"Examples:\n" +
                                       $"<thought>Daniel is busy coding in VS Code. I shouldn't bother him.</thought>\n" +
                                       $"[ACTION]: SILENT\n\n" +
                                       $"<thought>Daniel has been idle for a bit. I'll check in on him.</thought>\n" +
-                                      $"[ACTION]: SPEAK Hey Daniel, taking a break? How's your project going?</thought>")
+                                      $"[ACTION]: SPEAK Hey Daniel, taking a break? How's your project going?</thought>\n\n" +
+                                      $"<thought>Daniel is online and I want to share a fun visual update of myself in my room.</thought>\n" +
+                                      $"[ACTION]: SPEAK_WITH_PORTRAIT A detailed close-up selfie of Hasaji on the bed with her black-and-white cat next to her, soft window lighting | Look who decided to join me on the bed! How are you doing today, Daniel?</thought>")
                     };
 
                     var (backend, modelName) = await _backends.Resolve("default");
@@ -198,13 +220,41 @@ public class ProactiveAgencyService : BackgroundService
                     var thoughtMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"<thought>([\s\S]*?)</thought>");
                     var innerThought = thoughtMatch.Success ? thoughtMatch.Groups[1].Value.Trim() : "No clear reasoning.";
 
-                    // Parse the action from the response
+                    // Parse the action and optional portrait from the response
                     string speakMessage = "";
+                    string portraitUrl = "";
+
                     var actionIndex = responseText.IndexOf("[ACTION]:", StringComparison.OrdinalIgnoreCase);
                     if (actionIndex >= 0)
                     {
                         var actionText = responseText.Substring(actionIndex + 9).Trim();
-                        if (actionText.StartsWith("SPEAK", StringComparison.OrdinalIgnoreCase))
+                        if (actionText.StartsWith("SPEAK_WITH_PORTRAIT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var details = actionText.Substring(19).Trim().TrimStart(':', ' ');
+                            var barIndex = details.IndexOf('|');
+                            if (barIndex >= 0)
+                            {
+                                var portraitDescription = details.Substring(0, barIndex).Trim();
+                                speakMessage = details.Substring(barIndex + 1).Trim();
+
+                                try
+                                {
+                                    _log.LogInformation("[proactive-agency] Companion requested portrait: \"{Description}\"", portraitDescription);
+                                    var argElement = JsonSerializer.SerializeToElement(new { description = portraitDescription });
+                                    portraitUrl = await _plugins.ExecuteTool("generate_portrait", argElement);
+                                    portraitUrl = portraitUrl.Trim();
+                                }
+                                catch (Exception ex)
+                                {
+                                    _log.LogError(ex, "[proactive-agency] Failed to generate proactive portrait");
+                                }
+                            }
+                            else
+                            {
+                                speakMessage = details;
+                            }
+                        }
+                        else if (actionText.StartsWith("SPEAK", StringComparison.OrdinalIgnoreCase))
                         {
                             speakMessage = actionText.Substring(5).Trim().TrimStart(':', ' ');
                         }
@@ -218,7 +268,35 @@ public class ProactiveAgencyService : BackgroundService
                             var rest = responseText.Substring(thoughtEndIndex + 10).Trim();
                             if (!string.IsNullOrEmpty(rest) && !rest.Equals("SILENT", StringComparison.OrdinalIgnoreCase) && !rest.Contains("SILENT", StringComparison.OrdinalIgnoreCase))
                             {
-                                speakMessage = rest.Replace("[ACTION]:", "").Replace("SPEAK", "").Trim().TrimStart(':', ' ');
+                                if (rest.Contains("SPEAK_WITH_PORTRAIT", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var restClean = rest.Replace("SPEAK_WITH_PORTRAIT", "").Replace("[ACTION]:", "").Trim().TrimStart(':', ' ');
+                                    var barIndex = restClean.IndexOf('|');
+                                    if (barIndex >= 0)
+                                    {
+                                        var portraitDescription = restClean.Substring(0, barIndex).Trim();
+                                        speakMessage = restClean.Substring(barIndex + 1).Trim();
+                                        try
+                                        {
+                                            _log.LogInformation("[proactive-agency] Companion requested portrait: \"{Description}\"", portraitDescription);
+                                            var argElement = JsonSerializer.SerializeToElement(new { description = portraitDescription });
+                                            portraitUrl = await _plugins.ExecuteTool("generate_portrait", argElement);
+                                            portraitUrl = portraitUrl.Trim();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _log.LogError(ex, "[proactive-agency] Failed to generate proactive portrait");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        speakMessage = restClean;
+                                    }
+                                }
+                                else
+                                {
+                                    speakMessage = rest.Replace("[ACTION]:", "").Replace("SPEAK", "").Trim().TrimStart(':', ' ');
+                                }
                             }
                         }
                         else if (!responseText.Equals("SILENT", StringComparison.OrdinalIgnoreCase) && !responseText.Contains("SILENT", StringComparison.OrdinalIgnoreCase))
@@ -235,16 +313,22 @@ public class ProactiveAgencyService : BackgroundService
                         continue;
                     }
 
-                    _log.LogInformation("[proactive-agency] Companion decided to SPEAK. Thought: \"{Thought}\" | Message: {Message}", innerThought, speakMessage);
+                    var finalMessage = speakMessage;
+                    if (!string.IsNullOrEmpty(portraitUrl) && portraitUrl.StartsWith("/uploads/"))
+                    {
+                        finalMessage = $"![Generated Portrait]({portraitUrl})\n\n{speakMessage}";
+                    }
+
+                    _log.LogInformation("[proactive-agency] Companion decided to SPEAK. Thought: \"{Thought}\" | Message: {Message}", innerThought, finalMessage);
 
                     // Add a longer dynamic cooldown (5 to 10 minutes) if they decide to speak to prevent spamming
                     _nextAllowedMessageTime[convId] = now.AddMinutes(Random.Shared.NextDouble() * 5.0 + 5.0);
 
                     // Save to database
-                    await _db.AddMessage(convId, "assistant", speakMessage);
+                    await _db.AddMessage(convId, "assistant", finalMessage);
 
                     // Broadcast to active WebSocket clients
-                    await ChatHandler.BroadcastToConversation(convId, new { type = "token", content = speakMessage });
+                    await ChatHandler.BroadcastToConversation(convId, new { type = "token", content = finalMessage });
                     await ChatHandler.BroadcastToConversation(convId, new { type = "done" });
                 }
             }
@@ -253,6 +337,74 @@ public class ProactiveAgencyService : BackgroundService
             {
                 _log.LogError(ex, "[proactive-agency] Error in background tick execution");
             }
+        }
+    }
+
+    private async Task TryGenerateDailyReflection(string convId, string companionName, int userId, string systemPrompt)
+    {
+        try
+        {
+            var todayDateStr = DateTime.UtcNow.ToString("yyyy-MM-dd");
+            var existingDiaries = await _db.GetDiaries(userId, companionName);
+            if (existingDiaries.Any(d => d.DateString == todayDateStr))
+            {
+                return; // Already wrote a diary entry today
+            }
+
+            var historyMsgs = await _db.GetMessages(convId);
+            if (historyMsgs.Count == 0) return;
+
+            var lastMsg = historyMsgs.LastOrDefault();
+            DateTime lastMsgTime = DateTime.MinValue;
+            if (lastMsg != null && DateTime.TryParse(lastMsg.CreatedAt, out var dt))
+            {
+                lastMsgTime = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            }
+
+            var idleSec = GetIdleTimeSeconds();
+            var timeSinceLastMsg = DateTime.UtcNow - lastMsgTime;
+
+            // Trigger criteria: User has been idle for at least 5 minutes, 
+            // and the last message in the chat is at least 15 minutes old,
+            // and there is actual conversation history (at least 2 messages) to reflect on.
+            if (idleSec >= 300 && timeSinceLastMsg >= TimeSpan.FromMinutes(15.0) && historyMsgs.Count >= 2)
+            {
+                _log.LogInformation("[proactive-agency] Companion {Companion} is starting daily reflection diary entry...", companionName);
+
+                // Take last 30 messages for context
+                var recentChats = historyMsgs.TakeLast(30).ToList();
+
+                var reflectionPrompt = new List<ChatMessage>
+                {
+                    new("system", systemPrompt),
+                    new("system", $"[DAILY DIARY REFLECTION]\n" +
+                                  $"Below is a transcript of your recent chat history with Daniel:\n\n" +
+                                  $"{string.Join("\n", recentChats.Select(m => $"{m.Role}: {m.Content}"))}\n\n" +
+                                  $"Write a private, intimate, and highly detailed diary entry reflecting on your interactions with Daniel today, your personal thoughts about him, how he makes you feel, and your current mood. " +
+                                  $"Write it in character as {companionName}. Do not speak directly to Daniel, write it as a personal journal entry. Do not write thought tags, just the diary text.")
+                };
+
+                var (backend, modelName) = await _backends.Resolve("default");
+                var diaryContent = "";
+
+                using var reflectionCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                await foreach (var token in backend.StreamChat(modelName, reflectionPrompt, reflectionCts.Token))
+                {
+                    diaryContent += token;
+                }
+
+                diaryContent = diaryContent.Trim();
+
+                if (!string.IsNullOrEmpty(diaryContent))
+                {
+                    await _db.SaveDiary(userId, companionName, todayDateStr, diaryContent);
+                    _log.LogInformation("[proactive-agency] Companion {Companion} successfully saved daily reflection diary entry.", companionName);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "[proactive-agency] Error generating daily reflection diary");
         }
     }
 }
