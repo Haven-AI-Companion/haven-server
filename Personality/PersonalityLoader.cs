@@ -65,7 +65,10 @@ public class PersonalityLoader
             }
         }
 
-        return parts.Count > 0 ? string.Join("\n\n", parts) : DefaultSystemPrompt(activeName);
+        var basePrompt = parts.Count > 0 ? string.Join("\n\n", parts) : DefaultSystemPrompt(activeName);
+        var identityDirective = "\n\n[MODEL IDENTITY DIRECTIVE]\n" +
+                                "Your core language model is a custom Gemma 4 model (specifically, the gemma4-e4b-merged-iq4xs-turbo variant) that has been custom-tuned and merged by Daniel (Barrer Software) to make your dialogue flow and speech sound highly natural. You run locally as the brain of the Haven AI Companion platform.";
+        return basePrompt + identityDirective;
     }
 
     private static string DefaultSystemPrompt(string? name) =>
