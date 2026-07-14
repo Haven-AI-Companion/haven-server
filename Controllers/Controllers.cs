@@ -144,6 +144,21 @@ public class ConversationsController : ControllerBase
         return Ok(await _db.GetMessages(id));
     }
 
+    [HttpPost("{id}/messages")]
+    public async Task<IActionResult> AddMessage(string id, [FromBody] Dictionary<string, string> body)
+    {
+        var conv = await _db.GetConversation(id, UserId);
+        if (conv == null) return NotFound();
+
+        var role = body.GetValueOrDefault("role") ?? "assistant";
+        var content = body.GetValueOrDefault("content") ?? "";
+
+        if (string.IsNullOrEmpty(content)) return BadRequest(new { error = "content required" });
+
+        await _db.AddMessage(id, role, content);
+        return Ok(new { ok = true });
+    }
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {

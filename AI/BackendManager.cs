@@ -709,9 +709,17 @@ public class BackendManager
         {
             try
             {
-                var names = await instance.ListModels();
-                results.AddRange(names.Select(n => new ModelDescriptor(
-                    MakeModelId(row.Id, n), n, row.Id, row.Name, row.Type)));
+                var listTask = instance.ListModels();
+                if (await Task.WhenAny(listTask, Task.Delay(2000)) == listTask)
+                {
+                    var names = await listTask;
+                    results.AddRange(names.Select(n => new ModelDescriptor(
+                        MakeModelId(row.Id, n), n, row.Id, row.Name, row.Type)));
+                }
+                else
+                {
+                    Console.Error.WriteLine($"[backends] Timeout (2s) listing models from '{row.Name}' ({row.BaseUrl}). Skipping.");
+                }
             }
             catch (Exception ex)
             {
@@ -752,9 +760,17 @@ public class BackendManager
             {
                 try
                 {
-                    var models = await instance.ListModels();
-                    if (models.Any(m => string.Equals(m, modelId, StringComparison.OrdinalIgnoreCase)))
-                        return (instance, modelId);
+                    var listTask = instance.ListModels();
+                    if (await Task.WhenAny(listTask, Task.Delay(2000)) == listTask)
+                    {
+                        var models = await listTask;
+                        if (models.Any(m => string.Equals(m, modelId, StringComparison.OrdinalIgnoreCase)))
+                            return (instance, modelId);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine($"[backend-router] Warning: Timeout (2s) listing models for backend '{row.Name}' ({row.BaseUrl}). Skipping.");
+                    }
                 }
                 catch { /* Ignore unreachable/non-responsive backends and continue scanning */ }
             }
