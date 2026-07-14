@@ -8,6 +8,7 @@ using AshServer.Models;
 using AshServer.Service;
 using System.Diagnostics;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using System.IO.Compression;
 
@@ -591,13 +592,23 @@ public class ModelsController : ControllerBase
             }
             else
             {
-                var modelPath = $@"C:\Users\admin\piper\piper\models\{voiceName}.onnx";
-                var configPath = $@"C:\Users\admin\piper\piper\models\{voiceName}.onnx.json";
+                var modelsDir = @"C:\Users\admin\piper\piper\models";
+                try
+                {
+                    await DownloadVoiceIfNeeded(voiceName, modelsDir);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[tts] Auto-download failed for voice '{voiceName}': {ex.Message}");
+                }
+
+                var modelPath = Path.Combine(modelsDir, $"{voiceName}.onnx");
+                var configPath = Path.Combine(modelsDir, $"{voiceName}.onnx.json");
 
                 if (!System.IO.File.Exists(modelPath))
                 {
-                    modelPath = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx";
-                    configPath = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx.json";
+                    modelPath = Path.Combine(modelsDir, "en_US-amy-medium.onnx");
+                    configPath = Path.Combine(modelsDir, "en_US-amy-medium.onnx.json");
                 }
 
                 var piperExe = @"C:\Users\admin\piper\piper\piper.exe";
@@ -638,6 +649,63 @@ public class ModelsController : ControllerBase
         catch (Exception ex)
         {
             return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    private static readonly HttpClient _httpClient = new();
+
+    private static async Task<bool> DownloadVoiceIfNeeded(string voiceName, string modelsDir)
+    {
+        var modelPath = Path.Combine(modelsDir, $"{voiceName}.onnx");
+        var configPath = Path.Combine(modelsDir, $"{voiceName}.onnx.json");
+
+        if (System.IO.File.Exists(modelPath) && System.IO.File.Exists(configPath))
+        {
+            return true;
+        }
+
+        // Format example: en_US-amy-medium
+        var parts = voiceName.Split('-');
+        if (parts.Length < 3) return false;
+
+        var langCode = parts[0]; // e.g. en_US
+        var lang = langCode.Split('_')[0]; // e.g. en
+        var speaker = parts[1]; // e.g. amy
+        var quality = parts[2]; // e.g. medium
+
+        var baseUrl = $"https://huggingface.co/rhasspy/piper-voices/resolve/main/{lang}/{langCode}/{speaker}/{quality}/{voiceName}";
+        var onnxUrl = $"{baseUrl}.onnx";
+        var jsonUrl = $"{baseUrl}.onnx.json";
+
+        try
+        {
+            Directory.CreateDirectory(modelsDir);
+            
+            // Download JSON config first (usually smaller, fast check)
+            if (!System.IO.File.Exists(configPath))
+            {
+                Console.WriteLine($"[tts] Downloading config from {jsonUrl}...");
+                var jsonBytes = await _httpClient.GetByteArrayAsync(jsonUrl);
+                await System.IO.File.WriteAllBytesAsync(configPath, jsonBytes);
+            }
+
+            // Download ONNX model
+            if (!System.IO.File.Exists(modelPath))
+            {
+                Console.WriteLine($"[tts] Downloading voice model from {onnxUrl}...");
+                var modelBytes = await _httpClient.GetByteArrayAsync(onnxUrl);
+                await System.IO.File.WriteAllBytesAsync(modelPath, modelBytes);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[tts] Failed to download voice '{voiceName}': {ex.Message}");
+            // Clean up partial files if download failed
+            try { if (System.IO.File.Exists(modelPath)) System.IO.File.Delete(modelPath); } catch {}
+            try { if (System.IO.File.Exists(configPath)) System.IO.File.Delete(configPath); } catch {}
+            return false;
         }
     }
 
@@ -2532,6 +2600,185 @@ public class CompanionsController : ControllerBase
             return StatusCode(500, new { error = $"Failed to delete companion: {ex.Message}" });
         }
     }
+
+    [HttpPost("import-card")]
+    public async Task<IActionResult> ImportTavernCard(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "PNG file is required." });
+
+        try
+        {
+            byte[] fileBytes;
+            using (var ms = new MemoryStream())
+            {
+                await file.CopyToAsync(ms);
+                fileBytes = ms.ToArray();
+            }
+
+            var jsonMetadata = PngTavernCardParser.ExtractTavernMetadata(fileBytes);
+            if (string.IsNullOrEmpty(jsonMetadata))
+            {
+                return BadRequest(new { error = "No Tavern card metadata found. Make sure the PNG is a valid Tavern character card." });
+            }
+
+            // Parse json
+            using var doc = JsonDocument.Parse(jsonMetadata);
+            var root = doc.RootElement;
+            var data = root.TryGetProperty("data", out var d) ? d : root;
+
+            string name = data.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return BadRequest(new { error = "Invalid character data in card: name is empty." });
+            }
+
+            // Validate name to avoid path traversal
+            var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+            if (string.IsNullOrWhiteSpace(cleanName))
+                return BadRequest(new { error = "Invalid companion name." });
+
+            string desc = data.TryGetProperty("description", out var ds) ? ds.GetString() ?? "" : "";
+            string personality = data.TryGetProperty("personality", out var p) ? p.GetString() ?? "" : "";
+            string scenario = data.TryGetProperty("scenario", out var sc) ? sc.GetString() ?? "" : "";
+            string firstMsg = data.TryGetProperty("first_mes", out var fm) ? fm.GetString() ?? "" : "";
+            string systemPrompt = data.TryGetProperty("system_prompt", out var sp) ? sp.GetString() ?? "" : "";
+
+            // Save avatar image to wwwroot/uploads
+            var webRoot = _config["Uploads:Directory"] ?? _config["UploadsDir"] ?? "wwwroot";
+            var uploadsDir = Path.Combine(AppContext.BaseDirectory, webRoot, "uploads");
+            Directory.CreateDirectory(uploadsDir);
+            var avatarFilename = $"companion_{cleanName.ToLowerInvariant()}.png";
+            var avatarPath = Path.Combine(uploadsDir, avatarFilename);
+            await System.IO.File.WriteAllBytesAsync(avatarPath, fileBytes);
+
+            // Construct CompanionConfig
+            var config = new CompanionConfig
+            {
+                Name = name,
+                VoiceId = "en_US-amy-medium", // Default voice
+                Description = desc,
+                Personality = personality,
+                Scenario = scenario,
+                FirstMessage = firstMsg,
+                SystemPrompt = systemPrompt,
+                AvatarPath = $"/uploads/{avatarFilename}"
+            };
+
+            var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+            var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+            Directory.CreateDirectory(baseDir);
+
+            var profilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            await System.IO.File.WriteAllTextAsync(profilePath, profileJson);
+
+            return Ok(new { ok = true, character = config });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Import failed: {ex.Message}" });
+        }
+    }
+
+    private static class PngTavernCardParser
+    {
+        public static string? ExtractTavernMetadata(byte[] pngBytes)
+        {
+            try
+            {
+                if (pngBytes.Length < 8 || 
+                    pngBytes[0] != 0x89 || pngBytes[1] != 0x50 || 
+                    pngBytes[2] != 0x4E || pngBytes[3] != 0x47 ||
+                    pngBytes[4] != 0x0D || pngBytes[5] != 0x0A || 
+                    pngBytes[6] != 0x1A || pngBytes[7] != 0x0A)
+                {
+                    return null;
+                }
+
+                int offset = 8;
+                while (offset + 12 <= pngBytes.Length)
+                {
+                    uint length = ((uint)pngBytes[offset] << 24) |
+                                  ((uint)pngBytes[offset + 1] << 16) |
+                                  ((uint)pngBytes[offset + 2] << 8) |
+                                  (uint)pngBytes[offset + 3];
+                    
+                    string type = Encoding.ASCII.GetString(pngBytes, offset + 4, 4);
+                    
+                    if (offset + 12 + length > pngBytes.Length)
+                        break;
+                    
+                    if (type == "tEXt")
+                    {
+                        int keyEnd = offset + 8;
+                        while (keyEnd < offset + 8 + length && pngBytes[keyEnd] != 0)
+                        {
+                            keyEnd++;
+                        }
+                        string keyword = Encoding.ASCII.GetString(pngBytes, offset + 8, keyEnd - (offset + 8));
+                        if (keyword == "chara")
+                        {
+                            int textStart = keyEnd + 1;
+                            int textLength = (int)(offset + 8 + length - textStart);
+                            if (textLength > 0)
+                            {
+                                var base64Str = Encoding.UTF8.GetString(pngBytes, textStart, textLength).Trim();
+                                return Encoding.UTF8.GetString(Convert.FromBase64String(base64Str));
+                            }
+                        }
+                    }
+                    else if (type == "iTXt")
+                    {
+                        int keyEnd = offset + 8;
+                        while (keyEnd < offset + 8 + length && pngBytes[keyEnd] != 0)
+                        {
+                            keyEnd++;
+                        }
+                        string keyword = Encoding.UTF8.GetString(pngBytes, offset + 8, keyEnd - (offset + 8));
+                        if (keyword == "chara")
+                        {
+                            int dataIdx = keyEnd + 1;
+                            bool isCompressed = pngBytes[dataIdx] != 0;
+                            dataIdx += 2;
+                            
+                            while (dataIdx < offset + 8 + length && pngBytes[dataIdx] != 0) dataIdx++;
+                            dataIdx++;
+                            
+                            while (dataIdx < offset + 8 + length && pngBytes[dataIdx] != 0) dataIdx++;
+                            dataIdx++;
+                            
+                            int textLength = (int)(offset + 8 + length - dataIdx);
+                            if (textLength > 0)
+                            {
+                                byte[] textBytes = new byte[textLength];
+                                Array.Copy(pngBytes, dataIdx, textBytes, 0, textLength);
+                                
+                                if (isCompressed)
+                                {
+                                    using var ms = new MemoryStream(textBytes, 2, textBytes.Length - 2); // skip zlib headers
+                                    using var def = new System.IO.Compression.DeflateStream(ms, System.IO.Compression.CompressionMode.Decompress);
+                                    using var outMs = new MemoryStream();
+                                    def.CopyTo(outMs);
+                                    var decoded = Encoding.UTF8.GetString(outMs.ToArray());
+                                    try { return Encoding.UTF8.GetString(Convert.FromBase64String(decoded.Trim())); } catch { return decoded; }
+                                }
+                                else
+                                {
+                                    var decoded = Encoding.UTF8.GetString(textBytes).Trim();
+                                    try { return Encoding.UTF8.GetString(Convert.FromBase64String(decoded)); } catch { return decoded; }
+                                }
+                            }
+                        }
+                    }
+                    
+                    offset += 12 + (int)length;
+                }
+            }
+            catch {}
+            return null;
+        }
+    }
 }
 
 public class CompanionConfig
@@ -2544,4 +2791,5 @@ public class CompanionConfig
     public string? FirstMessage { get; set; }
     public string? SystemPrompt { get; set; }
     public string? ConversationId { get; set; }
+    public string? AvatarPath { get; set; }
 }
