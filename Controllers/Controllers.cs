@@ -1043,8 +1043,8 @@ public class AdminController : ControllerBase
         try
         {
             AshServer.AI.IAiBackend backend = row.Type == "openai"
-                ? new AshServer.AI.OpenAiCompatBackend(row.BaseUrl, row.ApiKey)
-                : new AshServer.AI.OllamaBackend(row.BaseUrl);
+                ? new AshServer.AI.OpenAiCompatBackend(row.BaseUrl, row.ApiKey, _config)
+                : new AshServer.AI.OllamaBackend(row.BaseUrl, _config);
             var models = await backend.ListModels();
             return Ok(new { ok = true, models });
         }
@@ -1246,7 +1246,7 @@ public class AdminController : ControllerBase
 
         try
         {
-            var ollama = new AshServer.AI.OllamaBackend(ollamaUrl);
+            var ollama = new AshServer.AI.OllamaBackend(ollamaUrl, _config);
             ollamaModels  = await ollama.ListModels();
             ollamaDetected = true;
         }
@@ -1272,7 +1272,7 @@ public class AdminController : ControllerBase
         if (!IsAdmin) return Forbid();
         try
         {
-            var ollama = new AshServer.AI.OllamaBackend("http://localhost:11434");
+            var ollama = new AshServer.AI.OllamaBackend("http://localhost:11434", _config);
             var models = await ollama.ListModels();
             return Ok(new { models });
         }

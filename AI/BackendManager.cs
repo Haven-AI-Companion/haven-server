@@ -31,12 +31,14 @@ public interface IAiBackend
 public class OllamaBackend : IAiBackend
 {
     private readonly string _baseUrl;
+    private readonly IConfiguration _config;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public OllamaBackend(string baseUrl)
+    public OllamaBackend(string baseUrl, IConfiguration config)
     {
         _baseUrl = baseUrl.TrimEnd('/');
+        _config = config;
     }
 
     public async Task<List<string>> ListModels()
@@ -57,6 +59,11 @@ public class OllamaBackend : IAiBackend
         await _lock.WaitAsync(ct);
         try
         {
+            var temp = _config.GetValue<float>("ai:temperature", 0.7f);
+            var topP = _config.GetValue<float>("ai:top_p", 0.9f);
+            var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.0f);
+            var presPenalty = _config.GetValue<float>("ai:presence_penalty", 0.0f);
+
             var payload = JsonSerializer.Serialize(new
             {
                 model,
@@ -68,7 +75,10 @@ public class OllamaBackend : IAiBackend
                 {
                     stop = BackendManager.GetStopSequences(messages),
                     num_predict = 4096,
-                    temperature = 0.7f
+                    temperature = temp,
+                    top_p = topP,
+                    frequency_penalty = freqPenalty,
+                    presence_penalty = presPenalty
                 }
             });
 
@@ -114,6 +124,11 @@ public class OllamaBackend : IAiBackend
         await _lock.WaitAsync(ct);
         try
         {
+            var temp = _config.GetValue<float>("ai:temperature", 0.7f);
+            var topP = _config.GetValue<float>("ai:top_p", 0.9f);
+            var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.0f);
+            var presPenalty = _config.GetValue<float>("ai:presence_penalty", 0.0f);
+
             var payload = JsonSerializer.Serialize(new
             {
                 model,
@@ -124,7 +139,10 @@ public class OllamaBackend : IAiBackend
                 {
                     stop = BackendManager.GetStopSequences(messages),
                     num_predict = 4096,
-                    temperature = 0.7f
+                    temperature = temp,
+                    top_p = topP,
+                    frequency_penalty = freqPenalty,
+                    presence_penalty = presPenalty
                 }
             });
 
@@ -147,13 +165,15 @@ public class OpenAiCompatBackend : IAiBackend
 {
     private readonly string _baseUrl;
     private readonly string _apiKey;
+    private readonly IConfiguration _config;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public OpenAiCompatBackend(string baseUrl, string? apiKey)
+    public OpenAiCompatBackend(string baseUrl, string? apiKey, IConfiguration config)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _apiKey = apiKey ?? "none";
+        _config = config;
     }
 
     public async Task<List<string>> ListModels()
@@ -176,6 +196,11 @@ public class OpenAiCompatBackend : IAiBackend
         await _lock.WaitAsync(ct);
         try
         {
+            var temp = _config.GetValue<float>("ai:temperature", 0.7f);
+            var topP = _config.GetValue<float>("ai:top_p", 0.9f);
+            var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.0f);
+            var presPenalty = _config.GetValue<float>("ai:presence_penalty", 0.0f);
+
             var payload = JsonSerializer.Serialize(new
             {
                 model = string.IsNullOrEmpty(model) ? "model" : model,
@@ -183,7 +208,10 @@ public class OpenAiCompatBackend : IAiBackend
                 stream = true,
                 stop = BackendManager.GetStopSequences(messages),
                 max_tokens = 4096,
-                temperature = 0.7f
+                temperature = temp,
+                top_p = topP,
+                frequency_penalty = freqPenalty,
+                presence_penalty = presPenalty
             });
 
             using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
@@ -276,6 +304,11 @@ public class OpenAiCompatBackend : IAiBackend
         await _lock.WaitAsync(ct);
         try
         {
+            var temp = _config.GetValue<float>("ai:temperature", 0.7f);
+            var topP = _config.GetValue<float>("ai:top_p", 0.9f);
+            var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.0f);
+            var presPenalty = _config.GetValue<float>("ai:presence_penalty", 0.0f);
+
             var payload = JsonSerializer.Serialize(new
             {
                 model = string.IsNullOrEmpty(model) ? "model" : model,
@@ -284,7 +317,10 @@ public class OpenAiCompatBackend : IAiBackend
                 stream = false,
                 stop = BackendManager.GetStopSequences(messages),
                 max_tokens = 4096,
-                temperature = 0.7f
+                temperature = temp,
+                top_p = topP,
+                frequency_penalty = freqPenalty,
+                presence_penalty = presPenalty
             });
 
             using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
@@ -618,13 +654,15 @@ public class BackendManager
 {
     private readonly Database _db;
     private readonly GridManager _grid;
+    private readonly IConfiguration _config;
     private List<(AiBackend Row, IAiBackend Instance)>? _cache;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public BackendManager(Database db, GridManager grid)
+    public BackendManager(Database db, GridManager grid, IConfiguration config)
     {
         _db = db;
         _grid = grid;
+        _config = config;
     }
 
     public void Invalidate()
@@ -645,12 +683,12 @@ public class BackendManager
         finally { _lock.Release(); }
     }
 
-    private static IAiBackend MakeBackend(AiBackend row) => row.Type switch
+    private IAiBackend MakeBackend(AiBackend row) => row.Type switch
     {
-        "openai" or "openai_compat" => new OpenAiCompatBackend(row.BaseUrl, row.ApiKey),
+        "openai" or "openai_compat" => new OpenAiCompatBackend(row.BaseUrl, row.ApiKey, _config),
         "anthropic"                 => new AnthropicBackend(row.BaseUrl, row.ApiKey),
         "gemini"                    => new GeminiBackend(row.BaseUrl, row.ApiKey),
-        _                           => new OllamaBackend(row.BaseUrl)
+        _                           => new OllamaBackend(row.BaseUrl, _config)
     };
 
     public static string MakeModelId(int backendId, string modelName) => $"{backendId}:{modelName}";
