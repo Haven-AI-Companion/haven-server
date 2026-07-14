@@ -15,7 +15,6 @@ wwwroot/uploads/
 build/dist/
 ash_server_test.db*
 /plugins/haven-tools/
-Models/
 *.gguf
 *.db*
 *.db-shm
