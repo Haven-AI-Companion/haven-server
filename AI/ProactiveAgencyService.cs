@@ -43,7 +43,7 @@ public class ProactiveAgencyService : BackgroundService
     private readonly ILogger<ProactiveAgencyService> _log;
 
     private string _lastActiveWindow = "";
-    private DateTime _lastMessageTime = DateTime.MinValue;
+    private readonly Dictionary<string, DateTime> _nextAllowedMessageTime = new();
 
     public ProactiveAgencyService(
         Database db,
@@ -101,12 +101,13 @@ public class ProactiveAgencyService : BackgroundService
     {
         _log.LogInformation("[proactive-agency] Service started successfully.");
 
-        // Loop runs every 45 seconds to keep it responsive but light
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await Task.Delay(45000, stoppingToken);
+                // Unpredictable loop heartbeats: sleep for a random time between 30 to 90 seconds
+                var randomIntervalMs = Random.Shared.Next(30000, 90000);
+                await Task.Delay(randomIntervalMs, stoppingToken);
 
                 var activeSockets = ChatHandler.ActiveSockets;
                 if (activeSockets.IsEmpty)
@@ -120,9 +121,11 @@ public class ProactiveAgencyService : BackgroundService
                         continue;
 
                     var now = DateTime.UtcNow;
-                    if (now - _lastMessageTime < TimeSpan.FromMinutes(2.5))
+
+                    // Dynamic per-conversation cooldown check
+                    if (_nextAllowedMessageTime.TryGetValue(convId, out var nextAllowedTime) && now < nextAllowedTime)
                     {
-                        continue; // Strict cooldown of 2.5 minutes between any proactive checks
+                        continue;
                     }
 
                     var activeTitle = GetActiveWindowTitle();
@@ -146,7 +149,9 @@ public class ProactiveAgencyService : BackgroundService
                     }
 
                     // Trigger 2: Periodic check-in if user has been active recently (idle < 2 mins)
-                    if (!shouldTrigger && now - _lastMessageTime >= TimeSpan.FromMinutes(5) && idleSec < 120)
+                    // We check if it's been at least 4 minutes since the last allowed message time
+                    var hasTimePassed = !_nextAllowedMessageTime.TryGetValue(convId, out var lastTime) || (now - lastTime >= TimeSpan.FromMinutes(4));
+                    if (!shouldTrigger && hasTimePassed && idleSec < 120)
                     {
                         shouldTrigger = true;
                     }
@@ -158,7 +163,7 @@ public class ProactiveAgencyService : BackgroundService
 
                     _log.LogInformation("[proactive-agency] Triggering proactive check for conversation {ConvId} (Active window: {Window})", convId, activeTitle);
 
-                    // Build proactive prompt
+                    // Build proactive prompt with explicit volition instructions
                     var companionName = _personality.AiName ?? "Companion";
                     var systemPrompt = _personality.GetSystemPrompt("admin");
 
@@ -168,10 +173,14 @@ public class ProactiveAgencyService : BackgroundService
                         new("system", $"[SYSTEM TELEMETRY TICK]\n" +
                                       $" Daniel's active desktop window: \"{activeTitle}\"\n" +
                                       $" System idle time: {Math.Round(idleSec)} seconds.\n\n" +
-                                      $"Decide your next action. You can:\n" +
-                                      $"1. Stay silent and let Daniel focus. To do this, reply with ONLY the exact word \"SILENT\". Do not write thought tags or any other text.\n" +
-                                      $"2. Proactively text Daniel. Speak in character as {companionName}, keep it under 2 sentences, and address Daniel by name. Do not output thought tags, just the message.\n" +
-                                      $"If Daniel is busy coding, comment on his work or encourage him. If he is idle, check in on him.")
+                                      $"First, analyze Daniel's state in a <thought>...</thought> tag. Then, decide your next action:\n" +
+                                      $"- If you want to stay silent and let Daniel focus, write \"[ACTION]: SILENT\".\n" +
+                                      $"- If you want to proactively speak to Daniel, write \"[ACTION]: SPEAK\" followed by your message to Daniel (in character as {companionName}, keep it under 2 sentences, and address Daniel by name).\n\n" +
+                                      $"Examples:\n" +
+                                      $"<thought>Daniel is busy coding in VS Code. I shouldn't bother him.</thought>\n" +
+                                      $"[ACTION]: SILENT\n\n" +
+                                      $"<thought>Daniel has been idle for a bit. I'll check in on him.</thought>\n" +
+                                      $"[ACTION]: SPEAK Hey Daniel, taking a break? How's your project going?</thought>")
                     };
 
                     var (backend, modelName) = await _backends.Resolve("default");
@@ -185,22 +194,57 @@ public class ProactiveAgencyService : BackgroundService
 
                     responseText = responseText.Trim();
 
-                    if (string.IsNullOrEmpty(responseText) || responseText.Equals("SILENT", StringComparison.OrdinalIgnoreCase))
+                    // Parse the thought for debugging/logging
+                    var thoughtMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"<thought>([\s\S]*?)</thought>");
+                    var innerThought = thoughtMatch.Success ? thoughtMatch.Groups[1].Value.Trim() : "No clear reasoning.";
+
+                    // Parse the action from the response
+                    string speakMessage = "";
+                    var actionIndex = responseText.IndexOf("[ACTION]:", StringComparison.OrdinalIgnoreCase);
+                    if (actionIndex >= 0)
                     {
-                        _log.LogInformation("[proactive-agency] Companion decided to remain SILENT.");
+                        var actionText = responseText.Substring(actionIndex + 9).Trim();
+                        if (actionText.StartsWith("SPEAK", StringComparison.OrdinalIgnoreCase))
+                        {
+                            speakMessage = actionText.Substring(5).Trim().TrimStart(':', ' ');
+                        }
+                    }
+                    else
+                    {
+                        // Fallback parsing if formatting was slightly missed
+                        var thoughtEndIndex = responseText.LastIndexOf("</thought>");
+                        if (thoughtEndIndex >= 0)
+                        {
+                            var rest = responseText.Substring(thoughtEndIndex + 10).Trim();
+                            if (!string.IsNullOrEmpty(rest) && !rest.Equals("SILENT", StringComparison.OrdinalIgnoreCase) && !rest.Contains("SILENT", StringComparison.OrdinalIgnoreCase))
+                            {
+                                speakMessage = rest.Replace("[ACTION]:", "").Replace("SPEAK", "").Trim().TrimStart(':', ' ');
+                            }
+                        }
+                        else if (!responseText.Equals("SILENT", StringComparison.OrdinalIgnoreCase) && !responseText.Contains("SILENT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            speakMessage = responseText.Replace("[ACTION]:", "").Replace("SPEAK", "").Trim().TrimStart(':', ' ');
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(speakMessage))
+                    {
+                        _log.LogInformation("[proactive-agency] Companion decided to remain SILENT. Thought: \"{Thought}\"", innerThought);
+                        // Add a small dynamic cooldown (1.5 to 3 minutes) if they chose to remain silent
+                        _nextAllowedMessageTime[convId] = now.AddMinutes(Random.Shared.NextDouble() * 1.5 + 1.5);
                         continue;
                     }
 
-                    _log.LogInformation("[proactive-agency] Companion decided to SPEAK: {Message}", responseText);
+                    _log.LogInformation("[proactive-agency] Companion decided to SPEAK. Thought: \"{Thought}\" | Message: {Message}", innerThought, speakMessage);
 
-                    // Update last message time to prevent spam
-                    _lastMessageTime = DateTime.UtcNow;
+                    // Add a longer dynamic cooldown (5 to 10 minutes) if they decide to speak to prevent spamming
+                    _nextAllowedMessageTime[convId] = now.AddMinutes(Random.Shared.NextDouble() * 5.0 + 5.0);
 
                     // Save to database
-                    await _db.AddMessage(convId, "assistant", responseText);
+                    await _db.AddMessage(convId, "assistant", speakMessage);
 
                     // Broadcast to active WebSocket clients
-                    await ChatHandler.BroadcastToConversation(convId, new { type = "token", content = responseText });
+                    await ChatHandler.BroadcastToConversation(convId, new { type = "token", content = speakMessage });
                     await ChatHandler.BroadcastToConversation(convId, new { type = "done" });
                 }
             }
