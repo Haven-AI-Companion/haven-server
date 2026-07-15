@@ -10,6 +10,8 @@ public class PluginManager
     private readonly List<PluginManifest> _plugins = [];
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
     private static readonly JsonSerializerOptions Opts = new() { PropertyNameCaseInsensitive = true };
+    private readonly IConfiguration _config;
+    private readonly IWebHostEnvironment _env;
 
     public IReadOnlyList<PluginManifest> Plugins => _plugins;
 
@@ -18,6 +20,8 @@ public class PluginManager
 
     public PluginManager(IConfiguration config, IWebHostEnvironment env)
     {
+        _config = config;
+        _env = env;
         _pluginsDir = config["PluginsDir"] ?? Path.Combine(env.ContentRootPath, "plugins");
         Reload();
     }
@@ -208,7 +212,7 @@ public class PluginManager
         catch (Exception ex) { return $"HTTP tool error: {ex.Message}"; }
     }
 
-    private static async Task<string> ExecuteProcess(PluginManifest plugin, PluginTool tool, JsonElement args)
+    private async Task<string> ExecuteProcess(PluginManifest plugin, PluginTool tool, JsonElement args)
     {
         try
         {
@@ -281,10 +285,17 @@ public class PluginManager
                     inputPayload[prop.Name] = prop.Value;
                 }
             }
+            var configDict = new Dictionary<string, object>();
             if (plugin.Config != null)
             {
-                inputPayload["config"] = plugin.Config;
+                foreach (var kp in plugin.Config)
+                {
+                    configDict[kp.Key] = kp.Value;
+                }
             }
+            var personalityPath = _config["personality:path"] ?? _config["PersonalityDir"] ?? "personality";
+            configDict["server_companions_dir"] = Path.Combine(AppContext.BaseDirectory, personalityPath, "companions");
+            inputPayload["config"] = configDict;
 
             await proc.StandardInput.WriteAsync(JsonSerializer.Serialize(inputPayload));
             proc.StandardInput.Close();
