@@ -67,9 +67,7 @@ public class OllamaBackend : IAiBackend
             var payload = JsonSerializer.Serialize(new
             {
                 model,
-                messages = messages.Select(m => m.Images?.Count > 0
-                    ? (object)new { role = m.Role, content = m.Content, images = m.Images }
-                    : new { role = m.Role, content = m.Content }),
+                messages = BackendManager.MapMessagesForLocalBackend(messages),
                 stream = true,
                 options = new
                 {
@@ -132,7 +130,7 @@ public class OllamaBackend : IAiBackend
             var payload = JsonSerializer.Serialize(new
             {
                 model,
-                messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+                messages = BackendManager.MapMessagesForLocalBackend(messages),
                 tools,
                 stream = false,
                 options = new
@@ -204,7 +202,7 @@ public class OpenAiCompatBackend : IAiBackend
             var payload = JsonSerializer.Serialize(new
             {
                 model = string.IsNullOrEmpty(model) ? "model" : model,
-                messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+                messages = BackendManager.MapMessagesForLocalBackend(messages),
                 stream = true,
                 stop = BackendManager.GetStopSequences(messages),
                 max_tokens = 4096,
@@ -312,7 +310,7 @@ public class OpenAiCompatBackend : IAiBackend
             var payload = JsonSerializer.Serialize(new
             {
                 model = string.IsNullOrEmpty(model) ? "model" : model,
-                messages = messages.Select(m => new { role = m.Role, content = m.Content }),
+                messages = BackendManager.MapMessagesForLocalBackend(messages),
                 tools,
                 stream = false,
                 stop = BackendManager.GetStopSequences(messages),
@@ -858,6 +856,35 @@ public class BackendManager
         }
 
         return stops;
+    }
+
+    public static List<object> MapMessagesForLocalBackend(List<ChatMessage> messages)
+    {
+        var result = new List<object>();
+        foreach (var m in messages)
+        {
+            var role = m.Role;
+            var content = m.Content;
+            if (role == "tool")
+            {
+                role = "user";
+                content = $"[Tool Result: {m.Content}]";
+            }
+            else if (role == "assistant" && string.IsNullOrEmpty(content))
+            {
+                content = "[Executing tool calls...]";
+            }
+            
+            if (m.Images?.Count > 0)
+            {
+                result.Add(new { role, content, images = m.Images });
+            }
+            else
+            {
+                result.Add(new { role, content });
+            }
+        }
+        return result;
     }
 }
 
