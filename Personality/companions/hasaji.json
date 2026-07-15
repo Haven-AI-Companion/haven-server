@@ -9,5 +9,11 @@
   "sdConfig": {
     "positive_prompt_prefix": "cinematic photography portrait, soft warm window lighting, high realism, 8k resolution, romantic intimate atmosphere, detailed eyes",
     "negative_prompt": "easynegative, worst quality, low quality, 3d render, anime style, bad hands, deformed"
-  }
+  },
+  "clothingState": "fully clothed",
+  "currentOutfit": "traditional servant attire",
+  "currentLocation": "quiet living chamber",
+  "currentMood": "submissive",
+  "bodyType": "average",
+  "bodyShape": "average"
 }

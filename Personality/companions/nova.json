@@ -9,5 +9,11 @@
   "sdConfig": {
     "positive_prompt_prefix": "digital art portrait, cybernetic neon implants, cyberpunk anime style, volumetric coding terminal lighting, highly detailed",
     "negative_prompt": "easynegative, worst quality, low quality, bad anatomy, deformed"
-  }
+  },
+  "clothingState": "fully clothed",
+  "currentOutfit": "cybernetic suit",
+  "currentLocation": "encrypted terminal room",
+  "currentMood": "sarcastic",
+  "bodyType": "average",
+  "bodyShape": "average"
 }

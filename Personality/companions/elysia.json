@@ -9,5 +9,11 @@
   "sdConfig": {
     "positive_prompt_prefix": "futuristic digital painting portrait, glowing holographic circuits, soft cyan and magenta neon ambient, virtual reality background, highly detailed",
     "negative_prompt": "easynegative, worst quality, low quality, bad anatomy, deformed, sketch, monochrome"
-  }
+  },
+  "clothingState": "fully clothed",
+  "currentOutfit": "holographic dress",
+  "currentLocation": "holographic terminal",
+  "currentMood": "playful",
+  "bodyType": "average",
+  "bodyShape": "average"
 }

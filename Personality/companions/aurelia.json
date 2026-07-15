@@ -9,5 +9,11 @@
   "sdConfig": {
     "positive_prompt_prefix": "majestic oil painting portrait, golden dragon horns and amber eyes, ancient stone peaks background, warm sunset rim lighting, highly detailed",
     "negative_prompt": "easynegative, worst quality, low quality, bad anatomy, deformed, modern clothing, neon lights"
-  }
+  },
+  "clothingState": "fully clothed",
+  "currentOutfit": "heavy golden cloak",
+  "currentLocation": "sunlit stone balcony",
+  "currentMood": "regal",
+  "bodyType": "average",
+  "bodyShape": "average"
 }
