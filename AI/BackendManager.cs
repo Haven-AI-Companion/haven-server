@@ -32,7 +32,7 @@ public class OllamaBackend : IAiBackend
 {
     private readonly string _baseUrl;
     private readonly IConfiguration _config;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     public OllamaBackend(string baseUrl, IConfiguration config)
@@ -166,7 +166,7 @@ public class OpenAiCompatBackend : IAiBackend
     private readonly string _baseUrl;
     private readonly string _apiKey;
     private readonly IConfiguration _config;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     public OpenAiCompatBackend(string baseUrl, string? apiKey, IConfiguration config)
@@ -350,7 +350,7 @@ public class AnthropicBackend : IAiBackend
     private readonly string _baseUrl;
     private readonly string _apiKey;
     private const string AnthropicVersion = "2023-06-01";
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
 
     public AnthropicBackend(string baseUrl, string? apiKey)
     {
@@ -438,7 +438,7 @@ public class GeminiBackend : IAiBackend
 {
     private readonly string _baseUrl;
     private readonly string _apiKey;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
 
     public GeminiBackend(string baseUrl, string? apiKey)
     {

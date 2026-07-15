@@ -289,7 +289,7 @@ public class PluginManager
             await proc.StandardInput.WriteAsync(JsonSerializer.Serialize(inputPayload));
             proc.StandardInput.Close();
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(300));
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
             var output = await proc.StandardOutput.ReadToEndAsync(cts.Token);
             await proc.WaitForExitAsync(cts.Token);
 
