@@ -74,7 +74,14 @@ public class PersonalityLoader
         var basePrompt = parts.Count > 0 ? string.Join("\n\n", parts) : DefaultSystemPrompt(activeName, gender);
         var identityDirective = "\n\n[MODEL IDENTITY DIRECTIVE]\n" +
                                 "Your core language model is a custom Gemma 4 model (specifically, the gemma4-e4b-merged-iq4xs-turbo variant) that has been custom-tuned and merged by Daniel (Barrer Software) to make your dialogue flow and speech sound highly natural. You run locally as the brain of the Haven AI Companion platform.";
-        return basePrompt + identityDirective;
+        var stateDirective = "\n\n[STATE INSTRUCTIONS]\n" +
+                             "If your current physical location, outfit, clothing state, or emotional expression changes, you MUST explicitly output them in brackets using the following exact tags at the end of your message:\n" +
+                             "- [Mood: smile] | [Mood: angry] | [Mood: sad] | [Mood: surprise] | [Mood: neutral]\n" +
+                             "- [Location: <name of location>]\n" +
+                             "- [Outfit: <name of outfit>]\n" +
+                             "- [Clothing State: dressed | semi-dressed | naked]\n" +
+                             "Example: 'I walk over to the window. [Location: Living Room] [Mood: smile]'";
+        return basePrompt + identityDirective + stateDirective;
     }
 
     private static string DefaultSystemPrompt(string? name, string? gender = null)
