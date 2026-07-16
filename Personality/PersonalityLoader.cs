@@ -34,10 +34,10 @@ public class PersonalityLoader
         }
     }
 
-    public string GetSystemPrompt(string? username = null, string? displayName = null)
+    public string GetSystemPrompt(string? username = null, string? displayName = null, string? gender = null)
     {
         var activeName = displayName ?? username;
-        if (_soul == null) return DefaultSystemPrompt(activeName);
+        if (_soul == null) return DefaultSystemPrompt(activeName, gender);
 
         var parts = new List<string>();
 
@@ -53,6 +53,12 @@ public class PersonalityLoader
         if (!string.IsNullOrEmpty(_soul.SystemPrompt))
             parts.Add(_soul.SystemPrompt);
 
+        if (!string.IsNullOrEmpty(activeName))
+        {
+            var genderStr = !string.IsNullOrEmpty(gender) ? $", who is {gender}" : "";
+            parts.Add($"You are speaking with {activeName}{genderStr}. Always address them by this name and align your references to their gender.");
+        }
+
         // Per-user context
         if (username != null)
         {
@@ -65,14 +71,17 @@ public class PersonalityLoader
             }
         }
 
-        var basePrompt = parts.Count > 0 ? string.Join("\n\n", parts) : DefaultSystemPrompt(activeName);
+        var basePrompt = parts.Count > 0 ? string.Join("\n\n", parts) : DefaultSystemPrompt(activeName, gender);
         var identityDirective = "\n\n[MODEL IDENTITY DIRECTIVE]\n" +
                                 "Your core language model is a custom Gemma 4 model (specifically, the gemma4-e4b-merged-iq4xs-turbo variant) that has been custom-tuned and merged by Daniel (Barrer Software) to make your dialogue flow and speech sound highly natural. You run locally as the brain of the Haven AI Companion platform.";
         return basePrompt + identityDirective;
     }
 
-    private static string DefaultSystemPrompt(string? name) =>
-        $"You are Ash, a close companion who is warm, friendly, and conversational. Speak in a natural, slightly informal tone. Avoid corporate assistant phrases, explanations, or asking how you can help.{(name != null ? $" You are speaking with {name}." : "")}";
+    private static string DefaultSystemPrompt(string? name, string? gender = null)
+    {
+        var genderStr = !string.IsNullOrEmpty(gender) ? $", who is {gender}" : "";
+        return $"You are Ash, a close companion who is warm, friendly, and conversational. Speak in a natural, slightly informal tone. Avoid corporate assistant phrases, explanations, or asking how you can help.{(name != null ? $" You are speaking with {name}{genderStr}." : "")}";
+    }
 }
 
 public class SoulConfig

@@ -83,7 +83,17 @@ public class CompanionRegistrySyncService : BackgroundService
                 try
                 {
                     _log.LogInformation("[registry-sync] Syncing repository: {RepoName} ({RepoUrl})", repo.Name, repo.Url);
-                    var manifestJson = await http.GetStringAsync(repo.Url, ct);
+                    string manifestJson;
+                    try
+                    {
+                        manifestJson = await http.GetStringAsync(repo.Url, ct);
+                    }
+                    catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound && repo.Url.Contains("/main/registry.json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var fallbackUrl = repo.Url.Replace("/main/registry.json", "/master/registry.json", StringComparison.OrdinalIgnoreCase);
+                        _log.LogInformation("[registry-sync] Manifest not found on main branch, trying master fallback: {FallbackUrl}", fallbackUrl);
+                        manifestJson = await http.GetStringAsync(fallbackUrl, ct);
+                    }
                     
                     var manifest = JsonSerializer.Deserialize<CompanionRegistryManifest>(manifestJson, new JsonSerializerOptions
                     {

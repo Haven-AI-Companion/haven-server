@@ -8,7 +8,7 @@ public class PluginManager
 {
     private readonly string _pluginsDir;
     private readonly List<PluginManifest> _plugins = [];
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
     private static readonly JsonSerializerOptions Opts = new() { PropertyNameCaseInsensitive = true };
     private readonly IConfiguration _config;
     private readonly IWebHostEnvironment _env;

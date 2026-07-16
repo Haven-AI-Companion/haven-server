@@ -46,6 +46,23 @@ public class RegistryController : ControllerBase
         var name = string.IsNullOrWhiteSpace(req.Name) ? "Custom Repo" : req.Name.Trim();
         var url = req.Url.Trim();
 
+        // Auto-resolve standard GitHub repository URLs to raw registry.json manifest
+        if (url.Contains("github.com", StringComparison.OrdinalIgnoreCase) && !url.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            url = url.TrimEnd('/');
+            var parts = url.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 4)
+            {
+                var owner = parts[parts.Length - 2];
+                var repo = parts[parts.Length - 1];
+                url = $"https://raw.githubusercontent.com/{owner}/{repo}/main/registry.json";
+                if (name == "Custom Repo")
+                {
+                    name = $"{owner}/{repo}";
+                }
+            }
+        }
+
         try
         {
             await _db.AddRepository(url, name);

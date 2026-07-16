@@ -105,6 +105,69 @@ public class AuthController : ControllerBase
         await _db.UpdateUserPassword(userId, hash);
         return Ok(new { ok = true });
     }
+
+    [HttpGet("me/profile")]
+    [Authorize]
+    public async Task<IActionResult> GetProfile()
+    {
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var user = await _db.GetUserById(userId);
+        if (user == null) return NotFound();
+        return Ok(new
+        {
+            displayName = user.DisplayName,
+            gender = user.Gender,
+            avatarPath = user.AvatarPath
+        });
+    }
+
+    [HttpPost("me/profile")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile([FromBody] UserProfileRequest req)
+    {
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        await _db.UpdateUserProfile(userId, req.DisplayName, req.Gender);
+        return Ok(new { ok = true });
+    }
+
+    [HttpPost("me/profile/avatar")]
+    [Authorize]
+    public async Task<IActionResult> UploadAvatar(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "No file uploaded" });
+
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var user = await _db.GetUserById(userId);
+        if (user == null) return Unauthorized();
+
+        try
+        {
+            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            if (!Directory.Exists(uploadsDir)) Directory.CreateDirectory(uploadsDir);
+
+            var ext = Path.GetExtension(file.FileName).ToLower();
+            if (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp")
+                return BadRequest(new { error = "Invalid image format" });
+
+            var fileName = $"user_{userId}_avatar_{DateTime.UtcNow.Ticks}{ext}";
+            var filePath = Path.Combine(uploadsDir, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var webPath = $"/uploads/{fileName}";
+            await _db.UpdateUserProfile(userId, user.DisplayName, user.Gender, webPath);
+
+            return Ok(new { ok = true, avatarPath = webPath });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to upload avatar: {ex.Message}" });
+        }
+    }
 }
 
 [ApiController]
@@ -126,8 +189,9 @@ public class ConversationsController : ControllerBase
     public async Task<IActionResult> Create([FromBody] Dictionary<string, string>? body)
     {
         var title = body?.GetValueOrDefault("title") ?? "New Conversation";
-        var id = await _db.CreateConversation(UserId, title);
-        return Ok(new { id, title });
+        var companionId = body?.GetValueOrDefault("companion_id");
+        var id = await _db.CreateConversation(UserId, title, null, companionId);
+        return Ok(new { id, title, companionId });
     }
 
     [HttpGet("{id}")]
@@ -215,7 +279,7 @@ public class ConversationsController : ControllerBase
         sb.AppendLine();
         foreach (var m in messages)
         {
-            sb.AppendLine(m.Role == "user" ? "**You:**" : "**Companion:**");
+            sb.AppendLine(m.Role == "user" ? "**You:**" : $"**{(m.SenderName ?? "Companion")}:**");
             sb.AppendLine();
             sb.AppendLine(m.Content);
             sb.AppendLine();
@@ -231,7 +295,7 @@ public class ConversationsController : ControllerBase
         sb.AppendLine();
         foreach (var m in messages)
         {
-            sb.AppendLine($"{(m.Role == "user" ? "You" : "Ash")}: {m.Content}");
+            sb.AppendLine($"{(m.Role == "user" ? "You" : (m.SenderName ?? "Companion"))}: {m.Content}");
             sb.AppendLine();
         }
         return sb.ToString();
@@ -350,6 +414,45 @@ public class ModelsController : ControllerBase
         public string Output { get; set; } = "";
     }
 
+    private string ExtractUserMessage(string prompt, string? displayName)
+    {
+        if (string.IsNullOrEmpty(prompt)) return "";
+
+        int lastNewline = prompt.LastIndexOf('\n');
+        if (lastNewline <= 0) return prompt;
+
+        string targetPart = prompt.Substring(0, lastNewline).TrimEnd();
+
+        if (!string.IsNullOrEmpty(displayName))
+        {
+            string userPrefix = $"\n{displayName}:";
+            int prefixIdx = targetPart.LastIndexOf(userPrefix, StringComparison.OrdinalIgnoreCase);
+            if (prefixIdx >= 0)
+            {
+                return targetPart.Substring(prefixIdx + userPrefix.Length).Trim();
+            }
+
+            userPrefix = $"{displayName}:";
+            if (targetPart.StartsWith(userPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return targetPart.Substring(userPrefix.Length).Trim();
+            }
+        }
+
+        int lastColon = targetPart.LastIndexOf(':');
+        if (lastColon > 0)
+        {
+            int prevNewline = targetPart.LastIndexOf('\n', lastColon);
+            int nameStart = prevNewline + 1;
+            if (lastColon - nameStart < 30)
+            {
+                return targetPart.Substring(lastColon + 1).Trim();
+            }
+        }
+
+        return prompt;
+    }
+
     [HttpPost("chat")]
     [Authorize]
     public async Task Chat([FromBody] ChatRequest req, CancellationToken cancellationToken)
@@ -421,7 +524,9 @@ public class ModelsController : ControllerBase
                 {
                     conversationId = await _db.CreateConversation(userId);
                 }
-                await _db.AddMessage(conversationId, "user", promptText);
+                
+                var cleanUserMsg = ExtractUserMessage(promptText, req.DisplayName);
+                await _db.AddMessage(conversationId, "user", cleanUserMsg);
                 await _db.AddMessage(conversationId, "assistant", responseText.ToString());
             }
         }

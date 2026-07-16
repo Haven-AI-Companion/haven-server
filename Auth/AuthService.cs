@@ -69,7 +69,7 @@ public class AuthService
     }
 
     public static UserInfo ToInfo(User u, List<string>? roles = null, List<string>? permissions = null) =>
-        new(u.Id, u.Username, u.Email, u.IsAdmin, u.CreatedAt, roles ?? [], permissions ?? []);
+        new(u.Id, u.Username, u.Email, u.IsAdmin, u.CreatedAt, roles ?? [], permissions ?? [], u.DisplayName, u.Gender, u.AvatarPath);
 
     public async Task<UserInfo> ToInfoWithPerms(User u)
     {

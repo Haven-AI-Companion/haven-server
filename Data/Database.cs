@@ -259,6 +259,47 @@ public class Database
         cmd.ExecuteNonQuery();
 
         SeedSystemRoles(conn);
+
+        // Self-healing migration for schema changes
+        try
+        {
+            using var alterCmd = conn.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE conversations ADD COLUMN companion_id TEXT;";
+            alterCmd.ExecuteNonQuery();
+        }
+        catch {} // Ignore error if column already exists
+
+        try
+        {
+            using var alterCmd = conn.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE messages ADD COLUMN sender_name TEXT;";
+            alterCmd.ExecuteNonQuery();
+        }
+        catch {} // Ignore error if column already exists
+
+        try
+        {
+            using var alterCmd = conn.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE users ADD COLUMN display_name TEXT;";
+            alterCmd.ExecuteNonQuery();
+        }
+        catch {}
+
+        try
+        {
+            using var alterCmd = conn.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE users ADD COLUMN gender TEXT;";
+            alterCmd.ExecuteNonQuery();
+        }
+        catch {}
+
+        try
+        {
+            using var alterCmd = conn.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE users ADD COLUMN avatar_path TEXT;";
+            alterCmd.ExecuteNonQuery();
+        }
+        catch {}
     }
 
     private static void SeedSystemRoles(SqliteConnection conn)
@@ -291,7 +332,7 @@ public class Database
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, username, password_hash, email, is_admin, created_at FROM users WHERE username = $u";
+        cmd.CommandText = "SELECT id, username, password_hash, email, is_admin, created_at, display_name, gender, avatar_path FROM users WHERE username = $u";
         cmd.Parameters.AddWithValue("$u", username);
         using var r = cmd.ExecuteReader();
         return r.Read() ? MapUser(r) : (User?)null;
@@ -301,7 +342,7 @@ public class Database
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, username, password_hash, email, is_admin, created_at FROM users WHERE id = $id";
+        cmd.CommandText = "SELECT id, username, password_hash, email, is_admin, created_at, display_name, gender, avatar_path FROM users WHERE id = $id";
         cmd.Parameters.AddWithValue("$id", id);
         using var r = cmd.ExecuteReader();
         return r.Read() ? MapUser(r) : (User?)null;
@@ -314,7 +355,7 @@ public class Database
         cmd.CommandText = """
             INSERT INTO users (username, password_hash, email, is_admin)
             VALUES ($u, $p, $e, $a);
-            SELECT id, username, password_hash, email, is_admin, created_at FROM users WHERE id = last_insert_rowid();
+            SELECT id, username, password_hash, email, is_admin, created_at, display_name, gender, avatar_path FROM users WHERE id = last_insert_rowid();
             """;
         cmd.Parameters.AddWithValue("$u", username);
         cmd.Parameters.AddWithValue("$p", passwordHash);
@@ -333,6 +374,25 @@ public class Database
         cmd2.ExecuteNonQuery();
 
         return user;
+    });
+
+    public Task UpdateUserProfile(int id, string? displayName, string? gender, string? avatarPath = null) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        if (avatarPath != null)
+        {
+            cmd.CommandText = "UPDATE users SET display_name = $d, gender = $g, avatar_path = $a WHERE id = $id";
+            cmd.Parameters.AddWithValue("$a", (object?)avatarPath ?? DBNull.Value);
+        }
+        else
+        {
+            cmd.CommandText = "UPDATE users SET display_name = $d, gender = $g WHERE id = $id";
+        }
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.Parameters.AddWithValue("$d", (object?)displayName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$g", (object?)gender ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
     });
 
     public Task UpdateUserPassword(int userId, string newHash) => Task.Run(() =>
@@ -404,15 +464,16 @@ public class Database
 
     // ── Conversations ──────────────────────────────────────────────────────
 
-    public Task<string> CreateConversation(int userId, string title = "New Conversation", string? customId = null) => Task.Run(() =>
+    public Task<string> CreateConversation(int userId, string title = "New Conversation", string? customId = null, string? companionId = null) => Task.Run(() =>
     {
         var id = customId ?? Guid.NewGuid().ToString();
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "INSERT INTO conversations (id, user_id, title) VALUES ($id, $u, $t)";
+        cmd.CommandText = "INSERT INTO conversations (id, user_id, title, companion_id) VALUES ($id, $u, $t, $c)";
         cmd.Parameters.AddWithValue("$id", id);
         cmd.Parameters.AddWithValue("$u", userId);
         cmd.Parameters.AddWithValue("$t", title);
+        cmd.Parameters.AddWithValue("$c", (object?)companionId ?? DBNull.Value);
         cmd.ExecuteNonQuery();
         return id;
     });
@@ -421,7 +482,7 @@ public class Database
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, user_id, title, created_at, updated_at FROM conversations WHERE user_id = $u ORDER BY updated_at DESC";
+        cmd.CommandText = "SELECT id, user_id, title, created_at, updated_at, companion_id FROM conversations WHERE user_id = $u ORDER BY updated_at DESC";
         cmd.Parameters.AddWithValue("$u", userId);
         using var r = cmd.ExecuteReader();
         var list = new List<Conversation>();
@@ -433,7 +494,7 @@ public class Database
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, user_id, title, created_at, updated_at FROM conversations WHERE id = $id AND user_id = $u";
+        cmd.CommandText = "SELECT id, user_id, title, created_at, updated_at, companion_id FROM conversations WHERE id = $id AND user_id = $u";
         cmd.Parameters.AddWithValue("$id", id);
         cmd.Parameters.AddWithValue("$u", userId);
         using var r = cmd.ExecuteReader();
@@ -540,17 +601,18 @@ public class Database
 
     // ── Messages ───────────────────────────────────────────────────────────
 
-    public Task AddMessage(string conversationId, string role, string content) => Task.Run(() =>
+    public Task AddMessage(string conversationId, string role, string content, string? senderName = null) => Task.Run(() =>
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO messages (conversation_id, role, content) VALUES ($c, $r, $cnt);
+            INSERT INTO messages (conversation_id, role, content, sender_name) VALUES ($c, $r, $cnt, $s);
             UPDATE conversations SET updated_at = datetime('now') WHERE id = $c;
             """;
         cmd.Parameters.AddWithValue("$c", conversationId);
         cmd.Parameters.AddWithValue("$r", role);
         cmd.Parameters.AddWithValue("$cnt", content);
+        cmd.Parameters.AddWithValue("$s", (object?)senderName ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     });
 
@@ -558,7 +620,7 @@ public class Database
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, conversation_id, role, content, created_at FROM messages WHERE conversation_id = $c ORDER BY id";
+        cmd.CommandText = "SELECT id, conversation_id, role, content, created_at, sender_name FROM messages WHERE conversation_id = $c ORDER BY id";
         cmd.Parameters.AddWithValue("$c", conversationId);
         using var r = cmd.ExecuteReader();
         var list = new List<Message>();
@@ -959,13 +1021,18 @@ public class Database
     private static User MapUser(SqliteDataReader r) => new(
         r.GetInt32(0), r.GetString(1), r.GetString(2),
         r.IsDBNull(3) ? null : r.GetString(3),
-        r.GetInt32(4) == 1, r.GetString(5));
+        r.GetInt32(4) == 1, r.GetString(5),
+        r.FieldCount > 6 && !r.IsDBNull(6) ? r.GetString(6) : null,
+        r.FieldCount > 7 && !r.IsDBNull(7) ? r.GetString(7) : null,
+        r.FieldCount > 8 && !r.IsDBNull(8) ? r.GetString(8) : null);
 
     private static Conversation MapConversation(SqliteDataReader r) => new(
-        r.GetString(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4));
+        r.GetString(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4),
+        r.FieldCount > 5 && !r.IsDBNull(5) ? r.GetString(5) : null);
 
     private static Message MapMessage(SqliteDataReader r) => new(
-        r.GetInt32(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4));
+        r.GetInt32(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4),
+        r.FieldCount > 5 && !r.IsDBNull(5) ? r.GetString(5) : null);
 
     private static AiBackend MapBackend(SqliteDataReader r) => new(
         r.GetInt32(0), r.GetString(1), r.GetString(2), r.GetString(3),

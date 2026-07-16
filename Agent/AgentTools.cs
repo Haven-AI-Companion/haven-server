@@ -7,7 +7,7 @@ namespace AshServer.Agent;
 
 public static class AgentTools
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
 
     public static readonly JsonElement ToolDefinitions = JsonSerializer.Deserialize<JsonElement>("""
         [

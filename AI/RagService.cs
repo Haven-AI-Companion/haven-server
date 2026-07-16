@@ -25,7 +25,7 @@ public class RagService
 {
     private readonly Database _db;
     private readonly BackendManager _backends;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
 
     public RagService(Database db, BackendManager backends)
     {

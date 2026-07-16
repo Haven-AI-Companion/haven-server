@@ -813,8 +813,15 @@ public class BackendManager
         {
             if (string.IsNullOrEmpty(msg.Content)) continue;
 
+            var cleanContent = System.Text.RegularExpressions.Regex.Replace(
+                msg.Content, 
+                @"<(?:\|channel>)?thought[^>]*>.*?</(?:\|channel>)?thought>", 
+                "", 
+                System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            );
+
             // Pattern 1: User name prefix in chat lines, e.g. "Daniel: hey"
-            var lines = msg.Content.Split('\n');
+            var lines = cleanContent.Split('\n');
             foreach (var line in lines)
             {
                 var trimmed = line.Trim();

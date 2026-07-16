@@ -18,7 +18,7 @@ public class McpClient : IAsyncDisposable
     private readonly List<McpTool> _tools = [];
     private Task? _readLoop;
     private CancellationTokenSource? _cts;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
 
     public McpServerConfig       Config    => _config;
     public IReadOnlyList<McpTool> Tools    => _tools;
@@ -193,7 +193,7 @@ public class McpClient : IAsyncDisposable
         finally { _writeLock.Release(); }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
+        timeoutCts.CancelAfter(TimeSpan.FromMinutes(30));
         await using (timeoutCts.Token.Register(() =>
         {
             lock (_pending) _pending.Remove(id);

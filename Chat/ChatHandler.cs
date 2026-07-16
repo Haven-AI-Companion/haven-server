@@ -234,9 +234,10 @@ public class ChatHandler
 
                     await TrySend(new { type = "typing", content = true }, cts.Token);
 
+                    var activeUser = await _db.GetUserById(userId);
                     var systemPrompt = !string.IsNullOrEmpty(customSystemPrompt)
                         ? customSystemPrompt
-                        : _personality.GetSystemPrompt(username);
+                        : _personality.GetSystemPrompt(username, activeUser?.DisplayName, activeUser?.Gender);
                     var messages = new List<ChatMessage> { new("system", systemPrompt) };
                     // Don't pass images on history replay — only the current message
                     lock (history)
@@ -318,7 +319,7 @@ public class ChatHandler
 
                         if (!string.IsNullOrEmpty(responseText))
                         {
-                            await _db.AddMessage(conversationId, "assistant", responseText);
+                            await _db.AddMessage(conversationId, "assistant", responseText, _personality.AiName);
                             lock (history) { history.Add(new ChatMessage("assistant", responseText)); }
                         }
                     }

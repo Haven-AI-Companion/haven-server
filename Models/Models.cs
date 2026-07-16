@@ -8,7 +8,15 @@ public record User(
     string PasswordHash,
     string? Email,
     bool IsAdmin,
-    string CreatedAt
+    string CreatedAt,
+    string? DisplayName = null,
+    string? Gender = null,
+    string? AvatarPath = null
+);
+
+public record UserProfileRequest(
+    string? DisplayName,
+    string? Gender
 );
 
 public record Role(
@@ -35,7 +43,8 @@ public record Conversation(
     int UserId,
     string Title,
     string CreatedAt,
-    string UpdatedAt
+    string UpdatedAt,
+    string? CompanionId = null
 );
 
 public record Message(
@@ -43,7 +52,8 @@ public record Message(
     string ConversationId,
     string Role,
     string Content,
-    string CreatedAt
+    string CreatedAt,
+    string? SenderName = null
 );
 
 public record AiBackend(
@@ -68,7 +78,10 @@ public record UserInfo(
     bool IsAdmin,
     string CreatedAt,
     List<string> Roles,
-    List<string> Permissions
+    List<string> Permissions,
+    string? DisplayName = null,
+    string? Gender = null,
+    string? AvatarPath = null
 );
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public record ChangeEmailRequest(string Email);
