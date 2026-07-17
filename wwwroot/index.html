@@ -351,6 +351,7 @@
 </style>
 </head>
 <body>
+<div id="bg-wallpaper" style="position: fixed; inset: 0; z-index: -2; opacity: 0.12; background-size: cover; background-position: center; pointer-events: none; transition: background-image 0.5s ease;"></div>
 
 <div id="login-overlay">
   <div class="login-card">
@@ -439,6 +440,9 @@
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
       <div class="status-dot" id="status-dot"></div>
+      <div id="header-avatar-container" style="display: none; align-items: center; margin-right: 4px;">
+        <img id="header-avatar" src="" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--accent); box-shadow: 0 0 8px var(--accent-glow);">
+      </div>
       <div>
         <div class="header-title" id="chat-title">Haven</div>
         <div class="header-subtitle" id="chat-model-label">Select a model</div>
@@ -1029,6 +1033,15 @@ function appendMessage(role, content, streaming, images, timestamp) {
     ? (selectedCompanion ? selectedCompanion.name[0].toUpperCase() : '🌸') 
     : (currentUser?.username?.[0]?.toUpperCase() || 'U');
   const avatarClass = role === 'assistant' ? 'ash' : 'user-av';
+
+  let avatarHtml = `<div class="msg-avatar ${avatarClass}">${avatarInit}</div>`;
+  if (role === 'assistant' && selectedCompanion) {
+    const avUrl = getCompanionAvatarUrl(selectedCompanion);
+    avatarHtml = `<div class="msg-avatar ${avatarClass}" style="padding: 0; overflow: hidden; background: none; border: 1px solid var(--border);"><img src="${avUrl}" style="width: 100%; height: 100%; object-fit: cover;"></div>`;
+  } else if (role === 'user' && currentUser && currentUser.avatarPath) {
+    avatarHtml = `<div class="msg-avatar ${avatarClass}" style="padding: 0; overflow: hidden; background: none; border: 1px solid var(--border);"><img src="${currentUser.avatarPath}" style="width: 100%; height: 100%; object-fit: cover;"></div>`;
+  }
+
   const name = role === 'assistant' 
     ? (selectedCompanion ? selectedCompanion.name : 'Ash') 
     : (currentUser?.username || 'You');
@@ -1044,7 +1057,7 @@ function appendMessage(role, content, streaming, images, timestamp) {
 
   const copyId = 'copy-' + Math.random().toString(36).slice(2, 8);
   row.innerHTML = `
-    <div class="msg-avatar ${avatarClass}">${avatarInit}</div>
+    ${avatarHtml}
     <div class="msg-body">
       <div class="msg-meta"><span class="msg-name">${escHtml(name)}</span><span class="msg-time">${time}</span></div>
       <div class="msg-bubble">${imagesHtml}<div class="msg-content"></div></div>
@@ -1076,7 +1089,14 @@ function handleTyping(show) {
     const inner = document.getElementById('messages-inner');
     typingRow = document.createElement('div');
     typingRow.className = 'typing-row';
-    typingRow.innerHTML = `<div class="msg-avatar ash">🌸</div><div class="typing-bubble"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
+    
+    let avatarHtml = `<div class="msg-avatar ash">🌸</div>`;
+    if (selectedCompanion) {
+      const avUrl = getCompanionAvatarUrl(selectedCompanion);
+      avatarHtml = `<div class="msg-avatar ash" style="padding: 0; overflow: hidden; background: none; border: 1px solid var(--border);"><img src="${avUrl}" style="width: 100%; height: 100%; object-fit: cover;"></div>`;
+    }
+
+    typingRow.innerHTML = `${avatarHtml}<div class="typing-bubble"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
     inner.appendChild(typingRow);
     scrollBottom();
   } else if (!show) {
@@ -1592,6 +1612,13 @@ function copyPairingCode() {
 let companions = [];
 let selectedCompanion = null;
 
+function getCompanionAvatarUrl(c) {
+  if (!c) return '/static/logo.png';
+  if (c.avatarPath) return c.avatarPath;
+  const cleanName = c.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  return `/uploads/companion_${cleanName}.png`;
+}
+
 async function loadCompanions() {
   const sel = document.getElementById('companion-select');
   try {
@@ -1617,15 +1644,32 @@ function onCompanionChange() {
   const chatTitle = document.getElementById('chat-title');
   const welcomeTitle = document.querySelector('.welcome-title');
   const inputField = document.getElementById('input-field');
+  const bgWallpaper = document.getElementById('bg-wallpaper');
+  const avatarContainer = document.getElementById('header-avatar-container');
+  const avatarImg = document.getElementById('header-avatar');
   
   if (selectedCompanion) {
     if (chatTitle) chatTitle.textContent = selectedCompanion.name;
     if (welcomeTitle) welcomeTitle.textContent = `Hey, I'm ${selectedCompanion.name}`;
     if (inputField) inputField.placeholder = `Message ${selectedCompanion.name}…`;
+    
+    // Update Header Avatar
+    const avUrl = getCompanionAvatarUrl(selectedCompanion);
+    if (avatarImg) avatarImg.src = avUrl;
+    if (avatarContainer) avatarContainer.style.display = 'flex';
+    
+    // Update Wallpaper Background
+    if (bgWallpaper) {
+      bgWallpaper.style.backgroundImage = `url('${avUrl}')`;
+    }
   } else {
     if (chatTitle) chatTitle.textContent = 'Haven';
     if (welcomeTitle) welcomeTitle.textContent = "Hey, I'm Ash";
     if (inputField) inputField.placeholder = 'Message Ash…';
+    
+    // Hide Header Avatar & Wallpaper
+    if (avatarContainer) avatarContainer.style.display = 'none';
+    if (bgWallpaper) bgWallpaper.style.backgroundImage = '';
   }
 }
 </script>

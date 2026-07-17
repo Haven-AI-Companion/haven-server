@@ -459,6 +459,18 @@ public class ModelsController : ControllerBase
     {
         var promptText = req.Prompt ?? "";
         Console.WriteLine($"[chat] Received request. Prompt length: {promptText.Length} chars.");
+
+        string messageUuid;
+        if (Request.Headers.TryGetValue("X-Request-UUID", out var requestUuidVal))
+        {
+            messageUuid = requestUuidVal.ToString();
+        }
+        else
+        {
+            messageUuid = Guid.NewGuid().ToString();
+        }
+        Response.Headers["X-Message-UUID"] = messageUuid;
+
         if (_config.GetValue("ai:DisableMemoryExtraction", false) && 
             promptText.StartsWith("Extract key facts", StringComparison.OrdinalIgnoreCase))
         {
