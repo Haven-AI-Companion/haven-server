@@ -2744,7 +2744,10 @@ public class CompanionsController : ControllerBase
         
         try
         {
-            var json = JsonSerializer.Serialize(req, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(req, new JsonSerializerOptions { 
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
             System.IO.File.WriteAllText(filePath, json);
             return Ok(new { ok = true, message = $"Companion '{req.Name}' saved locally successfully." });
         }

@@ -80,7 +80,7 @@ public class SyncController : ControllerBase
     {
         if (req == null || string.IsNullOrWhiteSpace(req.Id) || string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.CharacterNames))
             return BadRequest(new { error = "id, name, characterNames required" });
-        await _db.SaveGroup(UserId, req.Id, req.Name, req.CharacterNames);
+        await _db.SaveGroup(UserId, req.Id, req.Name, req.CharacterNames, req.Scenario, req.SystemPrompt);
         return Ok(new { ok = true });
     }
 
@@ -113,5 +113,5 @@ public class SyncController : ControllerBase
 
 public record SyncMemoryRequest(string CompanionName, string Content, string Category);
 public record SyncDiaryRequest(string CompanionName, string DateString, string Content);
-public record SyncGroupRequest(string Id, string Name, string CharacterNames);
+public record SyncGroupRequest(string Id, string Name, string CharacterNames, string? Scenario, string? SystemPrompt);
 public record SyncGroupMessageRequest(string Sender, string? CharacterName, string Content);

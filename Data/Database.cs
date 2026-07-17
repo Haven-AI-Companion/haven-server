@@ -225,6 +225,8 @@ public class Database
                 user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 name            TEXT NOT NULL,
                 character_names TEXT NOT NULL,
+                scenario        TEXT,
+                system_prompt   TEXT,
                 created_at      TEXT DEFAULT (datetime('now'))
             );
 
@@ -297,6 +299,22 @@ public class Database
         {
             using var alterCmd = conn.CreateCommand();
             alterCmd.CommandText = "ALTER TABLE users ADD COLUMN avatar_path TEXT;";
+            alterCmd.ExecuteNonQuery();
+        }
+        catch {}
+
+        try
+        {
+            using var alterCmd = conn.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE group_chats ADD COLUMN scenario TEXT;";
+            alterCmd.ExecuteNonQuery();
+        }
+        catch {}
+
+        try
+        {
+            using var alterCmd = conn.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE group_chats ADD COLUMN system_prompt TEXT;";
             alterCmd.ExecuteNonQuery();
         }
         catch {}
@@ -1387,25 +1405,35 @@ public class Database
         var list = new List<SyncGroup>();
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, user_id, name, character_names, created_at FROM group_chats WHERE user_id = $uid ORDER BY created_at DESC";
+        cmd.CommandText = "SELECT id, user_id, name, character_names, scenario, system_prompt, created_at FROM group_chats WHERE user_id = $uid ORDER BY created_at DESC";
         cmd.Parameters.AddWithValue("$uid", userId);
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
-            list.Add(new SyncGroup(r.GetString(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4)));
+            list.Add(new SyncGroup(
+                r.GetString(0),
+                r.GetInt32(1),
+                r.GetString(2),
+                r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4),
+                r.IsDBNull(5) ? null : r.GetString(5),
+                r.GetString(6)
+            ));
         }
         return list;
     });
 
-    public Task SaveGroup(int userId, string id, string name, string characterNames) => Task.Run(() =>
+    public Task SaveGroup(int userId, string id, string name, string characterNames, string? scenario, string? systemPrompt) => Task.Run(() =>
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "INSERT OR REPLACE INTO group_chats (id, user_id, name, character_names) VALUES ($id, $uid, $name, $chars)";
+        cmd.CommandText = "INSERT OR REPLACE INTO group_chats (id, user_id, name, character_names, scenario, system_prompt) VALUES ($id, $uid, $name, $chars, $scenario, $prompt)";
         cmd.Parameters.AddWithValue("$id", id);
         cmd.Parameters.AddWithValue("$uid", userId);
         cmd.Parameters.AddWithValue("$name", name);
         cmd.Parameters.AddWithValue("$chars", characterNames);
+        cmd.Parameters.AddWithValue("$scenario", (object?)scenario ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$prompt", (object?)systemPrompt ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     });
 

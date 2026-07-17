@@ -278,6 +278,8 @@ public record SyncGroup(
     int UserId,
     string Name,
     string CharacterNames,
+    string? Scenario,
+    string? SystemPrompt,
     string CreatedAt
 );
 
