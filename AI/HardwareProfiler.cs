@@ -24,8 +24,6 @@ public class HardwareProfiler
 {
     private readonly Database _db;
     private readonly IConfiguration _config;
-    private Process? _llamaProcess;
-    private Process? _sdProcess;
     private const int LocalPort = 11436;
 
     public HardwareProfiler(Database db, IConfiguration config)

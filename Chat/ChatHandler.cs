@@ -207,11 +207,14 @@ public class ChatHandler
                         await SafeSend(new { type = "conversation_id", content = conversationId }, cts.Token);
                     }
 
-                    if (conversationId != null)
+                    if (conversationId == null)
                     {
-                        var dict = ActiveSockets.GetOrAdd(conversationId, _ => new ConcurrentDictionary<WebSocket, byte>());
-                        dict.TryAdd(ws, 0);
+                        _log.LogError("[chat-handler] Conversation ID could not be loaded or created.");
+                        continue;
                     }
+
+                    var dict = ActiveSockets.GetOrAdd(conversationId, _ => new ConcurrentDictionary<WebSocket, byte>());
+                    dict.TryAdd(ws, 0);
 
                     try
                     {
