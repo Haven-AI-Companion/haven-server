@@ -1358,6 +1358,18 @@ public class Database
         return list;
     });
 
+    public Task<bool> HasDiaryEntryToday(int userId, string companionName, string dateString) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM companion_diaries WHERE user_id = $uid AND companion_name = $cname AND date_string = $date LIMIT 1";
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cname", companionName);
+        cmd.Parameters.AddWithValue("$date", dateString);
+        using var r = cmd.ExecuteReader();
+        return r.Read();
+    });
+
     public Task SaveDiary(int userId, string companionName, string dateString, string content) => Task.Run(() =>
     {
         using var conn = Open();

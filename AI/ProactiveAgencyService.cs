@@ -345,8 +345,7 @@ public class ProactiveAgencyService : BackgroundService
         try
         {
             var todayDateStr = DateTime.UtcNow.ToString("yyyy-MM-dd");
-            var existingDiaries = await _db.GetDiaries(userId, companionName);
-            if (existingDiaries.Any(d => d.DateString == todayDateStr))
+            if (await _db.HasDiaryEntryToday(userId, companionName, todayDateStr))
             {
                 return; // Already wrote a diary entry today
             }

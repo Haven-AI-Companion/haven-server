@@ -720,21 +720,26 @@ public class ModelsController : ControllerBase
                 if (!System.IO.File.Exists(piperExe))
                     return StatusCode(500, new { error = "piper.exe was not found on the server." });
 
-                var escapedText = req.Text.Replace("\"", "\"\"");
-                
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = "cmd.exe",
-                    Arguments = $"/c chcp 65001 >nul && echo {escapedText} | \"{piperExe}\" -m \"{modelPath}\" -c \"{configPath}\" -f \"{outputPath}\"",
+                    FileName = piperExe,
+                    Arguments = $"-m \"{modelPath}\" -c \"{configPath}\" -f \"{outputPath}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    RedirectStandardError = true
+                    RedirectStandardInput = true,
+                    RedirectStandardError = true,
+                    StandardInputEncoding = System.Text.Encoding.UTF8
                 };
 
                 using (var process = System.Diagnostics.Process.Start(psi))
                 {
                     if (process == null)
                         throw new Exception("Failed to start TTS generator process.");
+
+                    using (var writer = process.StandardInput)
+                    {
+                        await writer.WriteLineAsync(req.Text);
+                    }
 
                     var stderr = await process.StandardError.ReadToEndAsync();
                     await process.WaitForExitAsync();

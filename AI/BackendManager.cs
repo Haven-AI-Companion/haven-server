@@ -165,7 +165,6 @@ public class OpenAiCompatBackend : IAiBackend
     private readonly string _apiKey;
     private readonly IConfiguration _config;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
-    private readonly SemaphoreSlim _lock = new(1, 1);
 
     public OpenAiCompatBackend(string baseUrl, string? apiKey, IConfiguration config)
     {
@@ -191,9 +190,6 @@ public class OpenAiCompatBackend : IAiBackend
         string model, List<ChatMessage> messages,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await _lock.WaitAsync(ct);
-        try
-        {
             var temp = _config.GetValue<float>("ai:temperature", 0.7f);
             var topP = _config.GetValue<float>("ai:top_p", 0.9f);
             var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.0f);
@@ -290,18 +286,10 @@ public class OpenAiCompatBackend : IAiBackend
             {
                 yield return "</thought>\n";
             }
-        }
-        finally
-        {
-            _lock.Release();
-        }
     }
 
     public async Task<JsonElement> ChatWithTools(string model, List<ChatMessage> messages, JsonElement tools, CancellationToken ct = default)
     {
-        await _lock.WaitAsync(ct);
-        try
-        {
             var temp = _config.GetValue<float>("ai:temperature", 0.7f);
             var topP = _config.GetValue<float>("ai:top_p", 0.9f);
             var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.0f);
@@ -333,11 +321,6 @@ public class OpenAiCompatBackend : IAiBackend
             var jsonStr = await resp.Content.ReadAsStringAsync(ct);
             using var doc = JsonDocument.Parse(jsonStr);
             return doc.RootElement.GetProperty("choices")[0].GetProperty("message").Clone();
-        }
-        finally
-        {
-            _lock.Release();
-        }
     }
 }
 

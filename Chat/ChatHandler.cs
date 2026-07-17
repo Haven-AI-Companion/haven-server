@@ -24,26 +24,36 @@ public class ChatHandler
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(2);
     private const int MaxHistoryMessages = 40;
 
-    public static readonly ConcurrentDictionary<string, ConcurrentBag<WebSocket>> ActiveSockets = new();
+    public static readonly ConcurrentDictionary<string, ConcurrentDictionary<WebSocket, byte>> ActiveSockets = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WebSocket, SemaphoreSlim> SocketsLocks = new();
 
     public static async Task BroadcastToConversation(string conversationId, object data)
     {
-        if (ActiveSockets.TryGetValue(conversationId, out var bag))
+        if (ActiveSockets.TryGetValue(conversationId, out var dict))
         {
             var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             });
             var bytes = Encoding.UTF8.GetBytes(json);
-            foreach (var ws in bag)
+            foreach (var ws in dict.Keys)
             {
                 if (ws.State == WebSocketState.Open)
                 {
+                    var wsLock = SocketsLocks.GetOrCreateValue(ws);
+                    await wsLock.WaitAsync();
                     try
                     {
-                        await ws.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+                        if (ws.State == WebSocketState.Open)
+                        {
+                            await ws.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+                        }
                     }
                     catch {}
+                    finally
+                    {
+                        wsLock.Release();
+                    }
                 }
             }
         }
@@ -199,11 +209,8 @@ public class ChatHandler
 
                     if (conversationId != null)
                     {
-                        var bag = ActiveSockets.GetOrAdd(conversationId, _ => new ConcurrentBag<WebSocket>());
-                        if (!bag.Contains(ws))
-                        {
-                            bag.Add(ws);
-                        }
+                        var dict = ActiveSockets.GetOrAdd(conversationId, _ => new ConcurrentDictionary<WebSocket, byte>());
+                        dict.TryAdd(ws, 0);
                     }
 
                     try
@@ -352,9 +359,13 @@ public class ChatHandler
         catch (WebSocketException) { }
         finally
         {
-            if (conversationId != null && ActiveSockets.TryGetValue(conversationId, out var bag))
+            if (conversationId != null && ActiveSockets.TryGetValue(conversationId, out var dict))
             {
-                ActiveSockets[conversationId] = new ConcurrentBag<WebSocket>(bag.Where(s => s != ws));
+                dict.TryRemove(ws, out _);
+                if (dict.IsEmpty)
+                {
+                    ActiveSockets.TryRemove(conversationId, out _);
+                }
             }
             if (ws.State == WebSocketState.Open)
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
@@ -379,6 +390,20 @@ public class ChatHandler
         });
         var bytes = Encoding.UTF8.GetBytes(json);
         if (ws.State == WebSocketState.Open)
-            await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
+        {
+            var wsLock = SocketsLocks.GetOrCreateValue(ws);
+            await wsLock.WaitAsync(ct);
+            try
+            {
+                if (ws.State == WebSocketState.Open)
+                {
+                    await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
+                }
+            }
+            finally
+            {
+                wsLock.Release();
+            }
+        }
     }
 }

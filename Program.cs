@@ -676,19 +676,26 @@ public class Program
                     if (File.Exists(piperExe) && File.Exists(piperModel) && replyText.Length > 0)
                     {
                         var ttsOut = Path.Combine(Path.GetTempPath(), $"tts_{Guid.NewGuid():N}.wav");
-                        var escaped = replyText.Replace("\"", "\\\"").Replace("\n", " ");
                         var piperProc = new Process
                         {
                             StartInfo = new ProcessStartInfo
                             {
-                                FileName = "cmd.exe",
-                                Arguments = $"/c echo {escaped} | \"{piperExe}\" -m \"{piperModel}\" -c \"{piperConfig}\" -f \"{ttsOut}\"",
+                                FileName = piperExe,
+                                Arguments = $"-m \"{piperModel}\" -c \"{piperConfig}\" -f \"{ttsOut}\"",
                                 UseShellExecute = false,
-                                CreateNoWindow = true
+                                CreateNoWindow = true,
+                                RedirectStandardInput = true,
+                                StandardInputEncoding = Encoding.UTF8
                             }
                         };
-                        piperProc.Start();
-                        await piperProc.WaitForExitAsync();
+                        if (piperProc.Start())
+                        {
+                            using (var writer = piperProc.StandardInput)
+                            {
+                                await writer.WriteLineAsync(replyText.Replace("\n", " "));
+                            }
+                            await piperProc.WaitForExitAsync();
+                        }
 
                         if (File.Exists(ttsOut))
                         {
