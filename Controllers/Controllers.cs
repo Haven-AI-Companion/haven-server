@@ -306,6 +306,22 @@ public class ConversationsController : ControllerBase
 [Route("api")]
 public class ModelsController : ControllerBase
 {
+    public static DateTime LastActiveChatTime = DateTime.MinValue;
+    public static CancellationTokenSource? ActiveProactiveCts = null;
+
+    public static void CancelActiveProactiveTask()
+    {
+        try
+        {
+            if (ActiveProactiveCts != null)
+            {
+                ActiveProactiveCts.Cancel();
+                ActiveProactiveCts = null;
+            }
+        }
+        catch { }
+    }
+
     private readonly AshServer.AI.BackendManager _backends;
     private readonly IConfiguration _config;
     private readonly IWebHostEnvironment _env;
@@ -457,6 +473,9 @@ public class ModelsController : ControllerBase
     [Authorize]
     public async Task Chat([FromBody] ChatRequest req, CancellationToken cancellationToken)
     {
+        LastActiveChatTime = DateTime.UtcNow;
+        CancelActiveProactiveTask();
+
         var promptText = req.Prompt ?? "";
         Console.WriteLine($"[chat] Received request. Prompt length: {promptText.Length} chars.");
 

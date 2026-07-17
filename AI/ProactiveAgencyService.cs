@@ -178,6 +178,13 @@ public class ProactiveAgencyService : BackgroundService
                         shouldTrigger = true;
                     }
 
+                    // Check if the user has been active recently in the chat endpoint
+                    if (DateTime.UtcNow - AshServer.Controllers.ModelsController.LastActiveChatTime < TimeSpan.FromMinutes(5))
+                    {
+                        _log.LogInformation("[proactive-agency] User was active in the last 5 minutes. Skipping proactive check.");
+                        continue;
+                    }
+
                     if (!shouldTrigger)
                     {
                         continue;
@@ -208,10 +215,31 @@ public class ProactiveAgencyService : BackgroundService
                     var (backend, modelName) = await _backends.Resolve("default");
                     var responseText = "";
 
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                    await foreach (var token in backend.StreamChat(modelName, messages, cts.Token))
+                    // Register this proactive check-in task cancellation source
+                    AshServer.Controllers.ModelsController.CancelActiveProactiveTask();
+                    var localCts = new CancellationTokenSource();
+                    AshServer.Controllers.ModelsController.ActiveProactiveCts = localCts;
+
+                    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(localCts.Token, stoppingToken);
+                    linkedCts.CancelAfter(TimeSpan.FromSeconds(60));
+
+                    try
                     {
-                        responseText += token;
+                        await foreach (var token in backend.StreamChat(modelName, messages, linkedCts.Token))
+                        {
+                            responseText += token;
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _log.LogInformation("[proactive-agency] Proactive generation was cancelled because the user started an active chat.");
+                        continue;
+                    }
+
+                    if (linkedCts.Token.IsCancellationRequested)
+                    {
+                        _log.LogInformation("[proactive-agency] Proactive check-in cancelled by active user input.");
+                        continue;
                     }
 
                     responseText = responseText.Trim();
@@ -239,6 +267,11 @@ public class ProactiveAgencyService : BackgroundService
 
                                 try
                                 {
+                                    if (linkedCts.Token.IsCancellationRequested)
+                                    {
+                                        _log.LogInformation("[proactive-agency] Proactive check-in cancelled before generating portrait.");
+                                        continue;
+                                    }
                                     _log.LogInformation("[proactive-agency] Companion requested portrait: \"{Description}\"", portraitDescription);
                                     var argElement = JsonSerializer.SerializeToElement(new { description = portraitDescription });
                                     portraitUrl = await _plugins.ExecuteTool("generate_portrait", argElement);
@@ -278,6 +311,11 @@ public class ProactiveAgencyService : BackgroundService
                                         speakMessage = restClean.Substring(barIndex + 1).Trim();
                                         try
                                         {
+                                            if (linkedCts.Token.IsCancellationRequested)
+                                            {
+                                                _log.LogInformation("[proactive-agency] Proactive check-in cancelled before generating portrait (fallback).");
+                                                continue;
+                                            }
                                             _log.LogInformation("[proactive-agency] Companion requested portrait: \"{Description}\"", portraitDescription);
                                             var argElement = JsonSerializer.SerializeToElement(new { description = portraitDescription });
                                             portraitUrl = await _plugins.ExecuteTool("generate_portrait", argElement);
@@ -323,6 +361,12 @@ public class ProactiveAgencyService : BackgroundService
 
                     // Add a longer dynamic cooldown (5 to 10 minutes) if they decide to speak to prevent spamming
                     _nextAllowedMessageTime[convId] = now.AddMinutes(Random.Shared.NextDouble() * 5.0 + 5.0);
+
+                    if (linkedCts.Token.IsCancellationRequested)
+                    {
+                        _log.LogInformation("[proactive-agency] Proactive check-in cancelled before database write.");
+                        continue;
+                    }
 
                     // Save to database
                     await _db.AddMessage(convId, "assistant", finalMessage);
