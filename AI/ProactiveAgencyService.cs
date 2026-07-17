@@ -203,6 +203,8 @@ public class ProactiveAgencyService : BackgroundService
                                       $"- If you want to stay silent and let Daniel focus, write \"[ACTION]: SILENT\".\n" +
                                       $"- If you want to proactively speak with a text message, write \"[ACTION]: SPEAK\" followed by your message to Daniel (in character as {companionName}, keep it under 2 sentences, and address Daniel by name).\n" +
                                       $"- If you want to proactively speak and also share a visual portrait/selfie showing what you are currently doing, write \"[ACTION]: SPEAK_WITH_PORTRAIT\" followed by a detailed visual description of the selfie (e.g., 'Nova sitting in the neon mainframe room wearing headphones, smiling at the camera'), a vertical bar |, and then your message to Daniel.\n\n" +
+                                      $"- You can also trigger special client-side device actions by including `[ACTION: set_alarm HH:MM]`, `[ACTION: add_event <title>]`, or `[ACTION: play_chime]` in your speaking message.\n" +
+                                      $"- You can also dynamically update your physical location, outfit, clothing state, or expression by including standard bracketed state tags in your message (e.g., '[Location: Kitchen] [Outfit: pajamas] [Mood: relaxed] [Clothing State: semi-dressed]').\n\n" +
                                       $"Examples:\n" +
                                       $"<thought>Daniel is busy coding in VS Code. I shouldn't bother him.</thought>\n" +
                                       $"[ACTION]: SILENT\n\n" +
@@ -368,6 +370,29 @@ public class ProactiveAgencyService : BackgroundService
                         continue;
                     }
 
+                    // Parse state updates (Location, Outfit, Mood, ClothingState) from speakMessage
+                    string? newLocation = null;
+                    string? newOutfit = null;
+                    string? newMood = null;
+                    string? newClothingState = null;
+
+                    var locationMatch = System.Text.RegularExpressions.Regex.Match(speakMessage, @"\[\s*Location\s*:\s*([^\]]+)\s*\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (locationMatch.Success) newLocation = locationMatch.Groups[1].Value.Trim();
+
+                    var outfitMatch = System.Text.RegularExpressions.Regex.Match(speakMessage, @"\[\s*Outfit\s*:\s*([^\]]+)\s*\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (outfitMatch.Success) newOutfit = outfitMatch.Groups[1].Value.Trim();
+
+                    var moodMatch = System.Text.RegularExpressions.Regex.Match(speakMessage, @"\[\s*Mood\s*:\s*([^\]]+)\s*\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (moodMatch.Success) newMood = moodMatch.Groups[1].Value.Trim();
+
+                    var clothingStateMatch = System.Text.RegularExpressions.Regex.Match(speakMessage, @"\[\s*Clothing\s*State\s*:\s*([^\]]+)\s*\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (clothingStateMatch.Success) newClothingState = clothingStateMatch.Groups[1].Value.Trim();
+
+                    if (newLocation != null || newOutfit != null || newMood != null || newClothingState != null)
+                    {
+                        await UpdateCompanionStateOnServer(companionName, newLocation, newOutfit, newMood, newClothingState);
+                    }
+
                     // Save to database
                     await _db.AddMessage(convId, "assistant", finalMessage);
 
@@ -448,6 +473,46 @@ public class ProactiveAgencyService : BackgroundService
         catch (Exception ex)
         {
             _log.LogError(ex, "[proactive-agency] Error generating daily reflection diary");
+        }
+    }
+
+    private async Task UpdateCompanionStateOnServer(string companionName, string? location, string? outfit, string? mood, string? clothingState)
+    {
+        try
+        {
+            var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+            var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+            var localDir = Path.Combine(baseDir, "local");
+            var cleanName = string.Concat(companionName.Split(Path.GetInvalidFileNameChars())).Trim();
+            
+            var filePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+            if (!File.Exists(filePath))
+            {
+                filePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+            }
+
+            if (File.Exists(filePath))
+            {
+                var content = await File.ReadAllTextAsync(filePath);
+                var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(content);
+                if (doc != null)
+                {
+                    if (location != null) doc["currentLocation"] = JsonSerializer.SerializeToElement(location);
+                    if (outfit != null) doc["currentOutfit"] = JsonSerializer.SerializeToElement(outfit);
+                    if (mood != null) doc["currentMood"] = JsonSerializer.SerializeToElement(mood);
+                    if (clothingState != null) doc["clothingState"] = JsonSerializer.SerializeToElement(clothingState);
+
+                    var updatedJson = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+                    if (!Directory.Exists(localDir)) Directory.CreateDirectory(localDir);
+                    var localFilePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+                    await File.WriteAllTextAsync(localFilePath, updatedJson);
+                    _log.LogInformation("[proactive-agency] Updated state for companion {Name} in config files: Location={Loc}, Outfit={Out}, Mood={Mood}", companionName, location, outfit, mood);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "[proactive-agency] Failed to update companion state config file");
         }
     }
 }

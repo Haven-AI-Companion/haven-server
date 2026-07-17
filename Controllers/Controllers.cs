@@ -2985,4 +2985,10 @@ public class CompanionConfig
     public string? SystemPrompt { get; set; }
     public string? ConversationId { get; set; }
     public string? AvatarPath { get; set; }
+    public string? CurrentOutfit { get; set; }
+    public string? CurrentLocation { get; set; }
+    public string? CurrentMood { get; set; }
+    public string? ClothingState { get; set; }
+    public string? BodyType { get; set; }
+    public string? BodyShape { get; set; }
 }
