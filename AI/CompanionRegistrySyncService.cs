@@ -84,15 +84,66 @@ public class CompanionRegistrySyncService : BackgroundService
                 {
                     _log.LogInformation("[registry-sync] Syncing repository: {RepoName} ({RepoUrl})", repo.Name, repo.Url);
                     string manifestJson;
-                    try
+                    bool isLocalPath = !repo.Url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && 
+                                       !repo.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+                    if (isLocalPath)
                     {
-                        manifestJson = await http.GetStringAsync(repo.Url, ct);
+                        var localCompanions = new List<CompanionRegistryItem>();
+                        if (Directory.Exists(repo.Url))
+                        {
+                            var files = Directory.GetFiles(repo.Url, "*.json");
+                            foreach (var file in files)
+                            {
+                                try
+                                {
+                                    var fileJson = await File.ReadAllTextAsync(file, ct);
+                                    using var doc = JsonDocument.Parse(fileJson);
+                                    var root = doc.RootElement;
+                                    var id = root.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+                                    var name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
+                                    if (!string.IsNullOrEmpty(id))
+                                    {
+                                        localCompanions.Add(new CompanionRegistryItem
+                                        {
+                                            Id = id,
+                                            Name = name ?? id,
+                                            DownloadUrl = file,
+                                            AvatarUrl = ""
+                                        });
+                                    }
+                                }
+                                catch {}
+                            }
+                        }
+                        var localManifestObj = new CompanionRegistryManifest
+                        {
+                            Name = repo.Name,
+                            Companions = localCompanions
+                        };
+                        manifestJson = JsonSerializer.Serialize(localManifestObj);
                     }
-                    catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound && repo.Url.Contains("/main/registry.json", StringComparison.OrdinalIgnoreCase))
+                    else
                     {
-                        var fallbackUrl = repo.Url.Replace("/main/registry.json", "/master/registry.json", StringComparison.OrdinalIgnoreCase);
-                        _log.LogInformation("[registry-sync] Manifest not found on main branch, trying master fallback: {FallbackUrl}", fallbackUrl);
-                        manifestJson = await http.GetStringAsync(fallbackUrl, ct);
+                        var url = repo.Url;
+                        if (url.Contains("github.com", StringComparison.OrdinalIgnoreCase) && 
+                            !url.Contains("/raw/", StringComparison.OrdinalIgnoreCase) && 
+                            !url.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                        {
+                            url = url.Replace("github.com", "raw.githubusercontent.com", StringComparison.OrdinalIgnoreCase);
+                            url = url.TrimEnd('/') + "/main/registry.json";
+                        }
+
+                        try
+                        {
+                            manifestJson = await http.GetStringAsync(url, ct);
+                        }
+                        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound && url.Contains("/main/registry.json", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var fallbackUrl = url.Replace("/main/registry.json", "/master/registry.json", StringComparison.OrdinalIgnoreCase);
+                            _log.LogInformation("[registry-sync] Manifest not found on main branch, trying master fallback: {FallbackUrl}", fallbackUrl);
+                            manifestJson = await http.GetStringAsync(fallbackUrl, ct);
+                        }
                     }
                     
                     var manifest = JsonSerializer.Deserialize<CompanionRegistryManifest>(manifestJson, new JsonSerializerOptions
@@ -115,8 +166,17 @@ public class CompanionRegistrySyncService : BackgroundService
 
                             var filePath = Path.Combine(companionsDir, $"{cleanId}.json");
                             
-                            _log.LogInformation("[registry-sync] Downloading companion profile: {CompName} ({CleanId})", companion.Name, cleanId);
-                            var profileJson = await http.GetStringAsync(companion.DownloadUrl, ct);
+                            string profileJson;
+                            if (isLocalPath || !companion.DownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                            {
+                                _log.LogInformation("[registry-sync] Reading companion profile from local path: {CompName} ({CleanId})", companion.Name, cleanId);
+                                profileJson = await File.ReadAllTextAsync(companion.DownloadUrl, ct);
+                            }
+                            else
+                            {
+                                _log.LogInformation("[registry-sync] Downloading companion profile: {CompName} ({CleanId})", companion.Name, cleanId);
+                                profileJson = await http.GetStringAsync(companion.DownloadUrl, ct);
+                            }
 
                             // Validate json by attempting to deserialize it
                             var companionConfig = JsonSerializer.Deserialize<CompanionConfig>(profileJson, new JsonSerializerOptions
@@ -134,7 +194,7 @@ public class CompanionRegistrySyncService : BackgroundService
                             await File.WriteAllTextAsync(filePath, profileJson, ct);
 
                             // Download avatar image if provided
-                            if (!string.IsNullOrEmpty(companion.AvatarUrl))
+                            if (!string.IsNullOrEmpty(companion.AvatarUrl) && companion.AvatarUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                             {
                                 _log.LogInformation("[registry-sync] Downloading avatar for companion: {CleanId} from {AvatarUrl}", cleanId, companion.AvatarUrl);
                                 var imgBytes = await http.GetByteArrayAsync(companion.AvatarUrl, ct);
