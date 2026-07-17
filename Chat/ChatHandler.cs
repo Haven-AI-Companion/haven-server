@@ -40,7 +40,7 @@ public class ChatHandler
             {
                 if (ws.State == WebSocketState.Open)
                 {
-                    var wsLock = SocketsLocks.GetOrCreateValue(ws);
+                    var wsLock = SocketsLocks.GetValue(ws, socket => new SemaphoreSlim(1, 1));
                     await wsLock.WaitAsync();
                     try
                     {
@@ -394,7 +394,7 @@ public class ChatHandler
         var bytes = Encoding.UTF8.GetBytes(json);
         if (ws.State == WebSocketState.Open)
         {
-            var wsLock = SocketsLocks.GetOrCreateValue(ws);
+            var wsLock = SocketsLocks.GetValue(ws, socket => new SemaphoreSlim(1, 1));
             await wsLock.WaitAsync(ct);
             try
             {
