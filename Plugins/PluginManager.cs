@@ -285,6 +285,23 @@ public class PluginManager
                     inputPayload[prop.Name] = prop.Value;
                 }
             }
+
+            // If group_name is present and target_filename is not already generated (e.g. from direct HTTP execute API)
+            if (args.ValueKind == JsonValueKind.Object && !inputPayload.ContainsKey("target_filename"))
+            {
+                if (args.TryGetProperty("group_name", out var gnEl) && gnEl.ValueKind == JsonValueKind.String)
+                {
+                    var groupName = gnEl.GetString() ?? "DefaultGroup";
+                    foreach (char c in Path.GetInvalidFileNameChars())
+                    {
+                        groupName = groupName.Replace(c, '_');
+                    }
+                    var uuidStr = Guid.NewGuid().ToString("N");
+                    var ext = tool.Name == "generate_portrait" ? ".webp" : ".glb";
+                    var prefix = tool.Name == "generate_portrait" ? "gen_" : "avatar_";
+                    inputPayload["target_filename"] = $"groups/{groupName}/{prefix}{uuidStr}{ext}";
+                }
+            }
             var configDict = new Dictionary<string, object>();
             if (plugin.Config != null)
             {

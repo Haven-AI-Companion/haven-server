@@ -145,17 +145,30 @@ public class AgentRunner
                 return await AgentTools.Execute(name, args);
             }
 
-            var companion = string.IsNullOrEmpty(_companionName) ? "Default" : _companionName;
-            var user = _userId?.ToString() ?? "0";
-            foreach (char c in System.IO.Path.GetInvalidFileNameChars())
-            {
-                companion = companion.Replace(c, '_');
-            }
-
             var uuidStr = Guid.NewGuid().ToString("N");
             var ext = name == "generate_portrait" ? ".webp" : ".glb";
             var prefix = name == "generate_portrait" ? "gen_" : "avatar_";
-            var targetFilename = $"{companion}/{user}/{prefix}{uuidStr}{ext}";
+            
+            string targetFilename;
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty("group_name", out var gnEl) && gnEl.ValueKind == JsonValueKind.String)
+            {
+                var groupName = gnEl.GetString() ?? "DefaultGroup";
+                foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+                {
+                    groupName = groupName.Replace(c, '_');
+                }
+                targetFilename = $"groups/{groupName}/{prefix}{uuidStr}{ext}";
+            }
+            else
+            {
+                var companion = string.IsNullOrEmpty(_companionName) ? "Default" : _companionName;
+                var user = _userId?.ToString() ?? "0";
+                foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+                {
+                    companion = companion.Replace(c, '_');
+                }
+                targetFilename = $"{companion}/{user}/{prefix}{uuidStr}{ext}";
+            }
             var outputUrl = $"/uploads/{targetFilename}";
 
             var argsDict = new Dictionary<string, object>();
