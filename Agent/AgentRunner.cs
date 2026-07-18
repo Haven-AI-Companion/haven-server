@@ -26,8 +26,9 @@ public class AgentRunner
     private readonly McpManager?    _mcp;
     private readonly RagService?    _rag;
     private readonly int _maxIterations;
+    private readonly string? _conversationId;
 
-    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null, RagService? rag = null, int maxIterations = MaxIterations)
+    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null, RagService? rag = null, int maxIterations = MaxIterations, string? conversationId = null)
     {
         _backend = backend;
         _model   = model;
@@ -35,6 +36,7 @@ public class AgentRunner
         _mcp     = mcp;
         _rag     = rag;
         _maxIterations = Math.Max(1, maxIterations);
+        _conversationId = conversationId;
     }
 
     /// Merge built-in tool definitions with enabled plugin tools and MCP tools.
@@ -129,6 +131,75 @@ public class AgentRunner
         // MCP tools first (external protocol servers)
         if (_mcp != null && _mcp.IsMcpTool(name))
             return await _mcp.ExecuteToolAsync(name, args);
+
+        if (name == "generate_portrait" || name == "generate_3d_avatar")
+        {
+            if (string.IsNullOrEmpty(_conversationId))
+            {
+                if (_plugins != null && _plugins.IsPluginTool(name))
+                    return await _plugins.ExecuteTool(name, args);
+                return await AgentTools.Execute(name, args);
+            }
+
+            var uuidStr = Guid.NewGuid().ToString("N");
+            var ext = name == "generate_portrait" ? ".webp" : ".glb";
+            var prefix = name == "generate_portrait" ? "gen_" : "avatar_";
+            var targetFilename = $"{prefix}{uuidStr}{ext}";
+            var outputUrl = $"/uploads/{targetFilename}";
+
+            var argsDict = new Dictionary<string, object>();
+            if (args.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in args.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == JsonValueKind.String)
+                        argsDict[prop.Name] = prop.Value.GetString()!;
+                    else if (prop.Value.ValueKind == JsonValueKind.Number)
+                        argsDict[prop.Name] = prop.Value.GetDouble();
+                    else if (prop.Value.ValueKind == JsonValueKind.True || prop.Value.ValueKind == JsonValueKind.False)
+                        argsDict[prop.Name] = prop.Value.GetBoolean();
+                    else
+                        argsDict[prop.Name] = prop.Value;
+                }
+            }
+            argsDict["target_filename"] = targetFilename;
+
+            var updatedArgs = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(argsDict));
+
+            // Fire and forget task to generate media in background
+            _ = Task.Run(async () =>
+            {
+                await SdGenerationQueue.Semaphore.WaitAsync();
+                try
+                {
+                    string result;
+                    if (_plugins != null && _plugins.IsPluginTool(name))
+                        result = await _plugins.ExecuteTool(name, updatedArgs);
+                    else
+                        result = await AgentTools.Execute(name, updatedArgs);
+
+                    if (!string.IsNullOrEmpty(result) && result.StartsWith("/uploads/"))
+                    {
+                        await AshServer.Chat.ChatHandler.BroadcastToConversation(_conversationId, new
+                        {
+                            type = "media_ready",
+                            url = result,
+                            tool = name
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[async-tool] Error in background execution of {name}: {ex.Message}");
+                }
+                finally
+                {
+                    SdGenerationQueue.Semaphore.Release();
+                }
+            });
+
+            return outputUrl;
+        }
 
         // Plugin tools (non-builtin) take priority if PluginManager knows them
         if (_plugins != null && _plugins.IsPluginTool(name))
@@ -252,5 +323,10 @@ public class AgentRunner
 
         yield return new AgentEvent("final", Iteration: MaxIterations);
     }
+}
+
+public static class SdGenerationQueue
+{
+    public static readonly System.Threading.SemaphoreSlim Semaphore = new(1, 1);
 }
 

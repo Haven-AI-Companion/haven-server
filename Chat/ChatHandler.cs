@@ -285,7 +285,7 @@ public class ChatHandler
                         if (agentMode)
                         {
                             var (backend, modelName) = await _backends.Resolve(modelId);
-                            var runner = new AgentRunner(backend, modelName, _plugins, _mcp, _rag);
+                            var runner = new AgentRunner(backend, modelName, _plugins, _mcp, _rag, conversationId: conversationId);
                             await foreach (var evt in runner.Run(messages).WithCancellation(genToken))
                             {
                                 switch (evt.Type)
