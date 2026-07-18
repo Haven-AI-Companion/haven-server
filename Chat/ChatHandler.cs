@@ -285,7 +285,9 @@ public class ChatHandler
                         if (agentMode)
                         {
                             var (backend, modelName) = await _backends.Resolve(modelId);
-                            var runner = new AgentRunner(backend, modelName, _plugins, _mcp, _rag, conversationId: conversationId);
+                            var conversation = await _db.GetConversation(conversationId, userId);
+                            var companionName = string.IsNullOrEmpty(conversation?.CompanionId) ? (_personality.AiName ?? "Default") : conversation.CompanionId;
+                            var runner = new AgentRunner(backend, modelName, _plugins, _mcp, _rag, conversationId: conversationId, companionName: companionName, userId: userId);
                             await foreach (var evt in runner.Run(messages).WithCancellation(genToken))
                             {
                                 switch (evt.Type)

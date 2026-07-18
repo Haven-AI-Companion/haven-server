@@ -27,8 +27,10 @@ public class AgentRunner
     private readonly RagService?    _rag;
     private readonly int _maxIterations;
     private readonly string? _conversationId;
+    private readonly string? _companionName;
+    private readonly int? _userId;
 
-    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null, RagService? rag = null, int maxIterations = MaxIterations, string? conversationId = null)
+    public AgentRunner(IAiBackend backend, string model, PluginManager? plugins = null, McpManager? mcp = null, RagService? rag = null, int maxIterations = MaxIterations, string? conversationId = null, string? companionName = null, int? userId = null)
     {
         _backend = backend;
         _model   = model;
@@ -37,6 +39,8 @@ public class AgentRunner
         _rag     = rag;
         _maxIterations = Math.Max(1, maxIterations);
         _conversationId = conversationId;
+        _companionName = companionName;
+        _userId = userId;
     }
 
     /// Merge built-in tool definitions with enabled plugin tools and MCP tools.
@@ -141,10 +145,17 @@ public class AgentRunner
                 return await AgentTools.Execute(name, args);
             }
 
+            var companion = string.IsNullOrEmpty(_companionName) ? "Default" : _companionName;
+            var user = _userId?.ToString() ?? "0";
+            foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+            {
+                companion = companion.Replace(c, '_');
+            }
+
             var uuidStr = Guid.NewGuid().ToString("N");
             var ext = name == "generate_portrait" ? ".webp" : ".glb";
             var prefix = name == "generate_portrait" ? "gen_" : "avatar_";
-            var targetFilename = $"{prefix}{uuidStr}{ext}";
+            var targetFilename = $"{companion}/{user}/{prefix}{uuidStr}{ext}";
             var outputUrl = $"/uploads/{targetFilename}";
 
             var argsDict = new Dictionary<string, object>();
