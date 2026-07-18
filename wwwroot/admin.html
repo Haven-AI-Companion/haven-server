@@ -2328,18 +2328,20 @@ async function loadConfigToMenu() {
       if (netResp.ok) {
         const interfaces = await netResp.json();
         const select = document.getElementById('cfg-server-host-select');
-        select.innerHTML = ''; // Clear default hardcoded entries
-        interfaces.forEach(ni => {
-          const opt = document.createElement('option');
-          opt.value = ni.ip;
-          opt.textContent = `${ni.name} — ${ni.ip}`;
-          select.appendChild(opt);
-        });
-        // Add custom option
-        const customOpt = document.createElement('option');
-        customOpt.value = 'custom';
-        customOpt.textContent = 'Custom Hostname / IP...';
-        select.appendChild(customOpt);
+        if (select) {
+          select.innerHTML = ''; // Clear default hardcoded entries
+          interfaces.forEach(ni => {
+            const opt = document.createElement('option');
+            opt.value = ni.ip;
+            opt.textContent = `${ni.name} — ${ni.ip}`;
+            select.appendChild(opt);
+          });
+          // Add custom option
+          const customOpt = document.createElement('option');
+          customOpt.value = 'custom';
+          customOpt.textContent = 'Custom Hostname / IP...';
+          select.appendChild(customOpt);
+        }
       }
     } catch (netErr) {
       console.error('Failed to retrieve network interfaces:', netErr);
@@ -2348,28 +2350,43 @@ async function loadConfigToMenu() {
     const resp   = await fetch('/api/admin/config', { headers: { Authorization: `Bearer ${token}` } });
     if (!resp.ok) {
       console.warn('Failed to load configuration:', resp.status);
+      toast('Failed to load configuration: ' + resp.status, 'error');
       return;
     }
     const config = await resp.json();
     
-    const hostVal = config.server?.host ?? '0.0.0.0';
-    document.getElementById('cfg-server-host').value        = hostVal;
+    const hostEl = document.getElementById('cfg-server-host');
+    if (hostEl) {
+      hostEl.value = config.server?.host ?? '0.0.0.0';
+    }
     
     // Sync the host select list with active config value
-    syncHostSelect();
+    try {
+      syncHostSelect();
+    } catch (syncErr) {
+      console.error('syncHostSelect failed:', syncErr);
+    }
     
-    document.getElementById('cfg-server-port').value        = config.server?.port ?? 8765;
-    document.getElementById('cfg-require-auth').value       = String(config.server?.require_auth ?? false);
-    document.getElementById('cfg-allow-registration').value = String(config.server?.allow_registration ?? true);
-    document.getElementById('cfg-fallback-model').value      = config.ai?.model ?? config.ollama?.model ?? '';
-    document.getElementById('cfg-fallback-temp').value       = config.ai?.temperature ?? config.ollama?.temperature ?? 0.7;
-    document.getElementById('cfg-db-path').value            = config.database?.path ?? 'ash_server.db';
-    document.getElementById('cfg-uploads-dir').value        = config.uploads?.directory ?? 'uploads';
-    document.getElementById('cfg-uploads-maxsize').value    = config.uploads?.max_size_mb ?? 10;
-    document.getElementById('cfg-auth-secret').value        = '';
-    document.getElementById('cfg-auth-expiry').value        = config.auth?.token_expiry_hours ?? 24;
-    document.getElementById('cfg-personality-path').value   = config.personality?.path ?? config.ai?.personality_path ?? 'personality';
-  } catch (err) { console.error('loadConfigToMenu:', err); }
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    };
+
+    setVal('cfg-server-port', config.server?.port ?? 8765);
+    setVal('cfg-require-auth', String(config.server?.require_auth ?? false));
+    setVal('cfg-allow-registration', String(config.server?.allow_registration ?? true));
+    setVal('cfg-fallback-model', config.ai?.model ?? config.ollama?.model ?? '');
+    setVal('cfg-fallback-temp', config.ai?.temperature ?? config.ollama?.temperature ?? 0.7);
+    setVal('cfg-db-path', config.database?.path ?? 'ash_server.db');
+    setVal('cfg-uploads-dir', config.uploads?.directory ?? 'uploads');
+    setVal('cfg-uploads-maxsize', config.uploads?.max_size_mb ?? 10);
+    setVal('cfg-auth-secret', '');
+    setVal('cfg-auth-expiry', config.auth?.token_expiry_hours ?? 24);
+    setVal('cfg-personality-path', config.personality?.path ?? config.ai?.personality_path ?? 'personality');
+  } catch (err) {
+    console.error('loadConfigToMenu:', err);
+    toast('Error parsing config: ' + err.message, 'error');
+  }
 }
 
 function syncHostInput() {
