@@ -28,10 +28,16 @@ public class HardwareProfiler
     private Process? _llamaProcess;
     private Process? _sdProcess;
 
+    private double _llamaCpu;
+    private double _llamaRamMb;
+    private double _sdCpu;
+    private double _sdRamMb;
+
     public HardwareProfiler(Database db, IConfiguration config)
     {
         _db = db;
         _config = config;
+        Task.Run(MonitorSidecarsPerformanceLoop);
     }
 
     public HardwareProfile ProfileSystem()
@@ -170,8 +176,8 @@ public class HardwareProfiler
                     var argsList = new System.Collections.Generic.List<string>
                     {
                         "--model", $"\"{modelPath}\"",
-                        "--threads", profile.OptimalThreads.ToString(),
-                        "--ctx-size", "16384",
+                        "--threads", _config.GetValue("sidecars:llama:threads", profile.OptimalThreads).ToString(),
+                        "--ctx-size", _config.GetValue("sidecars:llama:context_size", 16384).ToString(),
                         "--host", "127.0.0.1",
                         "--port", LocalPort.ToString(),
                         "--batch-size", "512",
@@ -334,7 +340,10 @@ public class HardwareProfiler
 
                 if (File.Exists(modelPath))
                 {
-                    var args = $"--model \"{modelPath}\" --taesd \"{taesdPath}\" --embd-dir \"{embdDir}\" --listen-ip 127.0.0.1 --listen-port {sdPort} --steps 8 --sampling-method lcm --cfg-scale 2.0";
+                    var steps = _config.GetValue("sidecars:stable_diffusion:steps", 8);
+                    var sampling = _config.GetValue("sidecars:stable_diffusion:sampling_method", "lcm");
+                    var cfgScale = _config.GetValue("sidecars:stable_diffusion:cfg_scale", 2.0);
+                    var args = $"--model \"{modelPath}\" --taesd \"{taesdPath}\" --embd-dir \"{embdDir}\" --listen-ip 127.0.0.1 --listen-port {sdPort} --steps {steps} --sampling-method {sampling} --cfg-scale {cfgScale.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}";
                     
                     var psi = new ProcessStartInfo
                     {
@@ -411,12 +420,14 @@ public class HardwareProfiler
     public int? SdPid => (_sdProcess != null && !_sdProcess.HasExited) ? _sdProcess.Id : null;
 
     public string LlamaModel => Path.GetFileName(FindModelGguf() ?? "None");
-    public int LlamaContextSize => 16384;
+    public int LlamaContextSize => _config.GetValue("sidecars:llama:context_size", 16384);
     public string LlamaModelPath => FindModelGguf() ?? "";
-    public int LlamaThreads => ProfileSystem().OptimalThreads;
+    public int LlamaThreads => _config.GetValue("sidecars:llama:threads", ProfileSystem().OptimalThreads);
 
     public string SdModel => "DreamShaper8_LCM_q8_0.gguf";
-    public int SdSteps => 8;
+    public int SdSteps => _config.GetValue("sidecars:stable_diffusion:steps", 8);
+    public string SdSampling => _config.GetValue("sidecars:stable_diffusion:sampling_method", "lcm");
+    public double SdCfgScale => _config.GetValue("sidecars:stable_diffusion:cfg_scale", 2.0);
 
     // Win32 memory struct and P/Invoke
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -436,6 +447,126 @@ public class HardwareProfiler
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+
+    public double LlamaCpu => _llamaCpu;
+    public double LlamaRamMb => _llamaRamMb;
+    public double SdCpu => _sdCpu;
+    public double SdRamMb => _sdRamMb;
+
+    public async Task StopLlamaAsync()
+    {
+        try
+        {
+            if (_llamaProcess != null && !_llamaProcess.HasExited)
+            {
+                _llamaProcess.Kill(true);
+                await _llamaProcess.WaitForExitAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[profiler] Error killing Llama process: {ex.Message}");
+        }
+        _llamaProcess = null;
+        _llamaCpu = 0;
+        _llamaRamMb = 0;
+    }
+
+    public async Task StopSdAsync()
+    {
+        try
+        {
+            if (_sdProcess != null && !_sdProcess.HasExited)
+            {
+                _sdProcess.Kill(true);
+                await _sdProcess.WaitForExitAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[profiler] Error killing SD process: {ex.Message}");
+        }
+        _sdProcess = null;
+        _sdCpu = 0;
+        _sdRamMb = 0;
+    }
+
+    private async Task MonitorSidecarsPerformanceLoop()
+    {
+        var lastLlamaTime = TimeSpan.Zero;
+        var lastLlamaStamp = DateTime.UtcNow;
+        var lastSdTime = TimeSpan.Zero;
+        var lastSdStamp = DateTime.UtcNow;
+
+        while (true)
+        {
+            try
+            {
+                await Task.Delay(3000);
+
+                // Monitor Llama
+                if (_llamaProcess != null && !_llamaProcess.HasExited)
+                {
+                    try
+                     {
+                        _llamaProcess.Refresh();
+                        _llamaRamMb = Math.Round((double)_llamaProcess.WorkingSet64 / (1024 * 1024), 1);
+                        
+                        var now = DateTime.UtcNow;
+                        var currentCpuTime = _llamaProcess.TotalProcessorTime;
+                        var timeDiff = (now - lastLlamaStamp).TotalMilliseconds;
+                        var cpuDiff = (currentCpuTime - lastLlamaTime).TotalMilliseconds;
+                        
+                        if (timeDiff > 0)
+                        {
+                            _llamaCpu = Math.Round((cpuDiff / (Environment.ProcessorCount * timeDiff)) * 100, 1);
+                            _llamaCpu = Math.Min(100.0, Math.Max(0.0, _llamaCpu));
+                        }
+                        
+                        lastLlamaTime = currentCpuTime;
+                        lastLlamaStamp = now;
+                    }
+                    catch { }
+                }
+                else
+                {
+                    _llamaCpu = 0;
+                    _llamaRamMb = 0;
+                }
+
+                // Monitor SD
+                if (_sdProcess != null && !_sdProcess.HasExited)
+                {
+                    try
+                    {
+                        _sdProcess.Refresh();
+                        _sdRamMb = Math.Round((double)_sdProcess.WorkingSet64 / (1024 * 1024), 1);
+                        
+                        var now = DateTime.UtcNow;
+                        var currentCpuTime = _sdProcess.TotalProcessorTime;
+                        var timeDiff = (now - lastSdStamp).TotalMilliseconds;
+                        var cpuDiff = (currentCpuTime - lastSdTime).TotalMilliseconds;
+                        
+                        if (timeDiff > 0)
+                        {
+                            _sdCpu = Math.Round((cpuDiff / (Environment.ProcessorCount * timeDiff)) * 100, 1);
+                            _sdCpu = Math.Min(100.0, Math.Max(0.0, _sdCpu));
+                        }
+                        
+                        lastSdTime = currentCpuTime;
+                        lastSdStamp = now;
+                    }
+                    catch { }
+                }
+                else
+                {
+                    _sdCpu = 0;
+                    _sdRamMb = 0;
+                }
+            }
+            catch { }
+        }
+    }
 }
 
 public static class LogStore

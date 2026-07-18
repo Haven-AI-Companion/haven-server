@@ -1470,7 +1470,9 @@ public class AdminController : ControllerBase
                     model = _profiler.LlamaModel,
                     context_size = _profiler.LlamaContextSize,
                     threads = _profiler.LlamaThreads,
-                    health = llamaHealth
+                    health = llamaHealth,
+                    cpu = _profiler.LlamaCpu,
+                    ram_mb = _profiler.LlamaRamMb
                 },
                 stable_diffusion = new
                 {
@@ -1479,7 +1481,11 @@ public class AdminController : ControllerBase
                     port = sdPort,
                     model = _profiler.SdModel,
                     steps = _profiler.SdSteps,
-                    health = sdHealth
+                    sampling_method = _profiler.SdSampling,
+                    cfg_scale = _profiler.SdCfgScale,
+                    health = sdHealth,
+                    cpu = _profiler.SdCpu,
+                    ram_mb = _profiler.SdRamMb
                 }
             },
             diagnostics = new
@@ -2360,6 +2366,130 @@ public class AdminController : ControllerBase
 
         return Ok(new { ok = true, message = "Update started. The server will restart shortly." });
     }
+
+    [HttpPost("sidecars/llama/stop")]
+    public async Task<IActionResult> StopLlama()
+    {
+        if (!IsAdmin) return Forbid();
+        await _profiler.StopLlamaAsync();
+        return Ok(new { ok = true, message = "llama-server sidecar stopped." });
+    }
+
+    [HttpPost("sidecars/llama/start")]
+    public async Task<IActionResult> StartLlama()
+    {
+        if (!IsAdmin) return Forbid();
+        if (_profiler.IsLlamaRunning && _profiler.LlamaPid != null) return BadRequest(new { error = "llama-server is already running." });
+        await _profiler.InitializeLocalBackendAsync();
+        return Ok(new { ok = true, message = "llama-server sidecar started." });
+    }
+
+    [HttpPost("sidecars/llama/restart")]
+    public async Task<IActionResult> RestartLlama()
+    {
+        if (!IsAdmin) return Forbid();
+        await _profiler.StopLlamaAsync();
+        await _profiler.InitializeLocalBackendAsync();
+        return Ok(new { ok = true, message = "llama-server sidecar restarted." });
+    }
+
+    [HttpPost("sidecars/sd/stop")]
+    public async Task<IActionResult> StopSd()
+    {
+        if (!IsAdmin) return Forbid();
+        await _profiler.StopSdAsync();
+        return Ok(new { ok = true, message = "sd-server sidecar stopped." });
+    }
+
+    [HttpPost("sidecars/sd/start")]
+    public async Task<IActionResult> StartSd()
+    {
+        if (!IsAdmin) return Forbid();
+        if (_profiler.IsSdRunning && _profiler.SdPid != null) return BadRequest(new { error = "sd-server is already running." });
+        await _profiler.InitializeSdBackendAsync();
+        return Ok(new { ok = true, message = "sd-server sidecar started." });
+    }
+
+    [HttpPost("sidecars/sd/restart")]
+    public async Task<IActionResult> RestartSd()
+    {
+        if (!IsAdmin) return Forbid();
+        await _profiler.StopSdAsync();
+        await _profiler.InitializeSdBackendAsync();
+        return Ok(new { ok = true, message = "sd-server sidecar restarted." });
+    }
+
+    [HttpPost("sidecars/config")]
+    public async Task<IActionResult> SaveSidecarSettings([FromBody] System.Text.Json.Nodes.JsonObject body)
+    {
+        if (!IsAdmin) return Forbid();
+
+        var path = ConfigPath;
+        System.Text.Json.Nodes.JsonObject root;
+        if (System.IO.File.Exists(path))
+        {
+            try { root = System.Text.Json.Nodes.JsonNode.Parse(await System.IO.File.ReadAllTextAsync(path))!.AsObject(); }
+            catch { root = new System.Text.Json.Nodes.JsonObject(); }
+        }
+        else
+        {
+            root = new System.Text.Json.Nodes.JsonObject();
+        }
+
+        // Create or get "sidecars" object
+        System.Text.Json.Nodes.JsonObject sidecarsObj;
+        if (root.ContainsKey("sidecars") && root["sidecars"] is System.Text.Json.Nodes.JsonObject obj)
+        {
+            sidecarsObj = obj;
+        }
+        else
+        {
+            sidecarsObj = new System.Text.Json.Nodes.JsonObject();
+            root["sidecars"] = sidecarsObj;
+        }
+
+        // Save Llama configuration
+        if (body.ContainsKey("llama") && body["llama"] is System.Text.Json.Nodes.JsonObject llamaBody)
+        {
+            System.Text.Json.Nodes.JsonObject llamaObj;
+            if (sidecarsObj.ContainsKey("llama") && sidecarsObj["llama"] is System.Text.Json.Nodes.JsonObject lObj)
+            {
+                llamaObj = lObj;
+            }
+            else
+            {
+                llamaObj = new System.Text.Json.Nodes.JsonObject();
+                sidecarsObj["llama"] = llamaObj;
+            }
+
+            if (llamaBody.ContainsKey("threads")) llamaObj["threads"] = llamaBody["threads"]?.GetValue<int>();
+            if (llamaBody.ContainsKey("context_size")) llamaObj["context_size"] = llamaBody["context_size"]?.GetValue<int>();
+        }
+
+        // Save SD configuration
+        if (body.ContainsKey("stable_diffusion") && body["stable_diffusion"] is System.Text.Json.Nodes.JsonObject sdBody)
+        {
+            System.Text.Json.Nodes.JsonObject sdObj;
+            if (sidecarsObj.ContainsKey("stable_diffusion") && sidecarsObj["stable_diffusion"] is System.Text.Json.Nodes.JsonObject sObj)
+            {
+                sdObj = sObj;
+            }
+            else
+            {
+                sdObj = new System.Text.Json.Nodes.JsonObject();
+                sidecarsObj["stable_diffusion"] = sdObj;
+            }
+
+            if (sdBody.ContainsKey("steps")) sdObj["steps"] = sdBody["steps"]?.GetValue<int>();
+            if (sdBody.ContainsKey("sampling_method")) sdObj["sampling_method"] = sdBody["sampling_method"]?.GetValue<string>();
+            if (sdBody.ContainsKey("cfg_scale")) sdObj["cfg_scale"] = sdBody["cfg_scale"]?.GetValue<double>();
+        }
+
+        var opts = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+        await System.IO.File.WriteAllTextAsync(path, root.ToJsonString(opts));
+
+        return Ok(new { ok = true, note = "Sidecar configurations saved successfully." });
+    }
 }
 
 // ── MCP Controller ─────────────────────────────────────────────────────────
@@ -3019,7 +3149,9 @@ public class HealthController : ControllerBase
                     model = _profiler.LlamaModel,
                     context_size = _profiler.LlamaContextSize,
                     threads = _profiler.LlamaThreads,
-                    health = llamaHealth
+                    health = llamaHealth,
+                    cpu = _profiler.LlamaCpu,
+                    ram_mb = _profiler.LlamaRamMb
                 },
                 stable_diffusion = new
                 {
@@ -3028,7 +3160,11 @@ public class HealthController : ControllerBase
                     port = sdPort,
                     model = _profiler.SdModel,
                     steps = _profiler.SdSteps,
-                    health = sdHealth
+                    sampling_method = _profiler.SdSampling,
+                    cfg_scale = _profiler.SdCfgScale,
+                    health = sdHealth,
+                    cpu = _profiler.SdCpu,
+                    ram_mb = _profiler.SdRamMb
                 }
             },
             diagnostics = new
