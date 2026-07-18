@@ -654,6 +654,9 @@ public class ModelsController : ControllerBase
 
         [System.Text.Json.Serialization.JsonPropertyName("voice")]
         public string Voice { get; set; } = "en_US-amy-medium";
+
+        [System.Text.Json.Serialization.JsonPropertyName("companion")]
+        public string? Companion { get; set; }
     }
 
     [HttpPost("tts")]
@@ -667,11 +670,25 @@ public class ModelsController : ControllerBase
         {
             var filename = $"tts_{Guid.NewGuid().ToString("N")[..12]}.wav";
             var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-            var uploadsDir = Path.Combine(webRoot, "uploads");
-            if (!Directory.Exists(uploadsDir))
-                Directory.CreateDirectory(uploadsDir);
+            
+            string companionSubdir = "_global";
+            if (!string.IsNullOrWhiteSpace(req.Companion))
+            {
+                companionSubdir = string.Concat(req.Companion.Split(Path.GetInvalidFileNameChars())).Trim();
+                if (string.IsNullOrWhiteSpace(companionSubdir))
+                {
+                    companionSubdir = "_global";
+                }
+            }
+
+            var userSubdir = $"user_{UserId}";
+            var relativeSubpath = Path.Combine("uploads", companionSubdir, userSubdir);
+            var targetDir = Path.Combine(webRoot, relativeSubpath);
+
+            if (!Directory.Exists(targetDir))
+                Directory.CreateDirectory(targetDir);
                 
-            var outputPath = Path.Combine(uploadsDir, filename);
+            var outputPath = Path.Combine(targetDir, filename);
 
             var voiceName = req.Voice ?? "en_US-amy-medium";
             bool isKokoro = voiceName.StartsWith("kokoro_") || 
@@ -694,78 +711,64 @@ public class ModelsController : ControllerBase
                 if (!System.IO.File.Exists(pythonExe))
                     return StatusCode(500, new { error = "python.exe was not found on the server." });
                 if (!System.IO.File.Exists(kokoroScript))
-                    return StatusCode(500, new { error = "kokoro_tts.py script was not found on the server." });
+                    return StatusCode(500, new { error = "kokoro_tts.py was not found on the server." });
 
-                var psi = new System.Diagnostics.ProcessStartInfo
+                var processStartInfo = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = pythonExe,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
+                    Arguments = $"\"{kokoroScript}\" \"{voiceName}\" \"{outputPath}\"",
+                    RedirectStandardInput = true,
                     RedirectStandardError = true,
-                    RedirectStandardOutput = true
+                    UseShellExecute = false,
+                    CreateNoWindow = true
                 };
-                psi.ArgumentList.Add(kokoroScript);
-                psi.ArgumentList.Add("--text");
-                psi.ArgumentList.Add(req.Text);
-                psi.ArgumentList.Add("--voice");
-                psi.ArgumentList.Add(voiceName);
-                psi.ArgumentList.Add("--output");
-                psi.ArgumentList.Add(outputPath);
 
-                using (var process = System.Diagnostics.Process.Start(psi))
+                using (var process = System.Diagnostics.Process.Start(processStartInfo))
                 {
                     if (process == null)
-                        throw new Exception("Failed to start Kokoro TTS process.");
+                        throw new Exception("Failed to start TTS python script.");
+
+                    using (var writer = process.StandardInput)
+                    {
+                        await writer.WriteLineAsync(req.Text);
+                    }
 
                     var stderr = await process.StandardError.ReadToEndAsync();
                     await process.WaitForExitAsync();
 
                     if (process.ExitCode != 0)
                     {
-                        throw new Exception($"Kokoro TTS process exited with code {process.ExitCode}. Stderr: {stderr}");
+                        throw new Exception($"TTS generation process exited with code {process.ExitCode}. Stderr: {stderr}");
                     }
                 }
             }
             else
             {
-                var modelsDir = @"C:\Users\admin\piper\piper\models";
-                try
-                {
-                    await DownloadVoiceIfNeeded(voiceName, modelsDir);
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[tts] Auto-download failed for voice '{voiceName}': {ex.Message}");
-                }
+                var baseDir = Path.Combine(AppContext.BaseDirectory, "Personality", "voices");
+                if (!await DownloadVoiceIfNeeded(voiceName, baseDir))
+                    return StatusCode(500, new { error = $"Failed to download or locate voice model for '{voiceName}'" });
 
-                var modelPath = Path.Combine(modelsDir, $"{voiceName}.onnx");
-                var configPath = Path.Combine(modelsDir, $"{voiceName}.onnx.json");
-
-                if (!System.IO.File.Exists(modelPath))
-                {
-                    modelPath = Path.Combine(modelsDir, "en_US-amy-medium.onnx");
-                    configPath = Path.Combine(modelsDir, "en_US-amy-medium.onnx.json");
-                }
-
+                var modelPath = Path.Combine(baseDir, $"{voiceName}.onnx");
+                var configPath = Path.Combine(baseDir, $"{voiceName}.onnx.json");
                 var piperExe = @"C:\Users\admin\piper\piper\piper.exe";
+
                 if (!System.IO.File.Exists(piperExe))
                     return StatusCode(500, new { error = "piper.exe was not found on the server." });
 
-                var psi = new System.Diagnostics.ProcessStartInfo
+                var processStartInfo = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = piperExe,
-                    Arguments = $"-m \"{modelPath}\" -c \"{configPath}\" -f \"{outputPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
+                    Arguments = $"--model \"{modelPath}\" --config \"{configPath}\" --output_file \"{outputPath}\"",
                     RedirectStandardInput = true,
                     RedirectStandardError = true,
-                    StandardInputEncoding = System.Text.Encoding.UTF8
+                    UseShellExecute = false,
+                    CreateNoWindow = true
                 };
 
-                using (var process = System.Diagnostics.Process.Start(psi))
+                using (var process = System.Diagnostics.Process.Start(processStartInfo))
                 {
                     if (process == null)
-                        throw new Exception("Failed to start TTS generator process.");
+                        throw new Exception("Failed to start TTS piper process.");
 
                     using (var writer = process.StandardInput)
                     {
@@ -785,7 +788,8 @@ public class ModelsController : ControllerBase
             if (!System.IO.File.Exists(outputPath))
                 throw new Exception("TTS output file was not created.");
 
-            return Ok(new { url = $"/uploads/{filename}" });
+            var webUrl = $"/uploads/{companionSubdir}/{userSubdir}/{filename}".Replace('\\', '/');
+            return Ok(new { url = webUrl });
         }
         catch (Exception ex)
         {
@@ -853,7 +857,7 @@ public class ModelsController : ControllerBase
     [HttpPost("upload")]
     [Authorize]
     [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB
-    public async Task<IActionResult> Upload(IFormFile file)
+    public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string? companion)
     {
         // Permission gate — admins always bypass
         if (!IsAdmin && !await _db.UserHasPermission(UserId, AshServer.Auth.Permissions.FileUpload))
@@ -862,18 +866,32 @@ public class ModelsController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(new { error = "No file provided" });
 
-        var uploadsDir = Path.Combine(_env.WebRootPath, "uploads");
-        Directory.CreateDirectory(uploadsDir);
+        string companionSubdir = "_global";
+        if (!string.IsNullOrWhiteSpace(companion))
+        {
+            companionSubdir = string.Concat(companion.Split(Path.GetInvalidFileNameChars())).Trim();
+            if (string.IsNullOrWhiteSpace(companionSubdir))
+            {
+                companionSubdir = "_global";
+            }
+        }
+
+        var userSubdir = $"user_{UserId}";
+        var relativeSubpath = Path.Combine("uploads", companionSubdir, userSubdir);
+        var targetDir = Path.Combine(_env.WebRootPath, relativeSubpath);
+        
+        if (!Directory.Exists(targetDir))
+            Directory.CreateDirectory(targetDir);
 
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         var safeName = $"{Guid.NewGuid()}{ext}";
-        var fullPath = Path.Combine(uploadsDir, safeName);
+        var fullPath = Path.Combine(targetDir, safeName);
 
         using (var stream = System.IO.File.Create(fullPath))
             await file.CopyToAsync(stream);
 
         var isImage = ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp";
-        var url = $"/uploads/{safeName}";
+        var url = $"/uploads/{companionSubdir}/{userSubdir}/{safeName}".Replace('\\', '/');
 
         string? base64 = null;
         string? textContent = null;
@@ -931,11 +949,12 @@ public class AdminController : ControllerBase
     private readonly IWebHostEnvironment _env;
     private readonly UpdateManager _updateManager;
     private readonly AshServer.AI.GridManager _grid;
+    private readonly HardwareProfiler _profiler;
 
     public AdminController(Database db, AshServer.AI.BackendManager backends, IConfiguration config,
         AshServer.Personality.PersonalityLoader personality, AshServer.Plugins.PluginManager plugins,
         ILogger<AdminController> log, IWebHostEnvironment env, UpdateManager updateManager,
-        AshServer.AI.GridManager grid)
+        AshServer.AI.GridManager grid, HardwareProfiler profiler)
     {
         _db = db;
         _backends = backends;
@@ -946,11 +965,250 @@ public class AdminController : ControllerBase
         _env = env;
         _updateManager = updateManager;
         _grid = grid;
+        _profiler = profiler;
     }
 
     private string ConfigPath => Path.Combine(_env.ContentRootPath, "config.json");
 
     private bool IsAdmin => User.FindFirstValue("is_admin") == "true";
+
+    [HttpPost("organize-uploads")]
+    public async Task<IActionResult> OrganizeUploads()
+    {
+        // Permission gate — admins only
+        if (!IsAdmin) return Forbid();
+
+        var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        var uploadsDir = Path.Combine(webRoot, "uploads");
+
+        if (!Directory.Exists(uploadsDir))
+            return Ok(new { message = "Uploads directory does not exist. Nothing to organize." });
+
+        // 1. Build a map of ConversationId -> CompanionName from all local companion JSON files
+        var conversationToCompanionMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var companionToAvatarMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+        var companionsBaseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+        var companionsLocalDir = Path.Combine(companionsBaseDir, "local");
+
+        void ScanCompanionDir(string dir)
+        {
+            if (!Directory.Exists(dir)) return;
+            foreach (var file in Directory.GetFiles(dir, "*.json"))
+            {
+                try
+                {
+                    var content = System.IO.File.ReadAllText(file);
+                    using var doc = JsonDocument.Parse(content);
+                    var root = doc.RootElement;
+                    
+                    string? name = null;
+                    if (root.TryGetProperty("name", out var nameProp))
+                        name = nameProp.GetString();
+
+                    if (string.IsNullOrEmpty(name)) continue;
+
+                    string? conversationId = null;
+                    if (root.TryGetProperty("conversationId", out var convProp))
+                        conversationId = convProp.GetString();
+                    else if (root.TryGetProperty("conversation_id", out var convProp2))
+                        conversationId = convProp2.GetString();
+
+                    if (!string.IsNullOrEmpty(conversationId))
+                    {
+                        conversationToCompanionMap[conversationId] = name;
+                    }
+
+                    string? avatarPath = null;
+                    if (root.TryGetProperty("avatarPath", out var avatarProp))
+                        avatarPath = avatarProp.GetString();
+                    else if (root.TryGetProperty("avatar_path", out var avatarProp2))
+                        avatarPath = avatarProp2.GetString();
+
+                    if (!string.IsNullOrEmpty(avatarPath))
+                    {
+                        companionToAvatarMap[name] = avatarPath;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[organize] Failed to read companion file {file}: {ex.Message}");
+                }
+            }
+        }
+
+        ScanCompanionDir(companionsBaseDir);
+        ScanCompanionDir(companionsLocalDir);
+
+        // 2. Iterate over all files directly inside the uploads directory
+        var filesMoved = 0;
+        var referencesUpdated = 0;
+
+        foreach (var filePath in Directory.GetFiles(uploadsDir))
+        {
+            var fileName = Path.GetFileName(filePath);
+            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+
+            // Ignore temporary or system files
+            if (fileName.StartsWith(".") || fileName.Equals("web.config", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string? conversationId = null;
+            int? userId = null;
+            string? companionName = null;
+
+            // Search database for messages referencing this file
+            var searchPattern = $"/uploads/{fileName}";
+            using (var conn = _db.Open())
+            {
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT conversation_id FROM messages WHERE content LIKE $pattern LIMIT 1";
+                    cmd.Parameters.AddWithValue("$pattern", $"%{searchPattern}%");
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            conversationId = reader.GetString(0);
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(conversationId))
+                {
+                    // Look up owner and companion_id in database
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "SELECT user_id, companion_id FROM conversations WHERE id = $id";
+                        cmd.Parameters.AddWithValue("$id", conversationId);
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                userId = reader.GetInt32(0);
+                                companionName = reader.IsDBNull(1) ? null : reader.GetString(1);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Resolve companion name using JSON overrides if database companion_id was null
+            if (string.IsNullOrEmpty(companionName) && !string.IsNullOrEmpty(conversationId))
+            {
+                conversationToCompanionMap.TryGetValue(conversationId, out companionName);
+            }
+
+            // If we still don't have companion name, check if any companion's avatar matches this file
+            if (string.IsNullOrEmpty(companionName))
+            {
+                foreach (var pair in companionToAvatarMap)
+                {
+                    if (pair.Value.Contains(fileName))
+                    {
+                        companionName = pair.Key;
+                        break;
+                    }
+                }
+            }
+
+            // Fallback values if not associated with any conversation or companion
+            var resolvedCompanion = string.IsNullOrEmpty(companionName) ? "_global" : string.Concat(companionName.Split(Path.GetInvalidFileNameChars())).Trim();
+            if (string.IsNullOrEmpty(resolvedCompanion)) resolvedCompanion = "_global";
+
+            var resolvedUserId = userId ?? int.Parse(User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)!);
+
+            // Target subfolder structure: uploads/<companion>/user_<userId>/
+            var userSubdir = $"user_{resolvedUserId}";
+            var relativeSubpath = Path.Combine("uploads", resolvedCompanion, userSubdir);
+            var targetDir = Path.Combine(webRoot, relativeSubpath);
+
+            if (!Directory.Exists(targetDir))
+                Directory.CreateDirectory(targetDir);
+
+            var newFilePath = Path.Combine(targetDir, fileName);
+            var newWebUrl = $"/uploads/{resolvedCompanion}/{userSubdir}/{fileName}".Replace('\\', '/');
+
+            try
+            {
+                // Move file on disk
+                if (System.IO.File.Exists(filePath))
+                {
+                    if (System.IO.File.Exists(newFilePath))
+                    {
+                        System.IO.File.Delete(newFilePath);
+                    }
+                    System.IO.File.Move(filePath, newFilePath);
+                    filesMoved++;
+                }
+
+                // Update database references in messages table
+                using (var conn = _db.Open())
+                {
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "UPDATE messages SET content = replace(content, $old, $new) WHERE content LIKE $old";
+                        cmd.Parameters.AddWithValue("$old", searchPattern);
+                        cmd.Parameters.AddWithValue("$new", newWebUrl);
+                        var updated = cmd.ExecuteNonQuery();
+                        referencesUpdated += updated;
+                    }
+
+                    // Update conversations.companion_id if it was null but we resolved the name
+                    if (!string.IsNullOrEmpty(conversationId) && !string.IsNullOrEmpty(companionName))
+                    {
+                        using (var cmd = conn.CreateCommand())
+                        {
+                            cmd.CommandText = "UPDATE conversations SET companion_id = $c WHERE id = $id AND (companion_id IS NULL OR companion_id = '')";
+                            cmd.Parameters.AddWithValue("$id", conversationId);
+                            cmd.Parameters.AddWithValue("$c", companionName);
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+
+                // Update companion JSON config files if they use this avatar path
+                void UpdateCompanionJsonAvatar(string dir)
+                {
+                    if (!Directory.Exists(dir)) return;
+                    foreach (var file in Directory.GetFiles(dir, "*.json"))
+                    {
+                        try
+                        {
+                            var fileContent = System.IO.File.ReadAllText(file);
+                            if (fileContent.Contains(fileName))
+                            {
+                                var modified = fileContent
+                                    .Replace($"/uploads/{fileName}", newWebUrl)
+                                    .Replace(fileName, newWebUrl); // handle simple relative filenames
+                                System.IO.File.WriteAllText(file, modified);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"[organize] Failed to update avatar path in companion file {file}: {ex.Message}");
+                        }
+                    }
+                }
+
+                UpdateCompanionJsonAvatar(companionsBaseDir);
+                UpdateCompanionJsonAvatar(companionsLocalDir);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[organize] Failed to move file {fileName}: {ex.Message}");
+            }
+        }
+
+        return Ok(new
+        {
+            success = true,
+            files_moved = filesMoved,
+            database_references_updated = referencesUpdated,
+            message = $"Successfully organized {filesMoved} legacy upload files into companion and user subfolders."
+        });
+    }
 
     [HttpGet("tailscale")]
     public IActionResult GetTailscaleStatus()
@@ -1107,6 +1365,35 @@ public class AdminController : ControllerBase
         return Ok(new { ok = true, note = "Configured in Worker Mode. Restarting background service to connect to Master..." });
     }
 
+    private static async Task<bool> CheckPortHealthAsync(int port)
+    {
+        try
+        {
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromMilliseconds(300);
+            var response = await client.GetAsync($"http://127.0.0.1:{port}/");
+            return true;
+        }
+        catch
+        {
+            try
+            {
+                using var tcp = new System.Net.Sockets.TcpClient();
+                var connectTask = tcp.ConnectAsync("127.0.0.1", port);
+                if (await Task.WhenAny(connectTask, Task.Delay(300)) == connectTask)
+                {
+                    await connectTask;
+                    return true;
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
     [HttpGet("stats")]
     public async Task<IActionResult> Stats()
     {
@@ -1130,6 +1417,23 @@ public class AdminController : ControllerBase
         var threadCount = proc.Threads.Count;
         var gcMemMb = Math.Round((double)GC.GetTotalMemory(false) / (1024 * 1024), 2);
 
+        // Query sidecar health
+        var llamaPort = 11436;
+        var sdPort = 8080;
+        var llamaHealth = "stopped";
+        var sdHealth = "stopped";
+
+        if (_profiler.IsLlamaRunning)
+        {
+            llamaHealth = await CheckPortHealthAsync(llamaPort) ? "ok" : "unreachable";
+        }
+        if (_profiler.IsSdRunning)
+        {
+            sdHealth = await CheckPortHealthAsync(sdPort) ? "ok" : "unreachable";
+        }
+
+        var systemProfile = _profiler.ProfileSystem();
+
         return Ok(new
         {
             total_users          = totalUsers,
@@ -1147,6 +1451,40 @@ public class AdminController : ControllerBase
                 ram_usage_mb     = ramUsageMb,
                 threads_count    = threadCount,
                 gc_memory_mb     = gcMemMb
+            },
+            system_profile = new
+            {
+                cpu_cores = systemProfile.CpuCores,
+                total_ram_gb = Math.Round(systemProfile.TotalRamGb, 1),
+                cuda_detected = systemProfile.HasCuda,
+                optimal_threads = systemProfile.OptimalThreads,
+                gpu_layers = systemProfile.GpuLayers
+            },
+            sidecars = new
+            {
+                llama = new
+                {
+                    running = _profiler.IsLlamaRunning,
+                    pid = _profiler.LlamaPid,
+                    port = llamaPort,
+                    model = _profiler.LlamaModel,
+                    context_size = _profiler.LlamaContextSize,
+                    threads = _profiler.LlamaThreads,
+                    health = llamaHealth
+                },
+                stable_diffusion = new
+                {
+                    running = _profiler.IsSdRunning,
+                    pid = _profiler.SdPid,
+                    port = sdPort,
+                    model = _profiler.SdModel,
+                    steps = _profiler.SdSteps,
+                    health = sdHealth
+                }
+            },
+            diagnostics = new
+            {
+                logs = LogStore.GetLogs()
             }
         });
     }
@@ -2570,10 +2908,40 @@ public class HealthController : ControllerBase
     private readonly Database _db;
     private readonly BackendManager _backends;
     private readonly IConfiguration _config;
+    private readonly HardwareProfiler _profiler;
 
-    public HealthController(Database db, BackendManager backends, IConfiguration config)
+    public HealthController(Database db, BackendManager backends, IConfiguration config, HardwareProfiler profiler)
     {
-        _db = db; _backends = backends; _config = config;
+        _db = db; _backends = backends; _config = config; _profiler = profiler;
+    }
+
+    private static async Task<bool> CheckPortHealthAsync(int port)
+    {
+        try
+        {
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromMilliseconds(300);
+            var response = await client.GetAsync($"http://127.0.0.1:{port}/");
+            return true;
+        }
+        catch
+        {
+            try
+            {
+                using var tcp = new System.Net.Sockets.TcpClient();
+                var connectTask = tcp.ConnectAsync("127.0.0.1", port);
+                if (await Task.WhenAny(connectTask, Task.Delay(300)) == connectTask)
+                {
+                    await connectTask;
+                    return true;
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 
     [HttpGet]
@@ -2601,6 +2969,23 @@ public class HealthController : ControllerBase
 
         var status = dbOk ? "ok" : "degraded";
 
+        // Query sidecar health
+        var llamaPort = 11436;
+        var sdPort = 8080;
+        var llamaHealth = "stopped";
+        var sdHealth = "stopped";
+
+        if (_profiler.IsLlamaRunning)
+        {
+            llamaHealth = await CheckPortHealthAsync(llamaPort) ? "ok" : "unreachable";
+        }
+        if (_profiler.IsSdRunning)
+        {
+            sdHealth = await CheckPortHealthAsync(sdPort) ? "ok" : "unreachable";
+        }
+
+        var systemProfile = _profiler.ProfileSystem();
+
         return Ok(new
         {
             status,
@@ -2615,6 +3000,40 @@ public class HealthController : ControllerBase
             {
                 ram_mb       = (int)(Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024),
                 thread_count = Process.GetCurrentProcess().Threads.Count
+            },
+            system_profile = new
+            {
+                cpu_cores = systemProfile.CpuCores,
+                total_ram_gb = Math.Round(systemProfile.TotalRamGb, 1),
+                cuda_detected = systemProfile.HasCuda,
+                optimal_threads = systemProfile.OptimalThreads,
+                gpu_layers = systemProfile.GpuLayers
+            },
+            sidecars = new
+            {
+                llama = new
+                {
+                    running = _profiler.IsLlamaRunning,
+                    pid = _profiler.LlamaPid,
+                    port = llamaPort,
+                    model = _profiler.LlamaModel,
+                    context_size = _profiler.LlamaContextSize,
+                    threads = _profiler.LlamaThreads,
+                    health = llamaHealth
+                },
+                stable_diffusion = new
+                {
+                    running = _profiler.IsSdRunning,
+                    pid = _profiler.SdPid,
+                    port = sdPort,
+                    model = _profiler.SdModel,
+                    steps = _profiler.SdSteps,
+                    health = sdHealth
+                }
+            },
+            diagnostics = new
+            {
+                logs = LogStore.GetLogs()
             }
         });
     }
@@ -2648,11 +3067,15 @@ public class ChatRequest
 public class CompanionsController : ControllerBase
 {
     private readonly IConfiguration _config;
+    private readonly AshServer.Data.Database _db;
 
-    public CompanionsController(IConfiguration config)
+    public CompanionsController(IConfiguration config, AshServer.Data.Database db)
     {
         _config = config;
+        _db = db;
     }
+
+    private int UserId => int.Parse(User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)!);
 
     [HttpGet]
     public IActionResult ListCompanions()
@@ -2721,7 +3144,7 @@ public class CompanionsController : ControllerBase
     }
 
     [HttpPost]
-    public IActionResult SaveCompanion([FromBody] CompanionConfig req)
+    public async Task<IActionResult> SaveCompanion([FromBody] CompanionConfig req)
     {
         if (req == null || string.IsNullOrWhiteSpace(req.Name))
             return BadRequest(new { error = "Companion name is required." });
@@ -2749,6 +3172,12 @@ public class CompanionsController : ControllerBase
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             });
             System.IO.File.WriteAllText(filePath, json);
+
+            if (!string.IsNullOrEmpty(req.ConversationId))
+            {
+                await _db.SetConversationCompanion(req.ConversationId, req.Name);
+            }
+
             return Ok(new { ok = true, message = $"Companion '{req.Name}' saved locally successfully." });
         }
         catch (Exception ex)
@@ -2994,4 +3423,7 @@ public class CompanionConfig
     public string? ClothingState { get; set; }
     public string? BodyType { get; set; }
     public string? BodyShape { get; set; }
+    public int RelationshipXp { get; set; }
+    public int MessageCount { get; set; }
+    public string? VrmModelPath { get; set; }
 }

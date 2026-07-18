@@ -496,6 +496,17 @@ public class Database
         return id;
     });
 
+    public Task SetConversationCompanion(string conversationId, string companionId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE conversations SET companion_id = $c WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", conversationId);
+        cmd.Parameters.AddWithValue("$c", companionId);
+        cmd.ExecuteNonQuery();
+    });
+
+
     public Task<List<Conversation>> GetConversations(int userId) => Task.Run(() =>
     {
         using var conn = Open();

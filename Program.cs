@@ -279,6 +279,7 @@ public class Program
         builder.Services.AddSingleton(personality);
         builder.Services.AddSingleton<BackendManager>();
         builder.Services.AddSingleton<HardwareProfiler>();
+        builder.Logging.AddProvider(new MemoryLoggerProvider());
 
         builder.Services.AddSingleton<AshServer.Plugins.PluginManager>();
         builder.Services.AddSingleton<McpManager>();

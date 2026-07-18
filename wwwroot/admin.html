@@ -141,6 +141,7 @@ body::after {
 .badge-muted{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)}
 .badge-accent{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-glow)}
 .badge-warn{background:#fbbf2422;color:var(--warning);border:1px solid #fbbf2433}
+.badge-danger{background:#f8717122;color:var(--error);border:1px solid #f8717133}
 
 /* Forms */
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -373,6 +374,61 @@ select.form-input{cursor:pointer}
             <tr><td>GC Allocated Memory</td><td id="server-gc-mem">—</td></tr>
           </table>
         </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="card-title">System & Sidecars Diagnostics</div>
+          
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+            <div>
+              <h4 style="margin-bottom:10px; font-weight:600; color:var(--accent);">System Profile</h4>
+              <table class="kv-table">
+                <tr><td>CPU Cores</td><td id="sys-cores">—</td></tr>
+                <tr><td>Total System RAM</td><td id="sys-ram">—</td></tr>
+                <tr><td>CUDA GPU</td><td id="sys-cuda">—</td></tr>
+                <tr><td>Optimal Inference Threads</td><td id="sys-threads">—</td></tr>
+                <tr><td>Offload Layers (GPU)</td><td id="sys-gpu-layers">—</td></tr>
+              </table>
+            </div>
+
+            <div>
+              <h4 style="margin-bottom:10px; font-weight:600; color:var(--accent);">Sidecars (Local Inference Backends)</h4>
+              <div style="display:flex; flex-direction:column; gap:12px;">
+                <div style="background:var(--surface2); border:1px solid var(--border); padding:12px; border-radius:var(--radius-sm);">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-weight:600; font-size:13px;">llama-server (LLM Core)</span>
+                    <span id="sidecar-llama-badge" class="badge">Checking...</span>
+                  </div>
+                  <div style="font-size:12px; color:var(--text-muted); display:grid; grid-template-columns: auto 1fr; gap:4px 10px;">
+                    <span>PID:</span><span id="sidecar-llama-pid" class="mono">—</span>
+                    <span>Port:</span><span class="mono">11436</span>
+                    <span>Active Model:</span><span id="sidecar-llama-model" class="mono txt-muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
+                    <span>Ctx Size:</span><span class="mono" id="sidecar-llama-ctx">—</span>
+                    <span>Threads:</span><span class="mono" id="sidecar-llama-threads">—</span>
+                  </div>
+                </div>
+
+                <div style="background:var(--surface2); border:1px solid var(--border); padding:12px; border-radius:var(--radius-sm);">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-weight:600; font-size:13px;">sd-server (Stable Diffusion)</span>
+                    <span id="sidecar-sd-badge" class="badge">Checking...</span>
+                  </div>
+                  <div style="font-size:12px; color:var(--text-muted); display:grid; grid-template-columns: auto 1fr; gap:4px 10px;">
+                    <span>PID:</span><span id="sidecar-sd-pid" class="mono">—</span>
+                    <span>Port:</span><span class="mono">8080</span>
+                    <span>Active Model:</span><span id="sidecar-sd-model" class="mono txt-muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
+                    <span>Steps:</span><span class="mono" id="sidecar-sd-steps">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;">
+            <h4 style="margin-bottom:10px; font-weight:600; color:var(--accent);">Live Diagnostics Log (Tail)</h4>
+            <div id="diagnostics-log-box" style="background:#0c0915; border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; font-family:'JetBrains Mono', monospace; font-size:11px; height:200px; overflow-y:auto; white-space:pre-wrap; color:#a1a1aa; line-height:1.4;">
+              [System Initializing...]
+            </div>
+          </div>
 
         <div class="card" style="margin-top:20px;">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
@@ -1456,6 +1512,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 
 /* Overview stats */
 async function loadStats() {
+  const escapeHtml = str => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   try {
     const resp = await fetch('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } });
     const s = await resp.json();
@@ -1473,6 +1530,65 @@ async function loadStats() {
     document.getElementById('server-ram-usage').textContent       = s.server?.ram_usage_mb ? `${s.server.ram_usage_mb} MB` : '\u2014';
     document.getElementById('server-threads').textContent         = s.server?.threads_count ?? '\u2014';
     document.getElementById('server-gc-mem').textContent          = s.server?.gc_memory_mb ? `${s.server.gc_memory_mb} MB` : '\u2014';
+    
+    // Render system profile
+    if (s.system_profile) {
+      document.getElementById('sys-cores').textContent = s.system_profile.cpu_cores;
+      document.getElementById('sys-ram').textContent = `${s.system_profile.total_ram_gb} GB`;
+      document.getElementById('sys-cuda').textContent = s.system_profile.cuda_detected ? 'DETECTED (NVIDIA GPU)' : 'NOT DETECTED';
+      document.getElementById('sys-threads').textContent = s.system_profile.optimal_threads;
+      document.getElementById('sys-gpu-layers').textContent = s.system_profile.gpu_layers > 0 ? `${s.system_profile.gpu_layers} (Full Offload)` : '0 (CPU Only)';
+    }
+
+    // Render sidecars
+    if (s.sidecars) {
+      const llama = s.sidecars.llama;
+      const llamaBadge = document.getElementById('sidecar-llama-badge');
+      if (llama.running) {
+        llamaBadge.textContent = `RUNNING (${llama.health})`;
+        llamaBadge.className = llama.health === 'ok' ? 'badge badge-success' : 'badge badge-warn';
+      } else {
+        llamaBadge.textContent = 'STOPPED';
+        llamaBadge.className = 'badge badge-danger';
+      }
+      document.getElementById('sidecar-llama-pid').textContent = llama.pid || '\u2014';
+      document.getElementById('sidecar-llama-model').textContent = llama.model || '\u2014';
+      document.getElementById('sidecar-llama-ctx').textContent = llama.context_size || '\u2014';
+      document.getElementById('sidecar-llama-threads').textContent = llama.threads || '\u2014';
+
+      const sd = s.sidecars.stable_diffusion;
+      const sdBadge = document.getElementById('sidecar-sd-badge');
+      if (sd.running) {
+        sdBadge.textContent = `RUNNING (${sd.health})`;
+        sdBadge.className = sd.health === 'ok' ? 'badge badge-success' : 'badge badge-warn';
+      } else {
+        sdBadge.textContent = 'STOPPED';
+        sdBadge.className = 'badge badge-danger';
+      }
+      document.getElementById('sidecar-sd-pid').textContent = sd.pid || '\u2014';
+      document.getElementById('sidecar-sd-model').textContent = sd.model || '\u2014';
+      document.getElementById('sidecar-sd-steps').textContent = sd.steps || '\u2014';
+    }
+
+    // Render diagnostics log
+    if (s.diagnostics && s.diagnostics.logs) {
+      const logBox = document.getElementById('diagnostics-log-box');
+      if (logBox) {
+        if (s.diagnostics.logs.length === 0) {
+          logBox.innerHTML = '<span style="color:var(--text-dim);">No logs recorded yet.</span>';
+        } else {
+          logBox.innerHTML = s.diagnostics.logs.map(log => {
+            let color = '#a1a1aa'; // default gray
+            if (log.includes('[Error]') || log.includes('[Critical]') || log.includes('Error')) color = '#f87171'; // red
+            else if (log.includes('[Warning]') || log.includes('Warning')) color = '#fbbf24'; // yellow
+            else if (log.includes('[Information]')) color = '#34d399'; // green
+            return `<div style="color:${color}; margin-bottom:2px;">${escapeHtml(log)}</div>`;
+          }).join('');
+          logBox.scrollTop = logBox.scrollHeight;
+        }
+      }
+    }
+
     // Show setup banner when no model is detected
     const banner = document.getElementById('setup-banner');
     if (banner) banner.style.display = s.server?.model ? 'none' : '';

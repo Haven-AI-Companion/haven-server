@@ -377,6 +377,27 @@
       <div class="form-error" id="reg-err"></div>
       <div class="form-switch">Have an account? <a onclick="toggleForm('login')">Sign in</a></div>
     </div>
+    <!-- Public Server Diagnostics Status Panel -->
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 11px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; color:var(--text-muted);">
+        <span style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">Server Status</span>
+        <a href="#" onclick="event.preventDefault(); fetchPublicHealth();" style="color:var(--accent); text-decoration:none;">Refresh</a>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); padding:6px 8px; border-radius:6px; display:flex; align-items:center; justify-content:space-between;">
+          <span style="color:var(--text-muted);">llama-server</span>
+          <span id="pub-llama-status" style="font-weight:600; color:var(--error);">● Offline</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); padding:6px 8px; border-radius:6px; display:flex; align-items:center; justify-content:space-between;">
+          <span style="color:var(--text-muted);">sd-server</span>
+          <span id="pub-sd-status" style="font-weight:600; color:var(--error);">● Offline</span>
+        </div>
+      </div>
+      <div style="color:var(--text-dim); display:flex; justify-content:space-between; align-items:center; padding:0 2px;">
+        <span id="pub-sys-spec">System: Cores: —, RAM: —</span>
+        <span id="pub-sys-cuda" style="color:var(--text-muted);">GPU: —</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -697,8 +718,57 @@ function doLogout() {
   document.getElementById('login-overlay').style.display = 'flex';
 }
 
+async function fetchPublicHealth() {
+  try {
+    const res = await fetch('/health');
+    if (!res.ok) throw new Error('Unreachable');
+    const h = await res.json();
+    
+    // Render public llama sidecar
+    const llama = h.sidecars?.llama;
+    const llamaEl = document.getElementById('pub-llama-status');
+    if (llamaEl) {
+      if (llama && llama.running) {
+        llamaEl.textContent = `● Running (${llama.health})`;
+        llamaEl.style.color = llama.health === 'ok' ? 'var(--success)' : 'var(--warning)';
+      } else {
+        llamaEl.textContent = '● Stopped';
+        llamaEl.style.color = 'var(--error)';
+      }
+    }
+
+    // Render public sd sidecar
+    const sd = h.sidecars?.stable_diffusion;
+    const sdEl = document.getElementById('pub-sd-status');
+    if (sdEl) {
+      if (sd && sd.running) {
+        sdEl.textContent = `● Running (${sd.health})`;
+        sdEl.style.color = sd.health === 'ok' ? 'var(--success)' : 'var(--warning)';
+      } else {
+        sdEl.textContent = '● Stopped';
+        sdEl.style.color = 'var(--error)';
+      }
+    }
+
+    // Render public system specs
+    if (h.system_profile) {
+      document.getElementById('pub-sys-spec').textContent = `System: ${h.system_profile.cpu_cores} Cores, ${h.system_profile.total_ram_gb} GB RAM`;
+      document.getElementById('pub-sys-cuda').textContent = h.system_profile.cuda_detected ? 'GPU: CUDA' : 'GPU: CPU';
+    }
+  } catch (e) {
+    console.error('fetchPublicHealth failed:', e);
+    document.getElementById('pub-llama-status').textContent = '● Offline';
+    document.getElementById('pub-llama-status').style.color = 'var(--error)';
+    document.getElementById('pub-sd-status').textContent = '● Offline';
+    document.getElementById('pub-sd-status').style.color = 'var(--error)';
+    document.getElementById('pub-sys-spec').textContent = 'System: Unreachable';
+    document.getElementById('pub-sys-cuda').textContent = 'GPU: —';
+  }
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 async function initApp() {
+  fetchPublicHealth(); // Load public health stats in background
   // Check server auth config
   let requireAuth = true, allowRegistration = true;
   try {
