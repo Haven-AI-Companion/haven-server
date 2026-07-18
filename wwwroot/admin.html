@@ -1555,6 +1555,15 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     if (tab === 'updates') checkUpdates();
     if (tab === 'grid') loadGridNodes();
     if (tab === 'database') loadDatabaseStatus();
+    if (tab === 'config') loadConfigToMenu();
+    if (tab === 'backends') loadBackends();
+    if (tab === 'users') loadUsers();
+    if (tab === 'roles') loadRoles();
+    if (tab === 'companions') loadCompanions();
+    if (tab === 'devices') loadPairedDevices();
+    if (tab === 'plugins') loadPlugins();
+    if (tab === 'mcp') loadMcp();
+    if (tab === 'analytics') loadAnalytics();
   });
 });
 
@@ -2337,6 +2346,10 @@ async function loadConfigToMenu() {
     }
 
     const resp   = await fetch('/api/admin/config', { headers: { Authorization: `Bearer ${token}` } });
+    if (!resp.ok) {
+      console.warn('Failed to load configuration:', resp.status);
+      return;
+    }
     const config = await resp.json();
     
     const hostVal = config.server?.host ?? '0.0.0.0';
