@@ -1528,7 +1528,20 @@ function formatDateTime(dateStr, fallback = '—') {
       if (d.require_auth && token === 'noauth') { window.location.href = '/'; return; }
     }
   } catch {}
-  loadStats(); loadBackends(); loadUsers(); loadAnalytics(); loadPlugins(); loadMcp(); loadConfigToMenu(); loadRoles(); loadAllIdentities(); loadCompanions(); loadRepositories(); loadPairedDevices(); loadMeshNetworkStatus(); checkPublicExposure();
+  await loadStats();
+  await loadBackends();
+  await loadUsers();
+  await loadAnalytics();
+  await loadPlugins();
+  await loadMcp();
+  await loadConfigToMenu();
+  await loadRoles();
+  await loadAllIdentities();
+  await loadCompanions();
+  await loadRepositories();
+  await loadPairedDevices();
+  await loadMeshNetworkStatus();
+  await checkPublicExposure();
   const raw = token !== 'noauth' ? token.split('.')[1] : null;
   if (raw) {
     try {
