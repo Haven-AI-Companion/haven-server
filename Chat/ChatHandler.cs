@@ -331,6 +331,68 @@ public class ChatHandler
 
                         if (!string.IsNullOrEmpty(responseText))
                         {
+                            var lowerResponse = responseText.ToLowerInvariant();
+                            bool shouldGenSelfie = lowerResponse.Contains("<call>generate_portrait</call>") ||
+                                                   lowerResponse.Contains("*sends a selfie*") ||
+                                                   lowerResponse.Contains("*sends you a selfie*") ||
+                                                   lowerResponse.Contains("*takes a selfie*") ||
+                                                   lowerResponse.Contains("*sends a photo*") ||
+                                                   lowerResponse.Contains("*sends you a photo*") ||
+                                                   lowerResponse.Contains("*sends a picture*") ||
+                                                   lowerResponse.Contains("*sends you a picture*") ||
+                                                   lowerResponse.Contains("*takes a picture*") ||
+                                                   lowerResponse.Contains("[selfie]");
+
+                            if (shouldGenSelfie)
+                            {
+                                try
+                                {
+                                    var compName = _personality.AiName ?? "Companion";
+                                    var compClean = string.Concat(compName.Split(Path.GetInvalidFileNameChars())).Trim();
+                                    var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+                                    var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+                                    var localDir = Path.Combine(baseDir, "local");
+                                    var localFile = Path.Combine(localDir, $"{compClean.ToLowerInvariant()}.json");
+                                    var baseFile = Path.Combine(baseDir, $"{compClean.ToLowerInvariant()}.json");
+                                    var checkFile = File.Exists(localFile) ? localFile : (File.Exists(baseFile) ? baseFile : null);
+
+                                    AshServer.Controllers.CompanionConfig? comp = null;
+                                    if (checkFile != null)
+                                    {
+                                        var json = await File.ReadAllTextAsync(checkFile);
+                                        comp = JsonSerializer.Deserialize<AshServer.Controllers.CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                    }
+
+                                    var details = comp?.Description ?? comp?.Personality ?? "";
+                                    var location = comp?.CurrentLocation ?? "";
+                                    var outfit = comp?.CurrentOutfit ?? "";
+                                    var mood = comp?.CurrentMood ?? "";
+                                    var clothing = comp?.ClothingState ?? "";
+
+                                    var sdPrompt = $"digital art portrait of {compName}, highly detailed";
+                                    if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
+                                    if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
+                                    if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
+                                    if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
+                                    if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
+
+                                    var sdArgObj = new { description = sdPrompt };
+                                    var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
+                                    var relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
+
+                                    if (!string.IsNullOrEmpty(relativeImagePath) && relativeImagePath.StartsWith("/uploads/"))
+                                    {
+                                        var imgMarkdown = $"\n\n![Selfie]({relativeImagePath})";
+                                        responseText = responseText.Replace("<call>generate_portrait</call>", "").Trim() + imgMarkdown;
+                                        await TrySend(new { type = "token", content = imgMarkdown }, cts.Token);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.Error.WriteLine($"[chat] Failed to auto-generate selfie in websocket: {ex.Message}");
+                                }
+                            }
+
                             await _db.AddMessage(conversationId, "assistant", responseText, _personality.AiName);
                             lock (history) { history.Add(new ChatMessage("assistant", responseText)); }
                         }
