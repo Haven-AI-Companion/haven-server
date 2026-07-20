@@ -3304,6 +3304,31 @@ public class CompanionsController : ControllerBase
             return BadRequest(new { error = "Invalid companion name." });
 
         var filePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+
+        if (System.IO.File.Exists(filePath))
+        {
+            try
+            {
+                var oldConfigJson = System.IO.File.ReadAllText(filePath);
+                var oldConfig = JsonSerializer.Deserialize<CompanionConfig>(oldConfigJson, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                if (oldConfig != null && !string.IsNullOrWhiteSpace(oldConfig.BodyType) && !string.IsNullOrWhiteSpace(req.BodyType))
+                {
+                    var oldGender = oldConfig.BodyType.Trim().ToLowerInvariant();
+                    var newGender = req.BodyType.Trim().ToLowerInvariant();
+                    if (oldGender != newGender && (oldGender == "male" || oldGender == "female") && (newGender == "male" || newGender == "female"))
+                    {
+                        req.Description = SwapGenderPronouns(req.Description ?? "", oldGender, newGender);
+                        req.Personality = SwapGenderPronouns(req.Personality ?? "", oldGender, newGender);
+                        req.SystemPrompt = SwapGenderPronouns(req.SystemPrompt ?? "", oldGender, newGender);
+                        req.FirstMessage = SwapGenderPronouns(req.FirstMessage ?? "", oldGender, newGender);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[CompanionsController] Failed to auto-swap companion pronouns on save: {ex.Message}");
+            }
+        }
         
         try
         {
@@ -3318,7 +3343,7 @@ public class CompanionsController : ControllerBase
                 await _db.SetConversationCompanion(req.ConversationId, req.Name);
             }
 
-            return Ok(new { ok = true, message = $"Companion '{req.Name}' saved locally successfully." });
+            return Ok(new { ok = true, message = $"Companion '{req.Name}' saved locally successfully.", config = req });
         }
         catch (Exception ex)
         {
@@ -4115,6 +4140,82 @@ public class CompanionsController : ControllerBase
         await System.IO.File.WriteAllTextAsync(profilePath, updatedProfileJson);
 
         return Ok(new { ok = true, config });
+    }
+
+    private static string SwapGenderPronouns(string text, string fromGender, string toGender)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+
+        var cleanFrom = fromGender.Trim().ToLowerInvariant();
+        var cleanTo = toGender.Trim().ToLowerInvariant();
+
+        if (cleanFrom == cleanTo) return text;
+
+        var replacements = new List<(string pattern, string replacement)>();
+
+        if (cleanFrom == "male" && cleanTo == "female")
+        {
+            replacements.Add((@"\bhe\b", "she"));
+            replacements.Add((@"\bhim\b", "her"));
+            replacements.Add((@"\bhis\b", "her"));
+            replacements.Add((@"\bhimself\b", "herself"));
+            replacements.Add((@"\bmale\b", "female"));
+            replacements.Add((@"\bman\b", "woman"));
+            replacements.Add((@"\bmen\b", "women"));
+            replacements.Add((@"\bboy\b", "girl"));
+            replacements.Add((@"\bboys\b", "girls"));
+            replacements.Add((@"\bhusband\b", "wife"));
+            replacements.Add((@"\bboyfriend\b", "girlfriend"));
+            replacements.Add((@"\bson\b", "daughter"));
+            replacements.Add((@"\bbrother\b", "sister"));
+            replacements.Add((@"\bfather\b", "mother"));
+            replacements.Add((@"\bgentleman\b", "lady"));
+            replacements.Add((@"\bking\b", "queen"));
+            replacements.Add((@"\bprince\b", "princess"));
+        }
+        else if (cleanFrom == "female" && cleanTo == "male")
+        {
+            replacements.Add((@"\bshe\b", "he"));
+            replacements.Add((@"\bherself\b", "himself"));
+            replacements.Add((@"\bhers\b", "his"));
+            replacements.Add((@"\bher\b", "his"));
+            replacements.Add((@"\bfemale\b", "male"));
+            replacements.Add((@"\bwoman\b", "man"));
+            replacements.Add((@"\bwomen\b", "men"));
+            replacements.Add((@"\bgirl\b", "boy"));
+            replacements.Add((@"\bgirls\b", "boys"));
+            replacements.Add((@"\bwife\b", "husband"));
+            replacements.Add((@"\bgirlfriend\b", "boyfriend"));
+            replacements.Add((@"\bdaughter\b", "son"));
+            replacements.Add((@"\bsister\b", "brother"));
+            replacements.Add((@"\bmother\b", "father"));
+            replacements.Add((@"\blady\b", "gentleman"));
+            replacements.Add((@"\bqueen\b", "king"));
+            replacements.Add((@"\bprincess\b", "prince"));
+        }
+        else
+        {
+            return text;
+        }
+
+        var result = text;
+        foreach (var r in replacements)
+        {
+            result = System.Text.RegularExpressions.Regex.Replace(result, r.pattern, m => {
+                var val = m.Value;
+                if (char.IsUpper(val[0]))
+                {
+                    if (val.Length > 1 && char.IsUpper(val[1]))
+                    {
+                        return r.replacement.ToUpperInvariant();
+                    }
+                    return char.ToUpper(r.replacement[0]) + r.replacement.Substring(1);
+                }
+                return r.replacement;
+            }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        return result;
     }
 }
 
