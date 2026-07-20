@@ -3678,14 +3678,21 @@ public class CompanionsController : ControllerBase
                             keyEnd++;
                         }
                         string keyword = Encoding.ASCII.GetString(pngBytes, offset + 8, keyEnd - (offset + 8));
-                        if (keyword == "chara")
+                        if (keyword == "chara" || keyword == "ccv3")
                         {
                             int textStart = keyEnd + 1;
                             int textLength = (int)(offset + 8 + length - textStart);
                             if (textLength > 0)
                             {
-                                var base64Str = Encoding.UTF8.GetString(pngBytes, textStart, textLength).Trim();
-                                return Encoding.UTF8.GetString(Convert.FromBase64String(base64Str));
+                                var rawStr = Encoding.UTF8.GetString(pngBytes, textStart, textLength).Trim();
+                                try 
+                                { 
+                                    return Encoding.UTF8.GetString(Convert.FromBase64String(rawStr)); 
+                                } 
+                                catch 
+                                { 
+                                    return rawStr; 
+                                }
                             }
                         }
                     }
@@ -3697,7 +3704,7 @@ public class CompanionsController : ControllerBase
                             keyEnd++;
                         }
                         string keyword = Encoding.UTF8.GetString(pngBytes, offset + 8, keyEnd - (offset + 8));
-                        if (keyword == "chara")
+                        if (keyword == "chara" || keyword == "ccv3")
                         {
                             int dataIdx = keyEnd + 1;
                             bool isCompressed = pngBytes[dataIdx] != 0;
@@ -3715,19 +3722,27 @@ public class CompanionsController : ControllerBase
                                 byte[] textBytes = new byte[textLength];
                                 Array.Copy(pngBytes, dataIdx, textBytes, 0, textLength);
                                 
+                                string decoded;
                                 if (isCompressed)
                                 {
                                     using var ms = new MemoryStream(textBytes, 2, textBytes.Length - 2); // skip zlib headers
                                     using var def = new System.IO.Compression.DeflateStream(ms, System.IO.Compression.CompressionMode.Decompress);
                                     using var outMs = new MemoryStream();
                                     def.CopyTo(outMs);
-                                    var decoded = Encoding.UTF8.GetString(outMs.ToArray());
-                                    try { return Encoding.UTF8.GetString(Convert.FromBase64String(decoded.Trim())); } catch { return decoded; }
+                                    decoded = Encoding.UTF8.GetString(outMs.ToArray()).Trim();
                                 }
                                 else
                                 {
-                                    var decoded = Encoding.UTF8.GetString(textBytes).Trim();
-                                    try { return Encoding.UTF8.GetString(Convert.FromBase64String(decoded)); } catch { return decoded; }
+                                    decoded = Encoding.UTF8.GetString(textBytes).Trim();
+                                }
+                                
+                                try 
+                                { 
+                                    return Encoding.UTF8.GetString(Convert.FromBase64String(decoded)); 
+                                } 
+                                catch 
+                                { 
+                                    return decoded; 
                                 }
                             }
                         }
