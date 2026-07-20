@@ -746,6 +746,42 @@ select.form-input{cursor:pointer}
             <button class="btn" id="btn-export-card" onclick="triggerTavernExport()" style="display:none;background:var(--accent);color:var(--bg);">Export Tavern Card</button>
             <button class="btn" onclick="hideCompanionForm()">Cancel</button>
           </div>
+          
+          <!-- Wardrobe & Assets Manager -->
+          <div id="wardrobe-section" style="display:none; margin-top: 24px; border-top: 1px solid var(--border); padding-top: 16px;">
+            <div class="add-form-title" style="font-size: 16px; color: var(--accent); margin-bottom: 12px;">👗 Wardrobe & Expressive Assets</div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+              <div>
+                <h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-muted);">Outfits</h4>
+                <div id="wardrobe-outfits-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); border-radius: 4px; font-size:12px;"></div>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                  <input type="text" id="new-outfit-val" class="form-input" style="margin: 0; padding: 4px 8px; font-size: 12px; flex: 1;" placeholder="e.g. casual">
+                  <button class="btn btn-sm" onclick="generateWardrobeAsset('outfit')" style="padding: 4px 8px; font-size: 12px; white-space: nowrap;">Paint</button>
+                </div>
+              </div>
+              
+              <div>
+                <h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-muted);">Locations / Wallpapers</h4>
+                <div id="wardrobe-locations-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); border-radius: 4px; font-size:12px;"></div>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                  <input type="text" id="new-location-val" class="form-input" style="margin: 0; padding: 4px 8px; font-size: 12px; flex: 1;" placeholder="e.g. library">
+                  <button class="btn btn-sm" onclick="generateWardrobeAsset('location')" style="padding: 4px 8px; font-size: 12px; white-space: nowrap;">Paint</button>
+                </div>
+              </div>
+              
+              <div>
+                <h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-muted);">Moods / Expressions</h4>
+                <div id="wardrobe-moods-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); border-radius: 4px; font-size:12px;"></div>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                  <input type="text" id="new-mood-val" class="form-input" style="margin: 0; padding: 4px 8px; font-size: 12px; flex: 1;" placeholder="e.g. blushing">
+                  <button class="btn btn-sm" onclick="generateWardrobeAsset('mood')" style="padding: 4px 8px; font-size: 12px; white-space: nowrap;">Paint</button>
+                </div>
+              </div>
+            </div>
+            <div id="wardrobe-status" style="margin-top: 10px; font-size: 12px;"></div>
+          </div>
+
           <input type="file" id="tavern-export-file-input" accept="image/png" style="display:none" onchange="handleTavernExport(event)">
         </div>
         
@@ -3836,10 +3872,145 @@ function showAddCompanionForm() {
   document.getElementById('btn-export-card').style.display = 'none';
   document.getElementById('add-companion-status').textContent = '';
   document.getElementById('add-companion-form').style.display = '';
+  document.getElementById('wardrobe-section').style.display = 'none';
 }
 
 function hideCompanionForm() {
   document.getElementById('add-companion-form').style.display = 'none';
+}
+
+let currentEditingCompanion = "";
+
+async function loadCompanionAssets(name) {
+  currentEditingCompanion = name;
+  const outfitsList = document.getElementById('wardrobe-outfits-list');
+  const locationsList = document.getElementById('wardrobe-locations-list');
+  const moodsList = document.getElementById('wardrobe-moods-list');
+  
+  outfitsList.innerHTML = '<span class="txt-muted">Loading outfits...</span>';
+  locationsList.innerHTML = '<span class="txt-muted">Loading locations...</span>';
+  moodsList.innerHTML = '<span class="txt-muted">Loading moods...</span>';
+
+  try {
+    const res = await fetch(`/api/companions/${encodeURIComponent(name)}/assets`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    
+    // Outfits
+    let outfitsHtml = '<div style="display:flex; justify-content:space-between; align-items:center; padding: 4px; border-bottom:1px solid var(--border); font-weight:bold;"><span>default</span><button class="btn btn-xs" onclick="selectWardrobeAsset(\'outfit\', \'default\')">Select</button></div>';
+    d.outfits.forEach(o => {
+      outfitsHtml += `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding: 4px; border-bottom:1px solid var(--border);">
+          <span title="${escHtml(o.name)}" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(o.name)}</span>
+          <div style="display:flex; gap:4px; align-items:center;">
+            <a href="${o.url}" target="_blank" style="text-decoration:none; font-size:11px; color:var(--accent);">View</a>
+            <button class="btn btn-xs" onclick="selectWardrobeAsset('outfit', '${escHtml(o.name)}')">Select</button>
+          </div>
+        </div>
+      `;
+    });
+    outfitsList.innerHTML = outfitsHtml;
+
+    // Locations
+    let locationsHtml = '<div style="display:flex; justify-content:space-between; align-items:center; padding: 4px; border-bottom:1px solid var(--border); font-weight:bold;"><span>default</span><button class="btn btn-xs" onclick="selectWardrobeAsset(\'location\', \'default\')">Select</button></div>';
+    d.locations.forEach(l => {
+      locationsHtml += `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding: 4px; border-bottom:1px solid var(--border);">
+          <span title="${escHtml(l.name)}" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(l.name)}</span>
+          <div style="display:flex; gap:4px; align-items:center;">
+            <a href="${l.url}" target="_blank" style="text-decoration:none; font-size:11px; color:var(--accent);">View</a>
+            <button class="btn btn-xs" onclick="selectWardrobeAsset('location', '${escHtml(l.name)}')">Select</button>
+          </div>
+        </div>
+      `;
+    });
+    locationsList.innerHTML = locationsHtml;
+
+    // Moods
+    let moodsHtml = '<div style="display:flex; justify-content:space-between; align-items:center; padding: 4px; border-bottom:1px solid var(--border); font-weight:bold;"><span>default</span><button class="btn btn-xs" onclick="selectWardrobeAsset(\'mood\', \'default\')">Select</button></div>';
+    d.moods.forEach(m => {
+      moodsHtml += `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding: 4px; border-bottom:1px solid var(--border);">
+          <span title="${escHtml(m.name)}" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(m.name)}</span>
+          <div style="display:flex; gap:4px; align-items:center;">
+            <a href="${m.url}" target="_blank" style="text-decoration:none; font-size:11px; color:var(--accent);">View</a>
+            <button class="btn btn-xs" onclick="selectWardrobeAsset('mood', '${escHtml(m.name)}')">Select</button>
+          </div>
+        </div>
+      `;
+    });
+    moodsList.innerHTML = moodsHtml;
+
+  } catch (err) {
+    outfitsList.innerHTML = '<span class="txt-muted">Failed to load</span>';
+    locationsList.innerHTML = '<span class="txt-muted">Failed to load</span>';
+    moodsList.innerHTML = '<span class="txt-muted">Failed to load</span>';
+  }
+}
+
+async function generateWardrobeAsset(type) {
+  const inputId = type === 'outfit' ? 'new-outfit-val' : type === 'location' ? 'new-location-val' : 'new-mood-val';
+  const val = document.getElementById(inputId).value.trim();
+  if (!val) {
+    toast(`Please enter a name for the new ${type}`, 'error');
+    return;
+  }
+
+  const status = document.getElementById('wardrobe-status');
+  status.innerHTML = `<span class="txt-muted">Calling Stable Diffusion to paint custom ${type} "${val}"... Please wait (this can take 30-40s)</span>`;
+
+  try {
+    const res = await fetch(`/api/companions/${encodeURIComponent(currentEditingCompanion)}/generate-asset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        assetType: type,
+        value: val
+      })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Failed to paint asset');
+    
+    toast(`Successfully painted new ${type}!`);
+    document.getElementById(inputId).value = '';
+    status.textContent = '';
+    loadCompanionAssets(currentEditingCompanion);
+  } catch (err) {
+    status.innerHTML = `<span style="color:var(--error);">${escHtml(err.message)}</span>`;
+  }
+}
+
+async function selectWardrobeAsset(type, val) {
+  const status = document.getElementById('wardrobe-status');
+  status.innerHTML = '<span class="txt-muted">Updating active state...</span>';
+
+  try {
+    const res = await fetch(`/api/companions/${encodeURIComponent(currentEditingCompanion)}/select-asset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        assetType: type,
+        value: val
+      })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Failed to update selection');
+    
+    toast(`Active ${type} set to "${val}"!`);
+    status.textContent = '';
+    loadCompanionAssets(currentEditingCompanion);
+    loadCompanions();
+  } catch (err) {
+    status.innerHTML = `<span style="color:var(--error);">${escHtml(err.message)}</span>`;
+  }
 }
 
 function showGenerateCompanionForm() {
@@ -3915,6 +4086,10 @@ function editCompanion(name) {
   document.getElementById('btn-export-card').style.display = '';
   document.getElementById('add-companion-status').textContent = '';
   document.getElementById('add-companion-form').style.display = '';
+  
+  // Show wardrobe panel and load assets
+  document.getElementById('wardrobe-section').style.display = '';
+  loadCompanionAssets(c.name);
 }
 
 async function saveCompanion() {

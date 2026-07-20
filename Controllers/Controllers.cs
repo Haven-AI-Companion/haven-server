@@ -3908,11 +3908,206 @@ public class CompanionsController : ControllerBase
             return StatusCode(500, new { error = $"Generation failed: {ex.Message}" });
         }
     }
+
+    [HttpGet("{name}/assets")]
+    public async Task<IActionResult> GetCompanionAssets(string name)
+    {
+        var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+        var webRoot = _config["Uploads:Directory"] ?? _config["UploadsDir"] ?? "wwwroot";
+        var companionUploadDir = Path.Combine(AppContext.BaseDirectory, webRoot, "uploads", cleanName, $"user_{UserId}");
+
+        var outfits = new List<object>();
+        var locations = new List<object>();
+        var moods = new List<object>();
+
+        if (Directory.Exists(companionUploadDir))
+        {
+            var files = Directory.GetFiles(companionUploadDir);
+            foreach (var file in files)
+            {
+                var filename = Path.GetFileName(file);
+                var relativePath = $"/uploads/{cleanName}/user_{UserId}/{filename}".Replace('\\', '/');
+
+                if (filename.StartsWith("outfit_", StringComparison.OrdinalIgnoreCase))
+                {
+                    outfits.Add(new { name = filename.Substring(7).Replace(".webp", ""), url = relativePath });
+                }
+                else if (filename.StartsWith("location_", StringComparison.OrdinalIgnoreCase))
+                {
+                    locations.Add(new { name = filename.Substring(9).Replace(".webp", ""), url = relativePath });
+                }
+                else if (filename.StartsWith("mood_", StringComparison.OrdinalIgnoreCase))
+                {
+                    moods.Add(new { name = filename.Substring(5).Replace(".webp", ""), url = relativePath });
+                }
+            }
+        }
+
+        return Ok(new { ok = true, outfits, locations, moods });
+    }
+
+    [HttpPost("{name}/generate-asset")]
+    public async Task<IActionResult> GenerateCompanionAsset(string name, [FromBody] GenerateAssetRequest req)
+    {
+        if (req == null || string.IsNullOrWhiteSpace(req.AssetType) || string.IsNullOrWhiteSpace(req.Value))
+            return BadRequest(new { error = "AssetType and Value are required." });
+
+        var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+        var profilePath = Path.Combine(AppContext.BaseDirectory, relativePath, "companions", $"{cleanName.ToLowerInvariant()}.json");
+
+        if (!System.IO.File.Exists(profilePath))
+            return NotFound(new { error = "Companion not found." });
+
+        var configJson = await System.IO.File.ReadAllTextAsync(profilePath);
+        var config = JsonSerializer.Deserialize<CompanionConfig>(configJson);
+        if (config == null) return BadRequest(new { error = "Failed to parse companion config." });
+
+        var assetType = req.AssetType.ToLowerInvariant();
+        var value = req.Value.Trim();
+        var targetFilename = $"{cleanName}/user_{UserId}/{assetType}_{value.ToLowerInvariant()}.webp";
+
+        string sdPromptToUse;
+        if (assetType == "outfit")
+        {
+            sdPromptToUse = string.IsNullOrWhiteSpace(req.SdPromptOverride)
+                ? $"digital art portrait of {config.Name} wearing {value}, highly detailed, {config.Description}"
+                : req.SdPromptOverride;
+        }
+        else if (assetType == "location")
+        {
+            sdPromptToUse = string.IsNullOrWhiteSpace(req.SdPromptOverride)
+                ? $"digital art landscape of {value}, highly detailed anime background scenery, dynamic lighting"
+                : req.SdPromptOverride;
+        }
+        else if (assetType == "mood")
+        {
+            sdPromptToUse = string.IsNullOrWhiteSpace(req.SdPromptOverride)
+                ? $"digital art portrait of {config.Name}, {value} facial expression, highly detailed, {config.Description}"
+                : req.SdPromptOverride;
+        }
+        else
+        {
+            return BadRequest(new { error = "Invalid AssetType. Must be outfit, location, or mood." });
+        }
+
+        var relativeImagePath = "";
+        try
+        {
+            var sdArgObj = new { description = sdPromptToUse, target_filename = targetFilename };
+            var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
+            relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
+            relativeImagePath = relativeImagePath.Trim();
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Stable Diffusion generation failed: {ex.Message}" });
+        }
+
+        if (string.IsNullOrEmpty(relativeImagePath) || !relativeImagePath.StartsWith("/uploads/"))
+        {
+            return StatusCode(500, new { error = "Stable Diffusion failed to generate a valid image file." });
+        }
+
+        if (assetType == "outfit")
+        {
+            config.CurrentOutfit = value;
+            config.AvatarPath = relativeImagePath;
+        }
+        else if (assetType == "location")
+        {
+            config.CurrentLocation = value;
+        }
+        else if (assetType == "mood")
+        {
+            config.CurrentMood = value;
+            config.AvatarPath = relativeImagePath;
+        }
+
+        var updatedProfileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+        await System.IO.File.WriteAllTextAsync(profilePath, updatedProfileJson);
+
+        return Ok(new { ok = true, url = relativeImagePath, config });
+    }
+
+    [HttpPost("{name}/select-asset")]
+    public async Task<IActionResult> SelectCompanionAsset(string name, [FromBody] SelectAssetRequest req)
+    {
+        if (req == null || string.IsNullOrWhiteSpace(req.AssetType) || string.IsNullOrWhiteSpace(req.Value))
+            return BadRequest(new { error = "AssetType and Value are required." });
+
+        var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+        var profilePath = Path.Combine(AppContext.BaseDirectory, relativePath, "companions", $"{cleanName.ToLowerInvariant()}.json");
+
+        if (!System.IO.File.Exists(profilePath))
+            return NotFound(new { error = "Companion not found." });
+
+        var configJson = await System.IO.File.ReadAllTextAsync(profilePath);
+        var config = JsonSerializer.Deserialize<CompanionConfig>(configJson);
+        if (config == null) return BadRequest(new { error = "Failed to parse companion config." });
+
+        var assetType = req.AssetType.ToLowerInvariant();
+        var value = req.Value.Trim();
+        var expectedFilename = $"{assetType}_{value.ToLowerInvariant()}.webp";
+        var webRoot = _config["Uploads:Directory"] ?? _config["UploadsDir"] ?? "wwwroot";
+        var fileOnDisk = Path.Combine(AppContext.BaseDirectory, webRoot, "uploads", cleanName, $"user_{UserId}", expectedFilename);
+
+        if (!System.IO.File.Exists(fileOnDisk))
+        {
+            if (value.Equals("default", StringComparison.OrdinalIgnoreCase))
+            {
+                if (assetType == "outfit")
+                {
+                    config.CurrentOutfit = "default";
+                    config.AvatarPath = $"/uploads/companion_{cleanName.ToLowerInvariant()}.png";
+                }
+                else if (assetType == "location")
+                {
+                    config.CurrentLocation = "default";
+                }
+                else if (assetType == "mood")
+                {
+                    config.CurrentMood = "default";
+                    config.AvatarPath = $"/uploads/companion_{cleanName.ToLowerInvariant()}.png";
+                }
+            }
+            else
+            {
+                return BadRequest(new { error = $"Asset file not found. Generate it first." });
+            }
+        }
+        else
+        {
+            var relativeImagePath = $"/uploads/{cleanName}/user_{UserId}/{expectedFilename}".Replace('\\', '/');
+            if (assetType == "outfit")
+            {
+                config.CurrentOutfit = value;
+                config.AvatarPath = relativeImagePath;
+            }
+            else if (assetType == "location")
+            {
+                config.CurrentLocation = value;
+            }
+            else if (assetType == "mood")
+            {
+                config.CurrentMood = value;
+                config.AvatarPath = relativeImagePath;
+            }
+        }
+
+        var updatedProfileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+        await System.IO.File.WriteAllTextAsync(profilePath, updatedProfileJson);
+
+        return Ok(new { ok = true, config });
+    }
 }
 
 public record GenerateCompanionRequest(string Prompt, string? SdPrompt, string? VoiceId);
 public record GenerateProfileRequest(string Prompt);
 public record ImportUrlRequest(string Url);
+public record GenerateAssetRequest(string AssetType, string Value, string? SdPromptOverride);
+public record SelectAssetRequest(string AssetType, string Value);
 
 public class CompanionConfig
 {
