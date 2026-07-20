@@ -3842,12 +3842,12 @@ async function loadCompanions() {
     companions.forEach(c => {
       html += `
         <tr style="border-bottom: 1px solid var(--border);">
-          <td style="padding: 10px; font-weight: 600; color: #fff;">${escHtml(c.name)}</td>
-          <td style="padding: 10px; color: var(--text-muted);">${escHtml(c.voiceId || '—')}</td>
-          <td style="padding: 10px; color: var(--text-muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(c.description || '—')}</td>
+          <td style="padding: 10px; font-weight: 600; color: #fff;">${escHtml(c.name || c.Name || '')}</td>
+          <td style="padding: 10px; color: var(--text-muted);">${escHtml(c.voiceId || c.VoiceId || '—')}</td>
+          <td style="padding: 10px; color: var(--text-muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(c.description || c.Description || '—')}</td>
           <td style="padding: 10px; text-align: right;">
-            <button class="btn btn-sm btn-primary" onclick="editCompanion('${escHtml(c.name)}')">Edit</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteCompanion('${escHtml(c.name)}')">Delete</button>
+            <button class="btn btn-sm btn-primary" onclick="editCompanion('${escHtml(c.name || c.Name || '')}')">Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteCompanion('${escHtml(c.name || c.Name || '')}')">Delete</button>
           </td>
         </tr>
       `;
@@ -4072,24 +4072,25 @@ async function generateCompanionSubmit() {
 }
 
 function editCompanion(name) {
-  const c = companions.find(item => item.name === name);
+  const c = companions.find(item => (item.name || item.Name) === name);
   if (!c) return;
+  const companionName = c.name || c.Name || '';
   document.getElementById('companion-form-title').textContent = "Edit Companion";
-  document.getElementById('c-name').value = c.name;
+  document.getElementById('c-name').value = companionName;
   document.getElementById('c-name').disabled = true;
-  document.getElementById('c-voice').value = c.voiceId || '';
-  document.getElementById('c-desc').value = c.description || '';
-  document.getElementById('c-personality').value = c.personality || '';
-  document.getElementById('c-scenario').value = c.scenario || '';
-  document.getElementById('c-first').value = c.firstMessage || '';
-  document.getElementById('c-system').value = c.systemPrompt || '';
+  document.getElementById('c-voice').value = c.voiceId || c.VoiceId || '';
+  document.getElementById('c-desc').value = c.description || c.Description || '';
+  document.getElementById('c-personality').value = c.personality || c.Personality || '';
+  document.getElementById('c-scenario').value = c.scenario || c.Scenario || '';
+  document.getElementById('c-first').value = c.firstMessage || c.FirstMessage || '';
+  document.getElementById('c-system').value = c.systemPrompt || c.SystemPrompt || '';
   document.getElementById('btn-export-card').style.display = '';
   document.getElementById('add-companion-status').textContent = '';
   document.getElementById('add-companion-form').style.display = '';
   
   // Show wardrobe panel and load assets
   document.getElementById('wardrobe-section').style.display = '';
-  loadCompanionAssets(c.name);
+  loadCompanionAssets(companionName);
 }
 
 async function saveCompanion() {
