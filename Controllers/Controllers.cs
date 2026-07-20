@@ -3815,9 +3815,15 @@ public class CompanionsController : ControllerBase
             }
 
             var jsonResult = fullText.ToString().Trim();
-            
-            // Clean up any markdown codeblock markers
-            if (jsonResult.StartsWith("```"))
+
+            // Extract JSON substring by finding the outermost '{' and '}' to bypass thought blocks or conversational wrappers
+            var firstBrace = jsonResult.IndexOf('{');
+            var lastBrace = jsonResult.LastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace)
+            {
+                jsonResult = jsonResult.Substring(firstBrace, lastBrace - firstBrace + 1);
+            }
+            else if (jsonResult.StartsWith("```"))
             {
                 jsonResult = System.Text.RegularExpressions.Regex.Replace(jsonResult, @"^```[a-zA-Z]*\s*", "");
                 jsonResult = System.Text.RegularExpressions.Regex.Replace(jsonResult, @"\s*```$", "");
@@ -3867,7 +3873,15 @@ public class CompanionsController : ControllerBase
             }
 
             var jsonResult = fullText.ToString().Trim();
-            if (jsonResult.StartsWith("```"))
+
+            // Extract JSON substring by finding the outermost '{' and '}' to bypass thought blocks or conversational wrappers
+            var firstBrace = jsonResult.IndexOf('{');
+            var lastBrace = jsonResult.LastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace)
+            {
+                jsonResult = jsonResult.Substring(firstBrace, lastBrace - firstBrace + 1);
+            }
+            else if (jsonResult.StartsWith("```"))
             {
                 jsonResult = System.Text.RegularExpressions.Regex.Replace(jsonResult, @"^```[a-zA-Z]*\s*", "");
                 jsonResult = System.Text.RegularExpressions.Regex.Replace(jsonResult, @"\s*```$", "");
