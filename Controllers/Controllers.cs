@@ -1004,7 +1004,7 @@ public class AdminController : ControllerBase
                     var root = doc.RootElement;
                     
                     string? name = null;
-                    if (root.TryGetProperty("name", out var nameProp))
+                    if (root.TryGetProperty("name", out var nameProp) || root.TryGetProperty("Name", out nameProp))
                         name = nameProp.GetString();
 
                     if (string.IsNullOrEmpty(name)) continue;
@@ -3239,7 +3239,7 @@ public class CompanionsController : ControllerBase
                 var content = System.IO.File.ReadAllText(file);
                 using var doc = JsonDocument.Parse(content);
                 var root = doc.RootElement.Clone();
-                if (root.TryGetProperty("name", out var nameProp))
+                if (root.TryGetProperty("name", out var nameProp) || root.TryGetProperty("Name", out nameProp))
                 {
                     var name = nameProp.GetString();
                     if (!string.IsNullOrEmpty(name))
@@ -3264,7 +3264,7 @@ public class CompanionsController : ControllerBase
                     var content = System.IO.File.ReadAllText(file);
                     using var doc = JsonDocument.Parse(content);
                     var root = doc.RootElement.Clone();
-                    if (root.TryGetProperty("name", out var nameProp))
+                    if (root.TryGetProperty("name", out var nameProp) || root.TryGetProperty("Name", out nameProp))
                     {
                         var name = nameProp.GetString();
                         if (!string.IsNullOrEmpty(name))
@@ -3517,7 +3517,10 @@ public class CompanionsController : ControllerBase
             Directory.CreateDirectory(baseDir);
 
             var profilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
-            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { 
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
             await System.IO.File.WriteAllTextAsync(profilePath, profileJson);
 
             return Ok(new { ok = true, character = config });
@@ -3656,7 +3659,10 @@ public class CompanionsController : ControllerBase
             Directory.CreateDirectory(baseDir);
 
             var profilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
-            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { 
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
             await System.IO.File.WriteAllTextAsync(profilePath, profileJson);
 
             return Ok(new { ok = true, character = config });
@@ -3952,7 +3958,10 @@ public class CompanionsController : ControllerBase
             Directory.CreateDirectory(baseDir);
 
             var profilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
-            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { 
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
             await System.IO.File.WriteAllTextAsync(profilePath, profileJson);
 
             return Ok(new { ok = true, character = config });
@@ -4078,7 +4087,10 @@ public class CompanionsController : ControllerBase
             config.AvatarPath = relativeImagePath;
         }
 
-        var updatedProfileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+        var updatedProfileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { 
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
         await System.IO.File.WriteAllTextAsync(profilePath, updatedProfileJson);
 
         return Ok(new { ok = true, url = relativeImagePath, config });
@@ -4150,7 +4162,10 @@ public class CompanionsController : ControllerBase
             }
         }
 
-        var updatedProfileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+        var updatedProfileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { 
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
         await System.IO.File.WriteAllTextAsync(profilePath, updatedProfileJson);
 
         return Ok(new { ok = true, config });
