@@ -3204,11 +3204,13 @@ public class CompanionsController : ControllerBase
 {
     private readonly IConfiguration _config;
     private readonly AshServer.Data.Database _db;
+    private readonly BackendManager _backends;
 
-    public CompanionsController(IConfiguration config, AshServer.Data.Database db)
+    public CompanionsController(IConfiguration config, AshServer.Data.Database db, BackendManager backends)
     {
         _config = config;
         _db = db;
+        _backends = backends;
     }
 
     private int UserId => int.Parse(User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)!);
@@ -3405,6 +3407,55 @@ public class CompanionsController : ControllerBase
             string firstMsg = data.TryGetProperty("first_mes", out var fm) ? fm.GetString() ?? "" : "";
             string systemPrompt = data.TryGetProperty("system_prompt", out var sp) ? sp.GetString() ?? "" : "";
 
+            int relationshipXp = 0;
+            int messageCount = 0;
+            string? currentOutfit = null;
+            string? currentLocation = null;
+            string? currentMood = null;
+            string? clothingState = null;
+            string? bodyType = null;
+            string? bodyShape = null;
+
+            if (root.TryGetProperty("haven_metadata", out var meta))
+            {
+                if (meta.TryGetProperty("relationshipXp", out var rxp)) relationshipXp = rxp.GetInt32();
+                if (meta.TryGetProperty("messageCount", out var mc)) messageCount = mc.GetInt32();
+                if (meta.TryGetProperty("currentOutfit", out var co)) currentOutfit = co.GetString();
+                if (meta.TryGetProperty("currentLocation", out var cl)) currentLocation = cl.GetString();
+                if (meta.TryGetProperty("currentMood", out var cm)) currentMood = cm.GetString();
+                if (meta.TryGetProperty("clothingState", out var cs)) clothingState = cs.GetString();
+                if (meta.TryGetProperty("bodyType", out var bt)) bodyType = bt.GetString();
+                if (meta.TryGetProperty("bodyShape", out var bs)) bodyShape = bs.GetString();
+
+                // Restore memories
+                if (meta.TryGetProperty("memories", out var memories) && memories.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var mem in memories.EnumerateArray())
+                    {
+                        var content = mem.GetProperty("content").GetString() ?? "";
+                        var category = mem.GetProperty("category").GetString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(content) && !string.IsNullOrWhiteSpace(category))
+                        {
+                            await _db.SaveMemory(UserId, name, content, category);
+                        }
+                    }
+                }
+
+                // Restore diaries
+                if (meta.TryGetProperty("diaries", out var diaries) && diaries.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var diary in diaries.EnumerateArray())
+                    {
+                        var dateString = diary.GetProperty("dateString").GetString() ?? "";
+                        var content = diary.GetProperty("content").GetString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(dateString) && !string.IsNullOrWhiteSpace(content))
+                        {
+                            await _db.SaveDiary(UserId, name, dateString, content);
+                        }
+                    }
+                }
+            }
+
             // Save avatar image to wwwroot/uploads
             var webRoot = _config["Uploads:Directory"] ?? _config["UploadsDir"] ?? "wwwroot";
             var uploadsDir = Path.Combine(AppContext.BaseDirectory, webRoot, "uploads");
@@ -3423,7 +3474,15 @@ public class CompanionsController : ControllerBase
                 Scenario = scenario,
                 FirstMessage = firstMsg,
                 SystemPrompt = systemPrompt,
-                AvatarPath = $"/uploads/{avatarFilename}"
+                AvatarPath = $"/uploads/{avatarFilename}",
+                RelationshipXp = relationshipXp,
+                MessageCount = messageCount,
+                CurrentOutfit = currentOutfit,
+                CurrentLocation = currentLocation,
+                CurrentMood = currentMood,
+                ClothingState = clothingState,
+                BodyType = bodyType,
+                BodyShape = bodyShape
             };
 
             var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
@@ -3439,6 +3498,145 @@ public class CompanionsController : ControllerBase
         catch (Exception ex)
         {
             return StatusCode(500, new { error = $"Import failed: {ex.Message}" });
+        }
+    }
+
+    [HttpPost("import-url")]
+    public async Task<IActionResult> ImportTavernCardFromUrl([FromBody] ImportUrlRequest req)
+    {
+        if (req == null || string.IsNullOrWhiteSpace(req.Url))
+            return BadRequest(new { error = "PNG Card URL is required." });
+
+        try
+        {
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            
+            var response = await client.GetAsync(req.Url);
+            if (!response.IsSuccessStatusCode)
+                return BadRequest(new { error = $"Failed to download file from URL. HTTP Status: {response.StatusCode}" });
+
+            var fileBytes = await response.Content.ReadAsByteArrayAsync();
+
+            var jsonMetadata = PngTavernCardParser.ExtractTavernMetadata(fileBytes);
+            if (string.IsNullOrEmpty(jsonMetadata))
+            {
+                return BadRequest(new { error = "No Tavern card metadata found in the downloaded file. Make sure the link points directly to a valid PNG card." });
+            }
+
+            // Parse json
+            using var doc = JsonDocument.Parse(jsonMetadata);
+            var root = doc.RootElement;
+            var data = root.TryGetProperty("data", out var d) ? d : root;
+
+            string name = data.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return BadRequest(new { error = "Invalid character data in card: name is empty." });
+            }
+
+            // Validate name to avoid path traversal
+            var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+            if (string.IsNullOrWhiteSpace(cleanName))
+                return BadRequest(new { error = "Invalid companion name." });
+
+            string desc = data.TryGetProperty("description", out var ds) ? ds.GetString() ?? "" : "";
+            string personality = data.TryGetProperty("personality", out var p) ? p.GetString() ?? "" : "";
+            string scenario = data.TryGetProperty("scenario", out var sc) ? sc.GetString() ?? "" : "";
+            string firstMsg = data.TryGetProperty("first_mes", out var fm) ? fm.GetString() ?? "" : "";
+            string systemPrompt = data.TryGetProperty("system_prompt", out var sp) ? sp.GetString() ?? "" : "";
+
+            int relationshipXp = 0;
+            int messageCount = 0;
+            string? currentOutfit = null;
+            string? currentLocation = null;
+            string? currentMood = null;
+            string? clothingState = null;
+            string? bodyType = null;
+            string? bodyShape = null;
+
+            if (root.TryGetProperty("haven_metadata", out var meta))
+            {
+                if (meta.TryGetProperty("relationshipXp", out var rxp)) relationshipXp = rxp.GetInt32();
+                if (meta.TryGetProperty("messageCount", out var mc)) messageCount = mc.GetInt32();
+                if (meta.TryGetProperty("currentOutfit", out var co)) currentOutfit = co.GetString();
+                if (meta.TryGetProperty("currentLocation", out var cl)) currentLocation = cl.GetString();
+                if (meta.TryGetProperty("currentMood", out var cm)) currentMood = cm.GetString();
+                if (meta.TryGetProperty("clothingState", out var cs)) clothingState = cs.GetString();
+                if (meta.TryGetProperty("bodyType", out var bt)) bodyType = bt.GetString();
+                if (meta.TryGetProperty("bodyShape", out var bs)) bodyShape = bs.GetString();
+
+                // Restore memories
+                if (meta.TryGetProperty("memories", out var memories) && memories.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var mem in memories.EnumerateArray())
+                    {
+                        var content = mem.GetProperty("content").GetString() ?? "";
+                        var category = mem.GetProperty("category").GetString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(content) && !string.IsNullOrWhiteSpace(category))
+                        {
+                            await _db.SaveMemory(UserId, name, content, category);
+                        }
+                    }
+                }
+
+                // Restore diaries
+                if (meta.TryGetProperty("diaries", out var diaries) && diaries.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var diary in diaries.EnumerateArray())
+                    {
+                        var dateString = diary.GetProperty("dateString").GetString() ?? "";
+                        var content = diary.GetProperty("content").GetString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(dateString) && !string.IsNullOrWhiteSpace(content))
+                        {
+                            await _db.SaveDiary(UserId, name, dateString, content);
+                        }
+                    }
+                }
+            }
+
+            // Save avatar image to wwwroot/uploads
+            var webRoot = _config["Uploads:Directory"] ?? _config["UploadsDir"] ?? "wwwroot";
+            var uploadsDir = Path.Combine(AppContext.BaseDirectory, webRoot, "uploads");
+            Directory.CreateDirectory(uploadsDir);
+            var avatarFilename = $"companion_{cleanName.ToLowerInvariant()}.png";
+            var avatarPath = Path.Combine(uploadsDir, avatarFilename);
+            await System.IO.File.WriteAllBytesAsync(avatarPath, fileBytes);
+
+            // Construct CompanionConfig
+            var config = new CompanionConfig
+            {
+                Name = name,
+                VoiceId = "en_US-amy-medium", // Default voice
+                Description = desc,
+                Personality = personality,
+                Scenario = scenario,
+                FirstMessage = firstMsg,
+                SystemPrompt = systemPrompt,
+                AvatarPath = $"/uploads/{avatarFilename}",
+                RelationshipXp = relationshipXp,
+                MessageCount = messageCount,
+                CurrentOutfit = currentOutfit,
+                CurrentLocation = currentLocation,
+                CurrentMood = currentMood,
+                ClothingState = clothingState,
+                BodyType = bodyType,
+                BodyShape = bodyShape
+            };
+
+            var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+            var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+            Directory.CreateDirectory(baseDir);
+
+            var profilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            await System.IO.File.WriteAllTextAsync(profilePath, profileJson);
+
+            return Ok(new { ok = true, character = config });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Import from URL failed: {ex.Message}" });
         }
     }
 
@@ -3540,7 +3738,62 @@ public class CompanionsController : ControllerBase
             return null;
         }
     }
+
+    [HttpPost("generate-profile")]
+    public async Task<IActionResult> GenerateProfile([FromBody] GenerateProfileRequest req, CancellationToken cancellationToken)
+    {
+        if (req == null || string.IsNullOrWhiteSpace(req.Prompt))
+            return BadRequest(new { error = "Prompt is required." });
+
+        try
+        {
+            var systemPrompt = "You are a helpful assistant. Generate a character profile based on the user's idea.\n" +
+                               "Output the profile STRICTLY in the following JSON format:\n" +
+                               "{\n" +
+                               "  \"name\": \"Character Name\",\n" +
+                               "  \"description\": \"Short summary of background, appearance, and attire.\",\n" +
+                               "  \"personality\": \"Detailed personality traits, habits, and speech mannerisms.\",\n" +
+                               "  \"scenario\": \"Current roleplay setting or circumstances.\",\n" +
+                               "  \"firstMessage\": \"The initial welcoming message the companion says to start the chat.\",\n" +
+                               "  \"systemPrompt\": \"System directives for how this companion should act.\"\n" +
+                               "}\n" +
+                               "Do not write any extra conversational text, notes, or markdown codeblocks around the JSON. Output only the raw JSON.";
+
+            var modelId = _config["DefaultModel"] ?? "";
+            var messages = new List<ChatMessage>
+            {
+                new ChatMessage("system", systemPrompt),
+                new ChatMessage("user", $"Generate a companion for: {req.Prompt}")
+            };
+
+            var fullText = new System.Text.StringBuilder();
+            await foreach (var token in _backends.StreamChat(modelId, messages, cancellationToken))
+            {
+                fullText.Append(token);
+            }
+
+            var jsonResult = fullText.ToString().Trim();
+            
+            // Clean up any markdown codeblock markers
+            if (jsonResult.StartsWith("```"))
+            {
+                jsonResult = System.Text.RegularExpressions.Regex.Replace(jsonResult, @"^```[a-zA-Z]*\s*", "");
+                jsonResult = System.Text.RegularExpressions.Regex.Replace(jsonResult, @"\s*```$", "");
+                jsonResult = jsonResult.Trim();
+            }
+
+            using var doc = JsonDocument.Parse(jsonResult);
+            return Ok(new { ok = true, profile = doc.RootElement });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Generation failed: {ex.Message}" });
+        }
+    }
 }
+
+public record GenerateProfileRequest(string Prompt);
+public record ImportUrlRequest(string Url);
 
 public class CompanionConfig
 {
