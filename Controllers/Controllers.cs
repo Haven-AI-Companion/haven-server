@@ -3304,12 +3304,14 @@ public class CompanionsController : ControllerBase
             return BadRequest(new { error = "Invalid companion name." });
 
         var filePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+        var baseFilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+        var checkPath = System.IO.File.Exists(filePath) ? filePath : (System.IO.File.Exists(baseFilePath) ? baseFilePath : null);
 
-        if (System.IO.File.Exists(filePath))
+        if (checkPath != null)
         {
             try
             {
-                var oldConfigJson = System.IO.File.ReadAllText(filePath);
+                var oldConfigJson = System.IO.File.ReadAllText(checkPath);
                 var oldConfig = JsonSerializer.Deserialize<CompanionConfig>(oldConfigJson, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                 if (oldConfig != null && !string.IsNullOrWhiteSpace(oldConfig.BodyType) && !string.IsNullOrWhiteSpace(req.BodyType))
                 {
