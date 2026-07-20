@@ -114,15 +114,41 @@ public class ProactiveAgencyService : BackgroundService
                 await Task.Delay(randomIntervalMs, stoppingToken);
 
                 var activeSockets = ChatHandler.ActiveSockets;
-                if (activeSockets.IsEmpty)
+                IEnumerable<string> conversationIds;
+                
+                if (!activeSockets.IsEmpty)
                 {
-                    continue; // Nobody connected
+                    conversationIds = activeSockets.Keys.ToList();
+                }
+                else
+                {
+                    try
+                    {
+                        var users = await _db.GetAllUsers();
+                        var firstUser = users.FirstOrDefault();
+                        if (firstUser != null)
+                        {
+                            var conversations = await _db.GetConversations(firstUser.Id);
+                            conversationIds = conversations
+                                .OrderByDescending(c => c.UpdatedAt)
+                                .Take(3)
+                                .Select(c => c.Id)
+                                .ToList();
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogError(ex, "[proactive-agency] Error resolving fallback conversations");
+                        continue;
+                    }
                 }
 
-                foreach (var convId in activeSockets.Keys)
+                foreach (var convId in conversationIds)
                 {
-                    if (!activeSockets.TryGetValue(convId, out var bag) || bag.IsEmpty)
-                        continue;
 
                     var now = DateTime.UtcNow;
 
