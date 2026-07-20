@@ -3205,12 +3205,14 @@ public class CompanionsController : ControllerBase
     private readonly IConfiguration _config;
     private readonly AshServer.Data.Database _db;
     private readonly BackendManager _backends;
+    private readonly AshServer.Plugins.PluginManager _plugins;
 
-    public CompanionsController(IConfiguration config, AshServer.Data.Database db, BackendManager backends)
+    public CompanionsController(IConfiguration config, AshServer.Data.Database db, BackendManager backends, AshServer.Plugins.PluginManager plugins)
     {
         _config = config;
         _db = db;
         _backends = backends;
+        _plugins = plugins;
     }
 
     private int UserId => int.Parse(User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)!);
@@ -3790,8 +3792,125 @@ public class CompanionsController : ControllerBase
             return StatusCode(500, new { error = $"Generation failed: {ex.Message}" });
         }
     }
+
+    [HttpPost("generate")]
+    public async Task<IActionResult> GenerateCompanion([FromBody] GenerateCompanionRequest req, CancellationToken cancellationToken)
+    {
+        if (req == null || string.IsNullOrWhiteSpace(req.Prompt))
+            return BadRequest(new { error = "Prompt is required." });
+
+        try
+        {
+            var systemPrompt = "You are a helpful assistant. Generate a character profile based on the user's idea.\n" +
+                               "Output the profile STRICTLY in the following JSON format:\n" +
+                               "{\n" +
+                               "  \"name\": \"Character Name\",\n" +
+                               "  \"description\": \"Short summary of background, appearance, and attire.\",\n" +
+                               "  \"personality\": \"Detailed personality traits, habits, and speech mannerisms.\",\n" +
+                               "  \"scenario\": \"Current roleplay setting or circumstances.\",\n" +
+                               "  \"firstMessage\": \"The initial welcoming message the companion says to start the chat.\",\n" +
+                               "  \"systemPrompt\": \"System directives for how this companion should act.\"\n" +
+                               "}\n" +
+                               "Do not write any extra conversational text, notes, or markdown codeblocks around the JSON. Output only the raw JSON.";
+
+            var modelId = _config["DefaultModel"] ?? "";
+            var messages = new List<ChatMessage>
+            {
+                new ChatMessage("system", systemPrompt),
+                new ChatMessage("user", $"Generate a companion for: {req.Prompt}")
+            };
+
+            var fullText = new System.Text.StringBuilder();
+            await foreach (var token in _backends.StreamChat(modelId, messages, cancellationToken))
+            {
+                fullText.Append(token);
+            }
+
+            var jsonResult = fullText.ToString().Trim();
+            if (jsonResult.StartsWith("```"))
+            {
+                jsonResult = System.Text.RegularExpressions.Regex.Replace(jsonResult, @"^```[a-zA-Z]*\s*", "");
+                jsonResult = System.Text.RegularExpressions.Regex.Replace(jsonResult, @"\s*```$", "");
+                jsonResult = jsonResult.Trim();
+            }
+
+            using var doc = JsonDocument.Parse(jsonResult);
+            var root = doc.RootElement;
+
+            string name = root.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            string desc = root.TryGetProperty("description", out var ds) ? ds.GetString() ?? "" : "";
+            string personality = root.TryGetProperty("personality", out var p) ? p.GetString() ?? "" : "";
+            string scenario = root.TryGetProperty("scenario", out var sc) ? sc.GetString() ?? "" : "";
+            string firstMsg = root.TryGetProperty("firstMessage", out var fm) ? fm.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(firstMsg))
+            {
+                firstMsg = root.TryGetProperty("first_mes", out var fm2) ? fm2.GetString() ?? "" : "";
+            }
+            string systemPromptStr = root.TryGetProperty("systemPrompt", out var sp) ? sp.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(systemPromptStr))
+            {
+                systemPromptStr = root.TryGetProperty("system_prompt", out var sp2) ? sp2.GetString() ?? "" : "";
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+                return BadRequest(new { error = "LLM failed to generate a valid name." });
+
+            var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+            if (string.IsNullOrWhiteSpace(cleanName))
+                cleanName = "companion_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+
+            // Formulate Stable Diffusion prompt
+            var sdPromptToUse = string.IsNullOrWhiteSpace(req.SdPrompt)
+                ? $"digital art portrait of {name}, highly detailed, {desc}"
+                : req.SdPrompt;
+
+            var relativeImagePath = "";
+            try
+            {
+                var sdArgObj = new { description = sdPromptToUse };
+                var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
+                relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
+                relativeImagePath = relativeImagePath.Trim();
+                if (!relativeImagePath.StartsWith("/uploads/"))
+                {
+                    relativeImagePath = "";
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[CompanionsController] SD generation failed: {ex.Message}");
+            }
+
+            var config = new CompanionConfig
+            {
+                Name = name,
+                VoiceId = string.IsNullOrWhiteSpace(req.VoiceId) ? "en_US-amy-medium" : req.VoiceId,
+                Description = desc,
+                Personality = personality,
+                Scenario = scenario,
+                FirstMessage = firstMsg,
+                SystemPrompt = systemPromptStr,
+                AvatarPath = relativeImagePath
+            };
+
+            var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+            var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+            Directory.CreateDirectory(baseDir);
+
+            var profilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+            var profileJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            await System.IO.File.WriteAllTextAsync(profilePath, profileJson);
+
+            return Ok(new { ok = true, character = config });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Generation failed: {ex.Message}" });
+        }
+    }
 }
 
+public record GenerateCompanionRequest(string Prompt, string? SdPrompt, string? VoiceId);
 public record GenerateProfileRequest(string Prompt);
 public record ImportUrlRequest(string Url);
 
