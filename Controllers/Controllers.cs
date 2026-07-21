@@ -726,6 +726,27 @@ public class ModelsController : ControllerBase
         var username = User.FindFirstValue(ClaimTypes.Name) ?? "User";
         var systemPrompt = _personality.GetSystemPrompt(username, req.DisplayName);
 
+        var companionName = _personality.AiName ?? "Companion";
+        var compClean = string.Concat(companionName.Split(Path.GetInvalidFileNameChars())).Trim();
+        var convId = string.IsNullOrWhiteSpace(req.ConversationId) ? $"char_{compClean}" : req.ConversationId;
+
+        var convState = await _db.GetConversationState(convId);
+        if (convState != null)
+        {
+            var stateParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(convState.Location)) stateParts.Add($"Location = {convState.Location}");
+            if (!string.IsNullOrWhiteSpace(convState.Outfit)) stateParts.Add($"Outfit = {convState.Outfit}");
+            if (!string.IsNullOrWhiteSpace(convState.Mood)) stateParts.Add($"Mood = {convState.Mood}");
+            if (!string.IsNullOrWhiteSpace(convState.ClothingState)) stateParts.Add($"ClothingState = {convState.ClothingState}");
+
+            if (stateParts.Count > 0)
+            {
+                var stateContext = $"[Companion State: {string.Join(", ", stateParts)}]";
+                systemPrompt = stateContext + "\n" + systemPrompt;
+                Console.WriteLine($"[chat] Injected active companion state: {stateContext}");
+            }
+        }
+
         if (promptText.StartsWith("You are ") && promptText.Contains("\n\n"))
         {
             int lastDoubleNewline = promptText.LastIndexOf("\n\n");
@@ -778,17 +799,12 @@ public class ModelsController : ControllerBase
                 {
                     try
                     {
-                        var companionName = _personality.AiName ?? "Companion";
-                        var compClean = string.Concat(companionName.Split(Path.GetInvalidFileNameChars())).Trim();
                         var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
                         var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
                         var localDir = Path.Combine(baseDir, "local");
                         var localFile = Path.Combine(localDir, $"{compClean.ToLowerInvariant()}.json");
                         var baseFile = Path.Combine(baseDir, $"{compClean.ToLowerInvariant()}.json");
                         var checkFile = System.IO.File.Exists(localFile) ? localFile : (System.IO.File.Exists(baseFile) ? baseFile : null);
-
-                        var convId = string.IsNullOrWhiteSpace(req.ConversationId) ? $"char_{compClean}" : req.ConversationId;
-                        var convState = await _db.GetConversationState(convId);
 
                         CompanionConfig? comp = null;
                         if (checkFile != null)
