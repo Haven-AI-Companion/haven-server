@@ -279,6 +279,7 @@ public class ModelManagerController : ControllerBase
         var cliInstalled = false;
         try
         {
+            RefreshProcessPathEnvironment();
             // 1. Try standard 'where' command check
             var checkPsi = new ProcessStartInfo
             {
@@ -555,6 +556,21 @@ public class ModelManagerController : ControllerBase
         }
         catch {}
         return false;
+    }
+
+    private static void RefreshProcessPathEnvironment()
+    {
+        try
+        {
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+            {
+                var userPath = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("Environment")?.GetValue("Path")?.ToString() ?? "";
+                var systemPath = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"System\CurrentControlSet\Control\Session Manager\Environment")?.GetValue("Path")?.ToString() ?? "";
+                var combinedPath = $"{systemPath};{userPath}";
+                Environment.SetEnvironmentVariable("PATH", combinedPath);
+            }
+        }
+        catch {}
     }
 
     private async Task UpdateActiveModelInConfig(string modelFilename)
