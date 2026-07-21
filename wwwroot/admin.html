@@ -3006,7 +3006,8 @@ async function updateHfStatus() {
         text.innerHTML = 'Hugging Face CLI (<code>huggingface_hub</code>) is not installed in the server environment.';
         actions.innerHTML = '<button class="btn btn-sm" onclick="installHfSdk(this)">Install CLI</button>';
       } else if (s.loggedIn) {
-        if (!s.cliInstalled) {
+        const cliOk = s.cliInstalled || s.CliInstalled || false;
+        if (!cliOk) {
           badge.innerHTML = `<span class="badge badge-success">✓ Logged In</span> <span class="badge badge-warn" title="huggingface-cli command is not available in system PATH. Dynamic panel actions will still work.">CLI Not in PATH</span>`;
         } else {
           badge.innerHTML = `<span class="badge badge-success">✓ Logged In</span>`;
@@ -3014,7 +3015,8 @@ async function updateHfStatus() {
         text.innerHTML = `Authenticated as Hugging Face user: <strong>${s.username}</strong>`;
         actions.innerHTML = '<button class="btn btn-sm btn-danger" onclick="logoutHf(this)">Logout</button>';
       } else {
-        if (!s.cliInstalled) {
+        const cliOk = s.cliInstalled || s.CliInstalled || false;
+        if (!cliOk) {
           badge.innerHTML = '<span class="badge badge-muted">Not Logged In</span> <span class="badge badge-warn" title="huggingface-cli command is not available in system PATH. Dynamic panel actions will still work.">CLI Not in PATH</span>';
         } else {
           badge.innerHTML = '<span class="badge badge-muted">Not Logged In</span>';
