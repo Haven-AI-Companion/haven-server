@@ -279,11 +279,11 @@ public class ModelManagerController : ControllerBase
         var cliInstalled = false;
         try
         {
-            var pythonPath = GetPythonExecutable();
+            // 1. Try standard 'where' command check
             var checkPsi = new ProcessStartInfo
             {
-                FileName = pythonPath,
-                Arguments = "-c \"import huggingface_hub.cli.hf\"",
+                FileName = "cmd.exe",
+                Arguments = "/c where huggingface-cli",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -292,16 +292,49 @@ public class ModelManagerController : ControllerBase
             using var checkProc = Process.Start(checkPsi);
             if (checkProc != null)
             {
-                var stdout = await checkProc.StandardOutput.ReadToEndAsync();
-                var stderr = await checkProc.StandardError.ReadToEndAsync();
                 await checkProc.WaitForExitAsync();
                 cliInstalled = checkProc.ExitCode == 0;
-                Console.WriteLine($"[hf-status] Check: pythonPath='{pythonPath}', ExitCode={checkProc.ExitCode}, STDOUT='{stdout.Trim()}', STDERR='{stderr.Trim()}'");
+            }
+
+            // 2. If 'where' fails, scan local python AppData directories for the Scripts executable
+            if (!cliInstalled)
+            {
+                var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var pythonDir = Path.Combine(localAppData, "Python");
+                if (Directory.Exists(pythonDir))
+                {
+                    var files = Directory.GetFiles(pythonDir, "huggingface-cli.exe", SearchOption.AllDirectories);
+                    if (files.Length > 0)
+                    {
+                        cliInstalled = true;
+                    }
+                }
+            }
+
+            // 3. Fallback to check if it's importable via python
+            if (!cliInstalled)
+            {
+                var pythonPath = GetPythonExecutable();
+                var pythonCheckPsi = new ProcessStartInfo
+                {
+                    FileName = pythonPath,
+                    Arguments = "-c \"import huggingface_hub.cli.hf\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using var pythonCheckProc = Process.Start(pythonCheckPsi);
+                if (pythonCheckProc != null)
+                {
+                    await pythonCheckProc.WaitForExitAsync();
+                    cliInstalled = pythonCheckProc.ExitCode == 0;
+                }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[hf-status] Check failed with exception: {ex.Message}");
+            Console.WriteLine($"[hf-status] CLI detection failed with exception: {ex.Message}");
         }
 
         try
