@@ -280,6 +280,8 @@ public class ModelManagerController : ControllerBase
         try
         {
             RefreshProcessPathEnvironment();
+            Console.WriteLine("[hf-status] Initiating Hugging Face CLI path verification check...");
+
             // 1. Try standard 'where' command check
             var checkPsi = new ProcessStartInfo
             {
@@ -296,6 +298,7 @@ public class ModelManagerController : ControllerBase
                 await checkProc.WaitForExitAsync();
                 cliInstalled = checkProc.ExitCode == 0;
             }
+            Console.WriteLine($"[hf-status] Step 1: cmd.exe 'where' check. Succeeded={cliInstalled}");
 
             // 2. If 'where' fails, scan local python AppData directories for the Scripts executable
             if (!cliInstalled)
@@ -304,10 +307,16 @@ public class ModelManagerController : ControllerBase
                 var pythonDir = Path.Combine(localAppData, "Python");
                 if (Directory.Exists(pythonDir))
                 {
-                    if (SafeSearchCliExecutable(pythonDir))
+                    var found = SafeSearchCliExecutable(pythonDir);
+                    Console.WriteLine($"[hf-status] Step 2: SafeSearchCliExecutable in '{pythonDir}'. Found={found}");
+                    if (found)
                     {
                         cliInstalled = true;
                     }
+                }
+                else
+                {
+                    Console.WriteLine($"[hf-status] Step 2: Python AppData directory '{pythonDir}' does not exist.");
                 }
             }
 
@@ -330,7 +339,10 @@ public class ModelManagerController : ControllerBase
                     await pythonCheckProc.WaitForExitAsync();
                     cliInstalled = pythonCheckProc.ExitCode == 0;
                 }
+                Console.WriteLine($"[hf-status] Step 3: Python import 'huggingface_hub.cli.hf' check using '{pythonPath}'. Succeeded={cliInstalled}");
             }
+            
+            Console.WriteLine($"[hf-status] Final CLI verification result: cliInstalled={cliInstalled}");
         }
         catch (Exception ex)
         {
