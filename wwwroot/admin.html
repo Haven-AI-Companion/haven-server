@@ -789,7 +789,7 @@ select.form-input{cursor:pointer}
             <div class="form-row" style="display:grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap:12px; align-items:flex-end;">
               <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label">Repository ID</label>
-                <input type="text" id="dl-repo-id" class="form-input" placeholder="e.g. OedoSoldier/detail-tweaker-lora">
+                <input type="text" id="dl-repo-id" class="form-input" placeholder="e.g. OedoSoldier/detail-tweaker-lora" onchange="loadRepoFiles(this.value)">
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label">Filename</label>
@@ -3334,12 +3334,50 @@ async function searchHfModels() {
   }
 }
 
+async function loadRepoFiles(repoId) {
+  if (!repoId) return;
+  const filenameInput = document.getElementById('dl-filename');
+  if (!filenameInput) return;
+  const parent = filenameInput.parentElement;
+  
+  filenameInput.disabled = true;
+  filenameInput.placeholder = "Loading available files...";
+  
+  try {
+    const res = await fetch(`/api/admin/models/files?repoId=${encodeURIComponent(repoId)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    const files = data.files || [];
+    
+    if (files && files.length > 0) {
+      parent.innerHTML = `
+        <label class="form-label">Filename</label>
+        <select id="dl-filename" class="form-input">
+          ${files.map(f => `<option value="${f}">${f}</option>`).join('')}
+        </select>
+      `;
+    } else {
+      parent.innerHTML = `
+        <label class="form-label">Filename</label>
+        <input type="text" id="dl-filename" class="form-input" placeholder="e.g. add_detail.safetensors" value="">
+      `;
+    }
+  } catch (err) {
+    parent.innerHTML = `
+      <label class="form-label">Filename</label>
+      <input type="text" id="dl-filename" class="form-input" placeholder="e.g. add_detail.safetensors" value="">
+    `;
+  }
+}
+
 function selectSearchModel(repoId, defaultType) {
   const dlRepoInput = document.getElementById('dl-repo-id');
   const dlTypeSelect = document.getElementById('dl-type');
   if (dlRepoInput) dlRepoInput.value = repoId;
   if (dlTypeSelect) dlTypeSelect.value = defaultType;
-  toast(`Selected: ${repoId}. Enter the exact filename below to start downloading!`);
+  toast(`Selected: ${repoId}. Fetching model files...`);
+  loadRepoFiles(repoId);
 }
 
 /* ── External Identity Links ─────────────────────────────────────────────── */

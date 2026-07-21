@@ -492,6 +492,49 @@ public class ModelManagerController : ControllerBase
         }
     }
 
+    [HttpGet("files")]
+    public async Task<IActionResult> GetRepoFiles([FromQuery] string repoId)
+    {
+        if (string.IsNullOrWhiteSpace(repoId))
+            return BadRequest(new { error = "Query parameter 'repoId' is required." });
+
+        try
+        {
+            var pythonPath = GetPythonExecutable();
+            var scriptPath = Path.Combine(UserProfileDir, "haven-server", "repo_files_helper.py");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = pythonPath,
+                Arguments = $"\"{scriptPath}\" \"{repoId.Replace("\"", "\\\"")}\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+                return StatusCode(500, new { error = "Failed to start repository files query process." });
+
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                return BadRequest(new { error = string.IsNullOrWhiteSpace(error) ? "Files helper exited with code " + process.ExitCode : error.Trim() });
+            }
+
+            using var doc = JsonDocument.Parse(output);
+            return Ok(new { ok = true, files = doc.RootElement.Clone() });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     [HttpGet("search")]
     public async Task<IActionResult> SearchModels([FromQuery] string q)
     {
