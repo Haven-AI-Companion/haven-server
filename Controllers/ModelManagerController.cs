@@ -292,29 +292,26 @@ public class ModelManagerController : ControllerBase
             using var checkProc = Process.Start(checkPsi);
             if (checkProc != null)
             {
+                var stdout = await checkProc.StandardOutput.ReadToEndAsync();
+                var stderr = await checkProc.StandardError.ReadToEndAsync();
                 await checkProc.WaitForExitAsync();
                 cliInstalled = checkProc.ExitCode == 0;
+                Console.WriteLine($"[hf-status] Check: pythonPath='{pythonPath}', ExitCode={checkProc.ExitCode}, STDOUT='{stdout.Trim()}', STDERR='{stderr.Trim()}'");
             }
         }
-        catch {}
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[hf-status] Check failed with exception: {ex.Message}");
+        }
 
         try
         {
             var pythonPath = GetPythonExecutable();
+            var scriptPath = Path.Combine(UserProfileDir, "haven-server", "hf_status_helper.py");
             var psi = new ProcessStartInfo
             {
                 FileName = pythonPath,
-                Arguments = "-c \"import sys, json; " +
-                            "try: " +
-                            "  import huggingface_hub; " +
-                            "  api = huggingface_hub.HfApi(); " +
-                            "  try: " +
-                            "    user = api.whoami(); " +
-                            "    print(json.dumps({'installed': True, 'loggedIn': True, 'username': user.get('name')})); " +
-                            "  except: " +
-                            "    print(json.dumps({'installed': True, 'loggedIn': False})); " +
-                            "except Exception as e: " +
-                            "  print(json.dumps({'installed': False, 'loggedIn': False, 'error': str(e)}));\"",
+                Arguments = $"\"{scriptPath}\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
