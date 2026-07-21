@@ -730,6 +730,86 @@ select.form-input{cursor:pointer}
           <div class="card-title">Connected Backends <button class="btn btn-sm btn-primary" onclick="toggleAddForm()">+ Add Backend</button></div>
           <div id="backends-list"><div class="empty"><div class="empty-icon">🤖</div><p class="txt-muted">No backends configured yet. Add one above, or <a href="https://ollama.com/download" target="_blank" style="color:var(--accent);">install Ollama</a> and it will be detected automatically.</p></div></div>
         </div>
+
+        <!-- Model & LoRA Manager -->
+        <div class="card" style="margin-top: 16px;">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Model &amp; LoRA Manager</span>
+            <div id="hf-connection-badge" style="font-size:12px; font-weight:normal;">Checking HF status...</div>
+          </div>
+          
+          <!-- Hugging Face Authentication Section -->
+          <div id="hf-auth-section" style="background:var(--surface2); padding:12px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; border:1px solid var(--border);">
+            <div style="font-size:13px;">
+              <strong>Hugging Face Integration</strong>
+              <div id="hf-status-text" class="txt-muted" style="margin-top:2px;">Checking for library installation and active login credentials...</div>
+            </div>
+            <div id="hf-auth-actions" style="display:flex; gap:8px; align-items:center;">
+              <!-- Dynamic Login input and buttons injected via JS -->
+            </div>
+          </div>
+
+          <!-- Active Inference Models -->
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+            <div style="background:var(--surface2); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border);">
+              <label class="form-label" style="font-weight:600;">Active GGUF Model (llama-server)</label>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <select id="active-model-select" class="form-input" style="flex:1;"></select>
+                <button id="activate-model-btn" class="btn btn-primary" onclick="activateModel()">Switch</button>
+              </div>
+              <div id="llama-server-status" class="txt-muted" style="font-size:12px; margin-top:6px;">Status: Checking...</div>
+            </div>
+
+            <div style="background:var(--surface2); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border);">
+              <label class="form-label" style="font-weight:600;">Active Stable Diffusion (sd-server)</label>
+              <div style="margin-top:8px; font-size:13px; font-weight:600; display:flex; align-items:center; height:36px; padding:0 8px; background:var(--surface1); border-radius:var(--radius-sm); border:1px solid var(--border);">
+                DreamShaper8 LCM (q8_0)
+              </div>
+              <div id="sd-server-status" class="txt-muted" style="font-size:12px; margin-top:6px;">Status: Checking...</div>
+            </div>
+          </div>
+
+          <!-- Download Model / LoRA Form -->
+          <div style="border-top:1px solid var(--border); padding-top:16px;">
+            <div style="font-weight:600; margin-bottom:12px;">Download Models/LoRAs from Hugging Face</div>
+            <div class="form-row" style="display:grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap:12px; align-items:flex-end;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Repository ID</label>
+                <input type="text" id="dl-repo-id" class="form-input" placeholder="e.g. OedoSoldier/detail-tweaker-lora">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Filename</label>
+                <input type="text" id="dl-filename" class="form-input" placeholder="e.g. add_detail.safetensors">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Type</label>
+                <select id="dl-type" class="form-input">
+                  <option value="lora">LoRA (.safetensors)</option>
+                  <option value="gguf">Model (.gguf)</option>
+                </select>
+              </div>
+              <button class="btn btn-primary" onclick="triggerDownload()" style="height:36px;">Download</button>
+            </div>
+          </div>
+
+          <!-- Active Downloads & Installed List -->
+          <div id="active-downloads-section" style="margin-top:16px; display:none;">
+            <div style="font-weight:600; margin-bottom:8px; font-size:13px;">Active Downloads</div>
+            <div id="active-downloads-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+          </div>
+          
+          <div style="margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+            <div>
+              <div style="font-weight:600; margin-bottom:8px; font-size:13px; color:var(--text);">Installed Models (.gguf)</div>
+              <div id="installed-gguf-list" class="txt-muted" style="font-size:12px; display:flex; flex-direction:column; gap:4px; max-height:150px; overflow-y:auto; background:var(--surface2); padding:8px; border-radius:var(--radius-sm); border:1px solid var(--border);">None</div>
+            </div>
+            <div>
+              <div style="font-weight:600; margin-bottom:8px; font-size:13px; color:var(--text);">Installed LoRAs (.safetensors)</div>
+              <div id="installed-lora-list" class="txt-muted" style="font-size:12px; display:flex; flex-direction:column; gap:4px; max-height:150px; overflow-y:auto; background:var(--surface2); padding:8px; border-radius:var(--radius-sm); border:1px solid var(--border);">None</div>
+            </div>
+          </div>
+
+        </div>
       </div>
       <!-- Companions -->
       <div class="tab-content" id="companions">
@@ -1641,7 +1721,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     if (tab === 'grid') loadGridNodes();
     if (tab === 'database') loadDatabaseStatus();
     if (tab === 'config') loadConfigToMenu();
-    if (tab === 'backends') loadBackends();
+    if (tab === 'backends') { loadBackends(); initModelManager(); }
     if (tab === 'users') loadUsers();
     if (tab === 'roles') loadRoles();
     if (tab === 'companions') loadCompanions();
@@ -2866,6 +2946,295 @@ async function deleteBackend(id) {
     await fetch(`/api/admin/backends/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
     toast('Backend deleted'); loadBackends();
   } catch (err) { toast('Failed: ' + err.message, 'error'); }
+}
+
+/* ── Model & LoRA Manager ─────────────────────────────────────────────── */
+
+let modelManagerInterval = null;
+
+async function initModelManager() {
+  if (modelManagerInterval) clearInterval(modelManagerInterval);
+  
+  await updateHfStatus();
+  await updateInstalledModels();
+  await updateActiveModels();
+  await updateDownloadStatus();
+  
+  // Poll download progress and server statuses every 4 seconds
+  modelManagerInterval = setInterval(async () => {
+    // Only poll if the backends tab is still active
+    const activeTab = document.querySelector('.nav-item.active')?.dataset.tab;
+    if (activeTab !== 'backends') {
+      clearInterval(modelManagerInterval);
+      modelManagerInterval = null;
+      return;
+    }
+    await updateDownloadStatus();
+    await updateActiveModels();
+  }, 4000);
+}
+
+async function updateHfStatus() {
+  const badge = document.getElementById('hf-connection-badge');
+  const text = document.getElementById('hf-status-text');
+  const actions = document.getElementById('hf-auth-actions');
+  
+  if (!badge || !text || !actions) return;
+  
+  try {
+    const res = await fetch('/api/admin/models/hf-status', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    
+    if (data.ok && data.status) {
+      const s = data.status;
+      if (!s.installed) {
+        badge.innerHTML = '<span class="badge badge-muted">HF SDK Not Found</span>';
+        text.innerHTML = 'Python <code>huggingface_hub</code> package is not installed in the server environment.';
+        actions.innerHTML = '<button class="btn btn-sm" onclick="installHfSdk(this)">Install SDK</button>';
+      } else if (s.loggedIn) {
+        badge.innerHTML = `<span class="badge badge-success">✓ Logged In</span>`;
+        text.innerHTML = `Authenticated as Hugging Face user: <strong>${s.username}</strong>`;
+        actions.innerHTML = '<button class="btn btn-sm btn-danger" onclick="logoutHf(this)">Logout</button>';
+      } else {
+        badge.innerHTML = '<span class="badge badge-muted">Not Logged In</span>';
+        text.innerHTML = 'Credentials not found. Paste your Hugging Face User Access Token to download gated models.';
+        actions.innerHTML = `
+          <input type="password" id="hf-token-input" class="form-input form-input-sm" style="width:160px;" placeholder="hf_...">
+          <button class="btn btn-sm btn-primary" onclick="loginHf(this)">Login</button>
+        `;
+      }
+    }
+  } catch (err) {
+    badge.innerHTML = '<span class="badge badge-danger">Connection Error</span>';
+  }
+}
+
+async function loginHf(btn) {
+  const tokenInput = document.getElementById('hf-token-input');
+  if (!tokenInput || !tokenInput.value.trim()) return;
+  const origText = btn.textContent;
+  btn.textContent = '...'; btn.disabled = true;
+  
+  try {
+    const res = await fetch('/api/admin/models/hf-login', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ token: tokenInput.value.trim() })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Login failed');
+    }
+    toast('Hugging Face authentication successful!');
+    updateHfStatus();
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.textContent = origText; btn.disabled = false;
+  }
+}
+
+async function logoutHf(btn) {
+  const origText = btn.textContent;
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/models/hf-login', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ token: 'LOGOUT' })
+    });
+    toast('Logged out from Hugging Face');
+    updateHfStatus();
+  } catch (err) {
+    updateHfStatus();
+  } finally {
+    btn.textContent = origText; btn.disabled = false;
+  }
+}
+
+async function installHfSdk(btn) {
+  toast('Run "pip install huggingface_hub" on your server console.', 'info');
+}
+
+async function updateInstalledModels() {
+  const select = document.getElementById('active-model-select');
+  const ggufList = document.getElementById('installed-gguf-list');
+  const loraList = document.getElementById('installed-lora-list');
+  
+  if (!select || !ggufList || !loraList) return;
+  
+  try {
+    const res = await fetch('/api/admin/models/installed', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.ok) {
+      const activeRes = await fetch('/api/admin/models/active', { headers: { Authorization: `Bearer ${token}` } });
+      const activeData = await activeRes.json();
+      const activeModel = activeData.activeGguf || '';
+
+      if (data.gguf && data.gguf.length) {
+        select.innerHTML = data.gguf.map(g => `
+          <option value="${g.filename}" ${g.filename === activeModel ? 'selected' : ''}>${g.filename}</option>
+        `).join('');
+        
+        ggufList.innerHTML = data.gguf.map(g => `
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid var(--border); padding-bottom:2px;">
+            <span>${g.filename}</span>
+            <span>${(g.sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB</span>
+          </div>
+        `).join('');
+      } else {
+        select.innerHTML = '<option value="">No GGUF models installed</option>';
+        ggufList.innerHTML = '<div>No models found in C:\\Users\\admin\\gemma4-turbo-family</div>';
+      }
+
+      if (data.lora && data.lora.length) {
+        loraList.innerHTML = data.lora.map(l => `
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid var(--border); padding-bottom:2px;">
+            <span>${l.filename}</span>
+            <span>${(l.sizeBytes / (1024 * 1024)).toFixed(1)} MB</span>
+          </div>
+        `).join('');
+      } else {
+        loraList.innerHTML = '<div>No LoRAs found in C:\\Users\\admin\\stable-diffusion-cpp\\models\\lora-models</div>';
+      }
+    }
+  } catch (err) {
+    ggufList.innerHTML = '<div>Error loading installed models</div>';
+  }
+}
+
+async function updateActiveModels() {
+  const llamaStatus = document.getElementById('llama-server-status');
+  const sdStatus = document.getElementById('sd-server-status');
+  
+  if (!llamaStatus || !sdStatus) return;
+  
+  try {
+    const res = await fetch('/api/admin/models/active', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.ok) {
+      if (data.isLlamaRunning) {
+        llamaStatus.innerHTML = `Status: <span class="txt-success">● Active</span> (PID: ${data.llamaPid}, Model: <code>${data.activeGguf}</code>)`;
+      } else {
+        llamaStatus.innerHTML = `Status: <span class="txt-error">Offline</span> (Offline / Restarting)`;
+      }
+
+      if (data.isSdRunning) {
+        sdStatus.innerHTML = `Status: <span class="txt-success">● Active</span> (PID: ${data.sdPid})`;
+      } else {
+        sdStatus.innerHTML = `Status: <span class="txt-error">Offline</span> (Offline / Restarting)`;
+      }
+    }
+  } catch {}
+}
+
+async function activateModel() {
+  const select = document.getElementById('active-model-select');
+  const btn = document.getElementById('activate-model-btn');
+  if (!select || !select.value || !btn) return;
+  const origText = btn.textContent;
+  btn.textContent = '...'; btn.disabled = true;
+  
+  try {
+    const res = await fetch('/api/admin/models/activate', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ modelFilename: select.value })
+    });
+    if (!res.ok) throw new Error('Activation failed');
+    toast('Model change requested. Server sidecar is restarting in background!');
+    setTimeout(updateActiveModels, 2000);
+    setTimeout(updateActiveModels, 5000);
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.textContent = origText; btn.disabled = false;
+  }
+}
+
+async function triggerDownload() {
+  const repoIdInput = document.getElementById('dl-repo-id');
+  const filenameInput = document.getElementById('dl-filename');
+  const typeInput = document.getElementById('dl-type');
+  
+  if (!repoIdInput || !filenameInput || !typeInput) return;
+  
+  const repoId = repoIdInput.value.trim();
+  const filename = filenameInput.value.trim();
+  const type = typeInput.value;
+  
+  if (!repoId || !filename) {
+    toast('Repository ID and Filename are required', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/admin/models/download', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        repoId: repoId,
+        filename: filename,
+        modelType: type
+      })
+    });
+    if (!res.ok) throw new Error('Failed to start download');
+    toast('Download started in background!');
+    repoIdInput.value = '';
+    filenameInput.value = '';
+    updateDownloadStatus();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function updateDownloadStatus() {
+  const section = document.getElementById('active-downloads-section');
+  const list = document.getElementById('active-downloads-list');
+  
+  if (!section || !list) return;
+  
+  try {
+    const res = await fetch('/api/admin/models/download/status', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    
+    if (data.ok && data.downloads && data.downloads.length) {
+      const activeDl = data.downloads.filter(d => d.state === 'Downloading' || d.state === 'Pending');
+      if (activeDl.length) {
+        section.style.display = 'block';
+        list.innerHTML = activeDl.map(d => `
+          <div style="background:var(--surface1); padding:8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:12px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <strong>${d.filename}</strong>
+              <span class="txt-muted">${d.state} (${d.progress})</span>
+            </div>
+            <div style="width:100%; height:6px; background:var(--surface2); border-radius:3px; overflow:hidden;">
+              <div style="width:${d.progress}; height:100%; background:var(--accent); transition: width 0.5s ease;"></div>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        section.style.display = 'none';
+      }
+      
+      const completed = data.downloads.some(d => d.state === 'Completed');
+      if (completed) {
+        updateInstalledModels();
+      }
+    }
+  } catch {}
 }
 
 /* ── External Identity Links ─────────────────────────────────────────────── */
