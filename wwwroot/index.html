@@ -53,10 +53,11 @@
     left: -10%;
     width: 60%;
     height: 60%;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+    background: radial-gradient(circle, var(--glow-color-1, rgba(99, 102, 241, 0.12)) 0%, transparent 70%);
     z-index: -1;
     pointer-events: none;
     filter: blur(80px);
+    transition: background 0.8s ease;
   }
   body::after {
     content: '';
@@ -65,10 +66,11 @@
     right: -10%;
     width: 60%;
     height: 60%;
-    background: radial-gradient(circle, rgba(217, 70, 239, 0.1) 0%, transparent 70%);
+    background: radial-gradient(circle, var(--glow-color-2, rgba(217, 70, 239, 0.1)) 0%, transparent 70%);
     z-index: -1;
     pointer-events: none;
     filter: blur(80px);
+    transition: background 0.8s ease;
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -306,6 +308,12 @@
   .settings-msg.ok { color: var(--success); }
   .settings-msg.err { color: var(--error); }
 
+  #card-drop-zone.hover {
+    border-color: var(--accent) !important;
+    background-color: rgba(139, 92, 246, 0.08) !important;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.15) !important;
+  }
+
   /* Spinner */
   .spinner { border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -334,12 +342,51 @@
   .export-item { display: block; padding: 8px 14px; font-size: 13px; color: var(--text-muted); cursor: pointer; white-space: nowrap; border: none; background: none; width: 100%; text-align: left; font-family: inherit; transition: background 0.1s, color 0.1s; }
   .export-item:hover { background: var(--surface2); color: var(--text); }
 
-  /* Message copy button */
-  .msg-copy-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim); padding: 2px 6px; font-size: 11px; cursor: pointer; opacity: 0; transition: opacity 0.15s, color 0.15s, border-color 0.15s; font-family: inherit; margin-top: 4px; align-self: flex-start; }
-  .msg-row.user .msg-copy-btn { align-self: flex-end; }
-  .msg-row:hover .msg-copy-btn { opacity: 1; }
-  .msg-copy-btn:hover { color: var(--text); border-color: var(--border2); }
-  .msg-copy-btn.copied { color: var(--success); border-color: var(--success); opacity: 1; }
+  /* Message actions bar */
+  .msg-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.15s;
+    align-self: flex-start;
+    transform: translateY(3px);
+  }
+  .msg-row.user .msg-actions {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+  }
+  .msg-row:hover .msg-actions {
+    opacity: 1;
+    transform: none;
+  }
+  .msg-action-btn {
+    background: rgba(30, 26, 42, 0.7);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .msg-action-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    box-shadow: 0 0 6px var(--accent-glow);
+    background: var(--surface2);
+  }
+  .msg-action-btn.copied {
+    color: var(--success) !important;
+    border-color: var(--success) !important;
+  }
+  .msg-action-btn svg {
+    width: 12px;
+    height: 12px;
+  }
 
   /* Message timestamp */
   .msg-time { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
@@ -357,6 +404,265 @@
     transition: opacity 0.5s ease, filter 0.5s ease;
     opacity: 0.7;
     filter: blur(2px);
+  }
+
+  /* Right panel */
+  .right-panel {
+    width: 320px;
+    min-width: 320px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s, width 0.2s;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .right-panel.collapsed {
+    width: 0;
+    min-width: 0;
+    transform: translateX(100%);
+    border-left: none;
+    overflow: hidden;
+  }
+  .right-panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .right-panel-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .right-panel-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .right-panel-close:hover {
+    color: var(--text);
+    background: var(--surface2);
+  }
+  .right-panel-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Companion card large */
+  .companion-card-large {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+  }
+  .companion-avatar-large-wrap {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 16px var(--accent-glow);
+  }
+  .companion-avatar-large-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .companion-details-large h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .companion-details-large span {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* XP progression */
+  .xp-container {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+  }
+  .xp-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 8px;
+    color: var(--text-muted);
+  }
+  .xp-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .xp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #d946ef);
+    border-radius: 3px;
+    box-shadow: 0 0 8px var(--accent-glow);
+    transition: width 0.3s ease;
+  }
+
+  /* State pills */
+  .companion-states {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .state-pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+  }
+  .state-pill span {
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+  }
+
+  /* Section header */
+  .right-panel-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .section-action-btn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+  }
+  .section-action-btn:hover {
+    text-decoration: underline;
+  }
+  .vault-list, .reflections-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .vault-empty {
+    padding: 12px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .vault-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .vault-item-meta {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  /* Thought blocks */
+  .thought-block {
+    margin: 12px 0;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: linear-gradient(135deg, rgba(22, 18, 30, 0.3) 0%, rgba(15, 12, 22, 0.5) 100%);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    transition: border-color 0.3s, box-shadow 0.3s;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .thought-block[open] {
+    border-color: var(--accent);
+    box-shadow: 0 0 15px var(--accent-glow);
+  }
+  .thought-block summary {
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    list-style: none;
+    transition: color 0.2s;
+  }
+  .thought-block summary::-webkit-details-marker { display: none; }
+  .thought-block summary:hover {
+    color: var(--accent);
+  }
+  .thought-block summary::before {
+    content: '🧠';
+    font-size: 12px;
+    filter: drop-shadow(0 0 2px var(--accent));
+    transition: transform 0.3s ease;
+  }
+  .thought-block[open] summary::before {
+    transform: scale(1.2) rotate(15deg);
+    content: '⚡';
+  }
+  .thought-content {
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
+    background: rgba(0, 0, 0, 0.15);
+    border-top: 1px solid var(--border);
+    animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 </style>
 </head>
@@ -423,17 +729,17 @@
         <span class="sidebar-logo-text">Haven</span>
         <span class="sidebar-logo-badge" id="version-badge">v2</span>
       </div>
-      <div class="model-select-wrap">
-        <select class="model-select" id="model-select" onchange="onModelChange()">
-          <option value="">Loading models…</option>
-        </select>
-      </div>
       <button class="new-chat-btn" onclick="newConversation()">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         New conversation
       </button>
     </div>
-    <div class="sidebar-section-label">Active Companion</div>
+    <div class="sidebar-section-label" style="display:flex; justify-content:space-between; align-items:center; padding-right:16px;">
+      <span>Active Companion</span>
+      <button class="creator-trigger-btn" onclick="openCompanionCreator()" title="Create or Import Companion" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:2px; display:flex; align-items:center; transition:color 0.15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.5v13M1.5 8h13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
     <div style="padding: 0 16px 12px 16px;">
       <div class="companion-select-wrap">
         <select class="companion-select" id="companion-select" onchange="onCompanionChange()">
@@ -449,6 +755,13 @@
       </div>
     </div>
     <div class="conversations" id="conv-list"></div>
+    <div class="sidebar-section-label" style="display:flex; justify-content:space-between; align-items:center; padding-right:16px; margin-top:16px;">
+      <span>Group Rooms</span>
+      <button class="creator-trigger-btn" onclick="openGroupCreator()" title="Create Group Room" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:2px; display:flex; align-items:center; transition:color 0.15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.5v13M1.5 8h13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="conversations" id="group-list" style="margin-bottom: 12px;"></div>
     <div class="sidebar-footer">
       <div class="user-avatar" id="user-avatar">?</div>
       <div class="user-info">
@@ -478,6 +791,7 @@
         <div class="header-title" id="chat-title">Haven</div>
         <div class="header-subtitle" id="chat-model-label">Select a model</div>
       </div>
+      <div id="group-companions-chips" style="display: none; align-items: center; gap: 8px; margin-left: 12px; border-left: 1px solid var(--border); padding-left: 12px;"></div>
       <div class="header-actions">
         <div class="export-dropdown" id="export-dropdown" style="display:none">
           <button class="icon-btn" onclick="toggleExportMenu(event)" title="Export conversation">
@@ -493,6 +807,10 @@
         <button class="icon-btn" onclick="clearChat()" title="Clear messages">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4h10l-1 8H3L2 4zm3-3h4M5.5 7v4M8.5 7v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Clear
+        </button>
+        <button class="icon-btn" onclick="toggleRightPanel()" title="Companion details">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 15A7 7 0 108 1a7 7 0 000 14zm0-10v5m0 2h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Profile
         </button>
       </div>
     </header>
@@ -522,6 +840,12 @@
           <button class="attach-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach file">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12.5 6.5l-6 6a3.5 3.5 0 01-4.95-4.95l6-6a2 2 0 012.83 2.83l-6 6a.5.5 0 01-.71-.71l5.3-5.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
+          <button class="attach-btn" id="stt-record" onclick="toggleStt()" title="Microphone (Speech to Text)" style="color: var(--text-dim); transition: color 0.2s;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          </button>
+          <button class="attach-btn" id="tts-toggle" onclick="toggleTts()" title="Speak companion replies" style="color: var(--text-dim); transition: color 0.2s;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          </button>
           <textarea class="input-field" id="input-field" placeholder="Message Companion…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
           <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14L14 8 2 2v4.5l8 1.5-8 1.5V14z" fill="currentColor"/></svg>
@@ -529,16 +853,66 @@
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div class="input-hint">Press <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line</div>
-          <div class="agent-toggle">
-            <label for="agent-mode-toggle">
-              <input type="checkbox" id="agent-mode-toggle" onchange="onAgentModeChange()">
-              🔧 Agent mode
-            </label>
-          </div>
         </div>
       </div>
     </div>
   </main>
+  <aside class="right-panel collapsed" id="right-panel">
+    <div class="right-panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="right-panel-title">Companion Info</span>
+        <button class="edit-companion-btn" onclick="openCompanionEditor()" title="Edit Companion Profile" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:2px; display:flex; align-items:center; transition:color 0.15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+      </div>
+      <button class="right-panel-close" onclick="toggleRightPanel()">×</button>
+    </div>
+    <div class="right-panel-body">
+      <div class="companion-card-large">
+        <div class="companion-avatar-large-wrap">
+          <img id="companion-avatar-large" src="/static/haven_logo.png" alt="Avatar">
+        </div>
+        <div class="companion-details-large">
+          <h3 id="companion-name-large">Companion</h3>
+          <span id="companion-level-tag">Level 1 · Acquaintance</span>
+        </div>
+      </div>
+      
+      <div class="xp-container">
+        <div class="xp-header">
+          <span>Relationship Level</span>
+          <span id="companion-xp-text">0 / 100 XP</span>
+        </div>
+        <div class="xp-bar">
+          <div class="xp-fill" id="companion-xp-fill" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div class="companion-states">
+        <div class="state-pill">📍 <span id="companion-state-location">Unknown</span></div>
+        <div class="state-pill">👗 <span id="companion-state-outfit">Standard</span></div>
+        <div class="state-pill">🎭 <span id="companion-state-mood">Normal</span></div>
+      </div>
+
+      <div class="right-panel-section">
+        <div class="section-header">
+          <span>Memory Vault</span>
+        </div>
+        <div class="vault-list" id="vault-list-summary">
+          <div class="vault-empty">No active memories loaded</div>
+        </div>
+      </div>
+
+      <div class="right-panel-section">
+        <div class="section-header">
+          <span>Daily Reflections</span>
+        </div>
+        <div class="reflections-list" id="reflections-list-summary">
+          <div class="vault-empty">No daily journals written yet</div>
+        </div>
+      </div>
+    </div>
+  </aside>
 </div>
 <button id="scroll-btn" onclick="scrollBottom()" title="Scroll to bottom"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4l5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
@@ -552,6 +926,7 @@
     <div class="modal-tabs">
       <button class="modal-tab active" id="tab-profile" onclick="switchTab('profile')">Profile</button>
       <button class="modal-tab" id="tab-security" onclick="switchTab('security')">Security</button>
+      <button class="modal-tab" id="tab-advanced" onclick="switchTab('advanced')">Advanced</button>
     </div>
 
     <!-- Profile tab -->
@@ -580,6 +955,25 @@
         <div class="settings-msg" id="email-msg"></div>
       </div>
       <div class="settings-section" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+        <div class="settings-label">User Identity & Pronouns</div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label class="form-label" style="font-size:12px; color:var(--text-muted);">Display Name</label>
+          <input class="form-input" id="s-display-name" type="text" placeholder="Your name (e.g. Alex)">
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label class="form-label" style="font-size:12px; color:var(--text-muted);">Gender / Pronouns</label>
+          <select class="form-input" id="s-gender">
+            <option value="female">Female (she/her)</option>
+            <option value="male">Male (he/him)</option>
+            <option value="non-binary">Non-binary (they/them)</option>
+          </select>
+        </div>
+        <div class="modal-footer" style="padding:0; margin-top:8px;">
+          <button class="save-btn" id="save-profile-btn" onclick="saveUserProfile()">Save Profile</button>
+          <div class="settings-msg" id="profile-msg"></div>
+        </div>
+      </div>
+      <div class="settings-section" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
         <div class="settings-label">Mobile Companion</div>
         <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:8px;">
           Connect the Haven mobile app to chat on your device.
@@ -599,6 +993,25 @@
       <div class="modal-footer" style="padding:0">
         <button class="save-btn" id="save-pass-btn" onclick="savePassword()">Change password</button>
         <div class="settings-msg" id="pass-msg"></div>
+      </div>
+    </div>
+
+    <!-- Advanced tab -->
+    <div class="modal-body" id="settings-advanced" style="display:none">
+      <div class="settings-section">
+        <div class="settings-label">Model Selection</div>
+        <div class="model-select-wrap">
+          <select class="model-select" id="model-select" onchange="onModelChange()" style="width:100%;">
+            <option value="">Loading models…</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-section" style="margin-top:10px; border-top:1px solid var(--border); padding-top:16px;">
+        <div class="settings-label">Agent Mode & Tool Execution</div>
+        <div class="settings-row" style="margin-top:8px;">
+          <span class="settings-info">Allow companions to execute system tools (Agent Mode)</span>
+          <input type="checkbox" id="agent-mode-toggle" onchange="onAgentModeChange()" style="width:18px; height:18px; accent-color:var(--accent); cursor:pointer;">
+        </div>
       </div>
     </div>
 </div>
@@ -643,6 +1056,180 @@
   </div>
 </div>
 
+<!-- Companion Creator / Editor Modal -->
+<div class="modal-overlay" id="companion-creator-modal" style="display:none; z-index:9999;" onclick="closeCompanionCreatorOnBg(event)">
+  <div class="modal" style="max-width:800px; width:90%; display:flex; flex-direction:column; max-height:85vh;">
+    <div class="modal-header">
+      <span class="modal-title" id="companion-creator-title">Create Companion</span>
+      <button class="modal-close" onclick="closeCompanionCreator()">×</button>
+    </div>
+    
+    <div class="modal-body" style="display:flex; gap:20px; overflow-y:auto; padding:20px; flex-direction:row;">
+      <!-- Left side: Importer drag & drop -->
+      <div style="flex:1; display:flex; flex-direction:column; gap:16px; min-width:250px;">
+        <div class="settings-label">Import from Tavern Card</div>
+        
+        <div id="card-drop-zone" 
+             style="border:2px dashed var(--border); border-radius:8px; padding:30px 16px; text-align:center; cursor:pointer; background:var(--surface2); transition:border-color 0.2s, background-color 0.2s; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;"
+             onclick="document.getElementById('card-file-input').click()"
+             ondragover="onCardDragOver(event)"
+             ondragleave="onCardDragLeave(event)"
+             ondrop="onCardDrop(event)">
+          <input type="file" id="card-file-input" accept="image/png" style="display:none" onchange="onCardFileSelect(event)">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-muted);"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+          <span style="font-size:12.5px; font-weight:500;">Drag & Drop PNG Card</span>
+          <span style="font-size:11px; color:var(--text-dim);">or click to select file</span>
+        </div>
+        
+        <div style="text-align:center; font-size:11px; text-transform:uppercase; font-weight:600; color:var(--text-dim); letter-spacing:0.05em; margin:4px 0;">— OR —</div>
+        
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <span style="font-size:11px; font-weight:600; color:var(--text-dim); text-transform:uppercase;">Import from URL</span>
+          <div style="display:flex; gap:6px;">
+            <input class="form-input" id="card-url-input" type="url" placeholder="https://chara.card/chara.png" style="margin:0; flex:1; font-size:12.5px;">
+            <button class="save-btn" onclick="importCardFromUrl()" style="padding:6px 12px; margin:0; width:auto; font-size:12px;">Import</button>
+          </div>
+        </div>
+        
+        <div id="importer-status-msg" style="font-size:12px; text-align:center; min-height:16px; margin-top:8px;"></div>
+      </div>
+      
+      <!-- Right side: Profile Form details -->
+      <div style="flex:1.5; display:flex; flex-direction:column; gap:12px; border-left:1px solid var(--border); padding-left:20px; min-width:300px;">
+        <div class="settings-label">Companion Persona Configuration</div>
+        
+        <div style="display:flex; gap:10px;">
+          <div class="form-group" style="flex:1.5; margin:0; display:flex; flex-direction:column; gap:4px;">
+            <label class="form-label">Name</label>
+            <input class="form-input" id="c-name" type="text" placeholder="Companion name">
+          </div>
+          <div class="form-group" style="flex:1; margin:0; display:flex; flex-direction:column; gap:4px;">
+            <label class="form-label">TTS Voice Model ID</label>
+            <input class="form-input" id="c-voice" type="text" placeholder="en_US-amy-medium">
+          </div>
+        </div>
+        
+        <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;">
+          <label class="form-label">Avatar Image URL (optional)</label>
+          <input class="form-input" id="c-avatar-path" type="text" placeholder="/uploads/companion_nova.png">
+        </div>
+
+        <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;">
+          <label class="form-label">Description / Bio</label>
+          <textarea class="form-input" id="c-desc" rows="3" placeholder="A brief description of who this companion is..."></textarea>
+        </div>
+
+        <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;">
+          <label class="form-label">Personality Details</label>
+          <textarea class="form-input" id="c-personality" rows="3" placeholder="Detailed character traits, likes, dislikes..."></textarea>
+        </div>
+
+        <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;">
+          <label class="form-label">Scenario Context</label>
+          <textarea class="form-input" id="c-scenario" rows="2" placeholder="Active context or scenario of the conversation..."></textarea>
+        </div>
+
+        <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;">
+          <label class="form-label">First Message</label>
+          <textarea class="form-input" id="c-first-msg" rows="2" placeholder="First message the companion speaks upon start..."></textarea>
+        </div>
+
+        <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;">
+          <label class="form-label">Custom System Prompt Override</label>
+          <textarea class="form-input" id="c-system-prompt" rows="3" placeholder="Custom system instructions for dialogue behavior..."></textarea>
+        </div>
+
+        <div style="border-top:1px solid var(--border); margin-top:8px; padding-top:12px;">
+          <div class="settings-label" style="margin-bottom:8px;">States & Custom Assets</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;"><label class="form-label">Current Outfit</label><input class="form-input" id="c-outfit" type="text" placeholder="Standard"></div>
+            <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;"><label class="form-label">Current Location</label><input class="form-input" id="c-location" type="text" placeholder="Unknown"></div>
+            <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;"><label class="form-label">Current Mood</label><input class="form-input" id="c-mood" type="text" placeholder="Normal"></div>
+            <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;"><label class="form-label">Clothing State</label><input class="form-input" id="c-clothing" type="text" placeholder="dressed"></div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px;">
+            <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;"><label class="form-label">Body Type / Gender</label><input class="form-input" id="c-body-type" type="text" placeholder="female"></div>
+            <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;"><label class="form-label">VRM Model Path (.vrm)</label><input class="form-input" id="c-vrm-path" type="text" placeholder="/uploads/models/model.vrm"></div>
+          </div>
+        </div>
+        
+        <div id="editor-ai-assets-section" style="border-top:1px solid var(--border); margin-top:12px; padding-top:12px; display:none;">
+          <div class="settings-label" style="margin-bottom:8px; color:var(--accent);">AI Image Generator (Stable Diffusion)</div>
+          
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; gap:10px; align-items:flex-end;">
+              <div class="form-group" style="flex:1.5; margin:0; display:flex; flex-direction:column; gap:4px;">
+                <label class="form-label">Generate Outfit</label>
+                <input class="form-input" id="g-outfit-val" type="text" placeholder="e.g. maid dress, tactical suit">
+              </div>
+              <button class="save-btn" onclick="triggerAssetGeneration('outfit')" style="padding:10px 14px; margin:0; width:auto; font-size:12.5px; height:36px; display:flex; align-items:center; justify-content:center;">Generate</button>
+            </div>
+            
+            <div style="display:flex; gap:10px; align-items:flex-end;">
+              <div class="form-group" style="flex:1.5; margin:0; display:flex; flex-direction:column; gap:4px;">
+                <label class="form-label">Generate Location</label>
+                <input class="form-input" id="g-location-val" type="text" placeholder="e.g. cozy library, neon street">
+              </div>
+              <button class="save-btn" onclick="triggerAssetGeneration('location')" style="padding:10px 14px; margin:0; width:auto; font-size:12.5px; height:36px; display:flex; align-items:center; justify-content:center;">Generate</button>
+            </div>
+
+            <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:4px;">
+              <label class="form-label">Optional Prompt Override (For SD)</label>
+              <input class="form-input" id="g-prompt-override" type="text" placeholder="Leave empty for auto-generated prompt">
+            </div>
+            
+            <div id="asset-gen-status-msg" style="font-size:12px; text-align:center; min-height:16px; margin-top:4px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; padding:20px; border-top:1px solid var(--border);">
+      <button class="save-btn" id="delete-companion-btn" onclick="deleteCompanionProfile()" style="background:var(--error); color:#fff; border:none; margin-right:auto; display:none; width:auto; padding:8px 16px;">Delete Companion</button>
+      <button class="save-btn" onclick="saveCompanionProfile()" style="background:var(--accent); color:#fff; border:none; width:auto; padding:8px 16px;">Save Companion</button>
+      <button class="save-btn" onclick="closeCompanionCreator()" style="margin:0; width:auto; padding:8px 16px;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="group-creator-modal" style="display:none; z-index:9999;" onclick="closeGroupCreatorOnBg(event)">
+  <div class="modal" style="max-width:500px; width:95%; display:flex; flex-direction:column; max-height:85vh;">
+    <div class="modal-header">
+      <span class="modal-title" id="group-creator-title">Create Group Chat Room</span>
+      <button class="modal-close" onclick="closeGroupCreator()">×</button>
+    </div>
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:12px; overflow-y:auto; padding:20px;">
+      <input type="hidden" id="g-id">
+      <div class="form-group" style="display:flex; flex-direction:column; gap:4px; margin:0;">
+        <label class="form-label">Room Name</label>
+        <input class="form-input" id="g-name" type="text" placeholder="e.g. The Round Table">
+      </div>
+      <div class="form-group" style="display:flex; flex-direction:column; gap:4px; margin:0;">
+        <label class="form-label">Companions (Select all that apply)</label>
+        <div id="g-companions-list" style="display:flex; flex-direction:column; gap:6px; max-height:150px; overflow-y:auto; border:1px solid var(--border); padding:8px; border-radius:6px; background:var(--surface2);">
+          <!-- Populate companion checkboxes here -->
+        </div>
+      </div>
+      <div class="form-group" style="display:flex; flex-direction:column; gap:4px; margin:0;">
+        <label class="form-label">Scenario (optional)</label>
+        <textarea class="form-input" id="g-scenario" placeholder="e.g. Sitting around a cozy tavern talking about code..." rows="2" style="resize:vertical;"></textarea>
+      </div>
+      <div class="form-group" style="display:flex; flex-direction:column; gap:4px; margin:0;">
+        <label class="form-label">Room System Prompt (optional)</label>
+        <textarea class="form-input" id="g-prompt" placeholder="e.g. Keep replies witty and fast..." rows="2" style="resize:vertical;"></textarea>
+      </div>
+      <div id="group-creator-status" style="font-size:12px; text-align:center; min-height:16px; color:var(--error);"></div>
+    </div>
+    <div class="modal-footer" style="padding:12px 20px; border-top:1px solid var(--border); display:flex; justify-content:space-between; gap:10px;">
+      <button class="btn btn-sm" id="delete-group-btn" onclick="deleteGroupChat()" style="border-color:var(--error); color:var(--error); display:none;">Delete</button>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button class="btn btn-sm" onclick="closeGroupCreator()" style="border-color:var(--border);">Cancel</button>
+        <button class="save-btn" onclick="saveGroupChat()" style="margin:0; width:auto; padding:6px 16px;">Save Room</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
 <script>
@@ -658,6 +1245,10 @@ let isStreaming = false;
 let streamBuffer = '';
 let streamBubble = null;
 let agentStepsEl = null;
+let activeGroupId = null;
+let groupsList = [];
+let selectedGroupSpeaker = null;
+let activeSpeakerName = '';
 
 // Pending attachments: [{base64, url, isImage, name}]
 let pendingAttachments = [];
@@ -800,6 +1391,7 @@ async function initApp() {
     document.getElementById('user-avatar').textContent = 'L';
     document.getElementById('admin-btn').style.display = '';
     loadModels();
+    loadCompanions().then(() => updateRightPanel());
     loadConversations();
     connectWebSocket();
     document.getElementById('input-field').addEventListener('input', updateSendBtn);
@@ -828,8 +1420,10 @@ async function initApp() {
   document.getElementById('user-avatar').textContent = currentUser.username[0].toUpperCase();
   if (currentUser.is_admin) document.getElementById('admin-btn').style.display = '';
   loadModels();
-  loadCompanions();
+  loadCompanions().then(() => updateRightPanel());
   loadConversations();
+  loadGroups();
+  initTtsUI();
   connectWebSocket();
   document.getElementById('input-field').addEventListener('input', updateSendBtn);
   // Restore agent mode toggle from localStorage
@@ -933,8 +1527,24 @@ function renderConvList() {
 }
 
 async function loadConversation(id) {
+  activeGroupId = null;
+  selectedGroupSpeaker = null;
+  document.getElementById('group-companions-chips').style.display = 'none';
+  renderGroupList();
+
   activeConvId = id;
   document.getElementById('export-dropdown').style.display = '';
+
+  const conv = conversations.find(c => c.id === id);
+  if (conv) {
+    const select = document.getElementById('companion-select');
+    if (select) {
+      const compId = conv.companionId || conv.companion_id || "";
+      select.value = compId;
+      onCompanionChange();
+    }
+  }
+
   renderConvList();
   hideWelcome();
   const msgs = document.getElementById('messages-inner');
@@ -944,15 +1554,19 @@ async function loadConversation(id) {
     const res = await fetch(`/api/conversations/${id}/messages`, { headers: { Authorization: 'Bearer ' + token } });
     if (!res.ok) return;
     const history = await res.json();
-    history.forEach(m => appendMessage(m.role, m.content, false, null, m.created_at));
+    history.forEach(m => appendMessage(m.role, m.content, false, null, m.created_at, m.id));
     scrollBottom();
   } catch {}
 }
 
 async function newConversation() {
   activeConvId = null;
+  activeGroupId = null;
+  selectedGroupSpeaker = null;
   document.getElementById('export-dropdown').style.display = 'none';
+  document.getElementById('group-companions-chips').style.display = 'none';
   renderConvList();
+  renderGroupList();
   showWelcome();
   [...document.getElementById('messages-inner').querySelectorAll('.msg-row')].forEach(el => el.remove());
 }
@@ -965,6 +1579,227 @@ async function deleteConv(e, id) {
     if (activeConvId === id) newConversation();
     else renderConvList();
   } catch { toast('Could not delete conversation', 'error'); }
+}
+
+async function deleteMessageById(messageId, btnEl) {
+  if (!confirm("Are you sure you want to delete this message?")) return;
+  try {
+    const res = await fetch(`/api/conversations/${activeConvId}/messages/${messageId}`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (res.ok) {
+      const row = btnEl.closest('.msg-row');
+      if (row) row.remove();
+      toast('Message deleted');
+    } else {
+      toast('Failed to delete message', 'error');
+    }
+  } catch (err) {
+    toast('Error: ' + err.message, 'error');
+  }
+}
+
+function startEditMessage(messageId, btnEl) {
+  const row = btnEl.closest('.msg-row');
+  if (!row) return;
+  const contentEl = row.querySelector('.msg-content');
+  if (!contentEl) return;
+
+  if (row.classList.contains('editing-msg')) return;
+  row.classList.add('editing-msg');
+
+  // Back up original HTML and text content
+  const originalHtml = contentEl.innerHTML;
+  
+  // Find original raw content text. If we saved it to a custom attribute or just read textContent.
+  // Wait, let's read the element's actual markdown raw text by setting a data attribute when rendering, or just use textContent as backup.
+  // Actually, we can get raw text using innerText or a fallback.
+  // A clean trick: we can query the backend for the raw content, or we can just edit the rendered text. Let's edit the textContent, it is very reliable!
+  const originalText = contentEl.innerText.trim();
+
+  const container = document.createElement('div');
+  container.className = 'edit-msg-container';
+  container.style.cssText = 'display:flex; flex-direction:column; gap:8px; width:100%; margin-top:8px;';
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'form-input';
+  textarea.style.cssText = 'width:100%; min-height:80px; font-family:inherit; font-size:14px; background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px; border-radius:4px; resize:vertical;';
+  textarea.value = originalText;
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex; gap:8px; justify-content:flex-end;';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'save-btn';
+  cancelBtn.style.cssText = 'background:transparent; border:1px solid var(--border); color:var(--text-muted); padding:4px 10px; font-size:12px; cursor:pointer;';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = (e) => {
+    e.stopPropagation();
+    contentEl.innerHTML = originalHtml;
+    row.classList.remove('editing-msg');
+  };
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'save-btn';
+  saveBtn.style.cssText = 'padding:4px 10px; font-size:12px; cursor:pointer;';
+  saveBtn.textContent = 'Save';
+  saveBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const newText = textarea.value.trim();
+    if (!newText) return;
+    try {
+      const res = await fetch(`/api/conversations/${activeConvId}/messages/${messageId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token
+        },
+        body: JSON.stringify({ content: newText })
+      });
+      if (res.ok) {
+        contentEl.innerHTML = '';
+        renderMarkdown(contentEl, newText);
+        row.classList.remove('editing-msg');
+        toast('Message updated');
+      } else {
+        toast('Failed to update message', 'error');
+      }
+    } catch (err) {
+      toast('Error: ' + err.message, 'error');
+    }
+  };
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(saveBtn);
+  container.appendChild(textarea);
+  container.appendChild(btnRow);
+
+  contentEl.innerHTML = '';
+  contentEl.appendChild(container);
+  textarea.focus();
+}
+
+async function regenerateFromMessage(messageId, btnEl) {
+  if (isStreaming) {
+    toast('An operation is already in progress', 'warning');
+    return;
+  }
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const row = btnEl.closest('.msg-row');
+    if (row) {
+      let sibling = row.nextElementSibling;
+      while (sibling) {
+        const next = sibling.nextElementSibling;
+        sibling.remove();
+        sibling = next;
+      }
+      row.remove();
+    }
+    
+    isStreaming = true;
+    streamBuffer = '';
+    streamBubble = appendMessage('assistant', '', true);
+    agentStepsEl = null;
+    updateSendBtn();
+    scrollBottom();
+
+    const agentMode = document.getElementById('agent-mode-toggle')?.checked || false;
+    const payload = { 
+      content: "[REGENERATE]", 
+      model: selectedModel, 
+      conversation_id: activeConvId, 
+      agent_mode: agentMode, 
+      companion_name: selectedCompanion ? selectedCompanion.name : null 
+    };
+    ws.send(JSON.stringify(payload));
+  } else {
+    toast('No active connection. Try sending a message first.', 'error');
+  }
+}
+
+async function refreshMessageIds() {
+  if (!activeConvId) return;
+  try {
+    const res = await fetch(`/api/conversations/${activeConvId}/messages`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) return;
+    const history = await res.json();
+    
+    const rows = document.getElementById('messages-inner').querySelectorAll('.msg-row');
+    let rowIdx = rows.length - 1;
+    let histIdx = history.length - 1;
+    while (rowIdx >= 0 && histIdx >= 0) {
+      const row = rows[rowIdx];
+      const hist = history[histIdx];
+      
+      if (!row.getAttribute('data-msg-id')) {
+        row.setAttribute('data-msg-id', hist.id);
+        
+        let swipes = [hist.content];
+        let activeSwipeIdx = 0;
+        if (typeof hist.content === 'string' && hist.content.startsWith('{"swipes":') && hist.content.endsWith('}')) {
+          try {
+            const parsed = JSON.parse(hist.content);
+            swipes = parsed.swipes;
+            activeSwipeIdx = parsed.active !== undefined ? parsed.active : (swipes.length - 1);
+          } catch(e) {}
+        }
+        
+        if (swipes.length > 1) {
+          row.dataset.swipesJson = JSON.stringify({ swipes, active: activeSwipeIdx });
+          let swipesEl = row.querySelector('.msg-swipes');
+          if (!swipesEl) {
+            swipesEl = document.createElement('div');
+            swipesEl.className = 'msg-swipes';
+            swipesEl.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-muted); margin-top:6px; user-select:none;';
+            const bubble = row.querySelector('.msg-bubble');
+            if (bubble) bubble.appendChild(swipesEl);
+          }
+          swipesEl.innerHTML = `
+            <button class="swipe-btn prev" onclick="swipeMessage(${hist.id}, -1, this)" style="background:none; border:none; color:inherit; cursor:pointer; padding:2px; font-size:12px; display:inline-flex; align-items:center; justify-content:center; transition:opacity 0.2s;" onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">◀</button>
+            <span class="swipe-indicator" style="font-family:monospace; font-weight:600;">${activeSwipeIdx + 1} / ${swipes.length}</span>
+            <button class="swipe-btn next" onclick="swipeMessage(${hist.id}, 1, this)" style="background:none; border:none; color:inherit; cursor:pointer; padding:2px; font-size:12px; display:inline-flex; align-items:center; justify-content:center; transition:opacity 0.2s;" onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">▶</button>
+          `;
+        }
+
+        const actionsEl = row.querySelector('.msg-actions');
+        if (actionsEl) {
+          const role = hist.role;
+          const messageId = hist.id;
+          const copyBtn = actionsEl.querySelector('.copy');
+          const copyId = copyBtn ? copyBtn.id : ('copy-' + Math.random().toString(36).slice(2, 8));
+          
+          let actionsHtml = `
+            <button class="msg-action-btn copy" id="${copyId}" onclick="copyMsg('${copyId}')" title="Copy text">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </button>
+            <button class="msg-action-btn edit" onclick="startEditMessage(${messageId}, this)" title="Edit message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            </button>
+            <button class="msg-action-btn delete" onclick="deleteMessageById(${messageId}, this)" title="Delete message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </button>
+          `;
+          if (role === 'assistant') {
+            actionsHtml += `
+              <button class="msg-action-btn regen" onclick="regenerateFromMessage(${messageId}, this)" title="Regenerate reply">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              </button>
+            `;
+          }
+          actionsEl.innerHTML = actionsHtml;
+          
+          const contentEl = row.querySelector('.msg-content');
+          const newCopyBtn = actionsEl.querySelector(`#${copyId}`);
+          if (newCopyBtn && contentEl) {
+            newCopyBtn._getContent = () => contentEl.textContent || '';
+          }
+        }
+      }
+      rowIdx--;
+      histIdx--;
+    }
+  } catch {}
 }
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
@@ -1013,20 +1848,44 @@ function connectWebSocket() {
         agentStepsEl.appendChild(step);
         scrollBottom();
       }
+    } else if (msg.type === 'group_speaker') {
+      activeSpeakerName = msg.character_name;
     } else if (msg.type === 'token') {
       streamBuffer += msg.content;
       if (!streamBubble) {
-        streamBubble = appendMessage('assistant', '', true);
+        if (activeGroupId) {
+          streamBubble = appendGroupMessageBubble('assistant', activeSpeakerName || 'Assistant', '');
+        } else {
+          streamBubble = appendMessage('assistant', '', true);
+        }
       }
-      renderMarkdown(streamBubble, streamBuffer);
+      if (activeGroupId) {
+        const textEl = streamBubble.querySelector('.bubble-text');
+        if (textEl) {
+          textEl.innerHTML = marked.parse(streamBuffer);
+        }
+      } else {
+        renderMarkdown(streamBubble, streamBuffer);
+      }
     } else if (msg.type === 'done') {
       isStreaming = false;
+      const fullText = streamBuffer;
       streamBuffer = '';
       streamBubble = null;
       agentStepsEl = null;
       updateSendBtn();
-      loadConversations();
+      if (activeGroupId) {
+        loadGroups();
+      } else {
+        loadConversations();
+        refreshMessageIds();
+      }
       scrollBottom();
+
+      if (fullText) {
+        speakMessage(fullText, activeGroupId ? activeSpeakerName : (selectedCompanion ? selectedCompanion.name : null));
+      }
+      activeSpeakerName = '';
     } else if (msg.type === 'typing') {
       handleTyping(msg.content);
     } else if (msg.type === 'error') {
@@ -1067,6 +1926,23 @@ function sendMessage() {
   if ((!text && pendingAttachments.length === 0) || isStreaming || !ws || ws.readyState !== WebSocket.OPEN) return;
   hideWelcome();
 
+  if (activeGroupId) {
+    appendGroupMessage('user', 'User', text);
+    field.value = ''; autoResize(field);
+    isStreaming = true;
+    streamBuffer = ''; streamBubble = null;
+    updateSendBtn();
+    
+    const payload = {
+      group_id: activeGroupId,
+      content: text,
+      model: selectedModel,
+      companion_name: selectedGroupSpeaker
+    };
+    ws.send(JSON.stringify(payload));
+    return;
+  }
+
   const imageBase64List = pendingAttachments.filter(a => a.isImage).map(a => a.base64);
   const fileContext = buildFileContext(pendingAttachments);
 
@@ -1089,7 +1965,7 @@ function sendMessage() {
     fullContent = `${selectedCompanion.systemPrompt}\n\n${currentUser?.username || 'user'}: ${fullContent}`;
   }
   const agentMode = document.getElementById('agent-mode-toggle')?.checked || false;
-  const payload = { content: fullContent, model: selectedModel, conversation_id: activeConvId, agent_mode: agentMode };
+  const payload = { content: fullContent, model: selectedModel, conversation_id: activeConvId, agent_mode: agentMode, companion_name: selectedCompanion ? selectedCompanion.name : null };
   if (imageBase64List.length > 0) payload.images = imageBase64List;
   ws.send(JSON.stringify(payload));
 }
@@ -1113,10 +1989,29 @@ function updateSendBtn() {
 }
 
 // ── Messages ───────────────────────────────────────────────────────────────
-function appendMessage(role, content, streaming, images, timestamp) {
+function appendMessage(role, content, streaming, images, timestamp, messageId) {
   const inner = document.getElementById('messages-inner');
   const row = document.createElement('div');
   row.className = `msg-row ${role}`;
+  if (messageId) {
+    row.setAttribute('data-msg-id', messageId);
+  }
+
+  // Parse swipes if present
+  let swipes = [content];
+  let activeSwipeIdx = 0;
+  if (typeof content === 'string' && content.startsWith('{"swipes":') && content.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(content);
+      swipes = parsed.swipes;
+      activeSwipeIdx = parsed.active !== undefined ? parsed.active : (swipes.length - 1);
+      content = swipes[activeSwipeIdx];
+    } catch(e) {}
+  }
+
+  if (swipes.length > 1 && messageId) {
+    row.dataset.swipesJson = JSON.stringify({ swipes, active: activeSwipeIdx });
+  }
 
   const avatarInit = role === 'assistant' 
     ? (selectedCompanion ? selectedCompanion.name[0].toUpperCase() : '🌸') 
@@ -1145,20 +2040,96 @@ function appendMessage(role, content, streaming, images, timestamp) {
   }
 
   const copyId = 'copy-' + Math.random().toString(36).slice(2, 8);
+  
+  let actionsHtml = `
+    <button class="msg-action-btn copy" id="${copyId}" onclick="copyMsg('${copyId}')" title="Copy text">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+    </button>
+  `;
+  
+  if (messageId) {
+    actionsHtml += `
+      <button class="msg-action-btn edit" onclick="startEditMessage(${messageId}, this)" title="Edit message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+      </button>
+      <button class="msg-action-btn delete" onclick="deleteMessageById(${messageId}, this)" title="Delete message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+      </button>
+    `;
+    
+    if (role === 'assistant' && !streaming) {
+      actionsHtml += `
+        <button class="msg-action-btn regen" onclick="regenerateFromMessage(${messageId}, this)" title="Regenerate reply">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        </button>
+      `;
+    }
+  }
+
+  let swipesHtml = '';
+  if (swipes.length > 1 && messageId) {
+    swipesHtml = `
+      <div class="msg-swipes" style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-muted); margin-top:6px; user-select:none;">
+        <button class="swipe-btn prev" onclick="swipeMessage(${messageId}, -1, this)" style="background:none; border:none; color:inherit; cursor:pointer; padding:2px; font-size:12px; display:inline-flex; align-items:center; justify-content:center; transition:opacity 0.2s;" onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">◀</button>
+        <span class="swipe-indicator" style="font-family:monospace; font-weight:600;">${activeSwipeIdx + 1} / ${swipes.length}</span>
+        <button class="swipe-btn next" onclick="swipeMessage(${messageId}, 1, this)" style="background:none; border:none; color:inherit; cursor:pointer; padding:2px; font-size:12px; display:inline-flex; align-items:center; justify-content:center; transition:opacity 0.2s;" onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">▶</button>
+      </div>
+    `;
+  }
+
   row.innerHTML = `
     ${avatarHtml}
     <div class="msg-body">
       <div class="msg-meta"><span class="msg-name">${escHtml(name)}</span><span class="msg-time">${time}</span></div>
-      <div class="msg-bubble">${imagesHtml}<div class="msg-content"></div></div>
-      <button class="msg-copy-btn" id="${copyId}" onclick="copyMsg('${copyId}')">Copy</button>
+      <div class="msg-bubble">${imagesHtml}<div class="msg-content"></div>${swipesHtml}</div>
+      <div class="msg-actions">${actionsHtml}</div>
     </div>`;
 
   inner.appendChild(row);
   const contentEl = row.querySelector('.msg-content');
   if (content) renderMarkdown(contentEl, content);
-  row.querySelector('.msg-copy-btn')._getContent = () => contentEl.textContent || '';
+  row.querySelector(`#${copyId}`)._getContent = () => contentEl.textContent || '';
   scrollBottom();
   return contentEl;
+}
+
+async function swipeMessage(messageId, direction, btnEl) {
+  const row = btnEl.closest('.msg-row');
+  if (!row) return;
+  const contentEl = row.querySelector('.msg-content');
+  const indicatorEl = row.querySelector('.swipe-indicator');
+  if (!contentEl || !indicatorEl) return;
+
+  const rawJson = row.dataset.swipesJson;
+  if (!rawJson) return;
+
+  try {
+    const data = JSON.parse(rawJson);
+    let newActive = data.active + direction;
+    if (newActive < 0) newActive = data.swipes.length - 1;
+    if (newActive >= data.swipes.length) newActive = 0;
+
+    data.active = newActive;
+    row.dataset.swipesJson = JSON.stringify(data);
+
+    // Update text
+    contentEl.innerHTML = '';
+    renderMarkdown(contentEl, data.swipes[newActive]);
+    indicatorEl.textContent = `${newActive + 1} / ${data.swipes.length}`;
+
+    // Sync to backend
+    const token = localStorage.getItem('token');
+    await fetch(`/api/conversations/${activeConvId}/messages/${messageId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      },
+      body: JSON.stringify({ content: JSON.stringify(data) })
+    });
+  } catch (err) {
+    console.error('Failed to swipe message:', err);
+  }
 }
 
 function viewImageFull(img) {
@@ -1206,9 +2177,13 @@ function renderMarkdown(el, text) {
   });
   scrollBottom();
 }
-
 function parseMarkdown(text) {
   let html = escHtml(text);
+
+  // Parse <thought> tags
+  html = html.replace(/&lt;thought&gt;([\s\S]*?)&lt;\/thought&gt;/gi, (_, thoughtContent) => {
+    return `<details class="thought-block"><summary>Inner Thoughts</summary><div class="thought-content">${thoughtContent.trim()}</div></details>`;
+  });
 
   // Code blocks (``` lang \n code ```)
   html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
@@ -1415,7 +2390,7 @@ document.getElementById('login-pass').addEventListener('keydown', e => { if (e.k
 document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-pass').focus(); });
 
 // ── Settings ───────────────────────────────────────────────────────────────
-function openSettings() {
+async function openSettings() {
   document.getElementById('settings-modal').style.display = 'flex';
   switchTab('profile');
   if (currentUser) {
@@ -1426,9 +2401,42 @@ function openSettings() {
   }
   document.getElementById('email-msg').textContent = '';
   document.getElementById('pass-msg').textContent = '';
+  const profMsg = document.getElementById('profile-msg');
+  if (profMsg) profMsg.textContent = '';
   document.getElementById('s-cur-pass').value = '';
   document.getElementById('s-new-pass').value = '';
   document.getElementById('s-confirm-pass').value = '';
+
+  try {
+    const res = await fetch('/api/auth/me/profile', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (res.ok) {
+      const p = await res.json();
+      if (p.displayName) document.getElementById('s-display-name').value = p.displayName;
+      if (p.gender) document.getElementById('s-gender').value = p.gender;
+    }
+  } catch(e) {}
+}
+
+async function saveUserProfile() {
+  const displayName = document.getElementById('s-display-name').value.trim();
+  const gender = document.getElementById('s-gender').value;
+  const msg = document.getElementById('profile-msg');
+  const btn = document.getElementById('save-profile-btn');
+  btn.disabled = true; msg.textContent = '';
+  try {
+    const res = await fetch('/api/auth/me/profile', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ displayName, gender })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update profile');
+    msg.textContent = 'Profile saved!'; msg.className = 'settings-msg ok';
+  } catch(e) { msg.textContent = e.message; msg.className = 'settings-msg err'; }
+  btn.disabled = false;
 }
 
 function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
@@ -1437,8 +2445,10 @@ function closeSettingsOnBg(e) { if (e.target === document.getElementById('settin
 function switchTab(tab) {
   document.getElementById('settings-profile').style.display = tab === 'profile' ? '' : 'none';
   document.getElementById('settings-security').style.display = tab === 'security' ? '' : 'none';
+  document.getElementById('settings-advanced').style.display = tab === 'advanced' ? '' : 'none';
   document.getElementById('tab-profile').className = 'modal-tab' + (tab === 'profile' ? ' active' : '');
   document.getElementById('tab-security').className = 'modal-tab' + (tab === 'security' ? ' active' : '');
+  document.getElementById('tab-advanced').className = 'modal-tab' + (tab === 'advanced' ? ' active' : '');
 }
 
 async function saveEmail() {
@@ -1698,6 +2708,361 @@ function copyPairingCode() {
   toast('Pairing code copied to clipboard!', 'success');
 }
 
+// ── Companion Creator & Importer ───────────────────────────────────────────
+let isEditMode = false;
+let editingCompanionName = "";
+
+function openCompanionCreator() {
+  isEditMode = false;
+  editingCompanionName = "";
+  document.getElementById('companion-creator-title').textContent = "Create Companion";
+  document.getElementById('delete-companion-btn').style.display = "none";
+  document.getElementById('editor-ai-assets-section').style.display = "none";
+  resetCreatorFields();
+  document.getElementById('companion-creator-modal').style.display = "flex";
+}
+
+function openCompanionEditor() {
+  const selVal = document.getElementById('companion-select').value;
+  if (!selVal) {
+    toast("Cannot edit default (Ash) profile.", "error");
+    return;
+  }
+  const comp = companions.find(c => c.name === selVal);
+  if (!comp) {
+    toast("Active companion configuration not found.", "error");
+    return;
+  }
+  
+  isEditMode = true;
+  editingCompanionName = comp.name;
+  document.getElementById('companion-creator-title').textContent = `Edit Profile: ${comp.name}`;
+  document.getElementById('delete-companion-btn').style.display = "block";
+  document.getElementById('editor-ai-assets-section').style.display = "block";
+  
+  // Prepopulate fields
+  document.getElementById('c-name').value = comp.name || "";
+  document.getElementById('c-voice').value = comp.voiceId || "en_US-amy-medium";
+  document.getElementById('c-avatar-path').value = comp.avatarPath || "";
+  document.getElementById('c-desc').value = comp.description || "";
+  document.getElementById('c-personality').value = comp.personality || "";
+  document.getElementById('c-scenario').value = comp.scenario || "";
+  document.getElementById('c-first-msg').value = comp.firstMessage || "";
+  document.getElementById('c-system-prompt').value = comp.systemPrompt || "";
+  
+  document.getElementById('c-outfit').value = comp.currentOutfit || "";
+  document.getElementById('c-location').value = comp.currentLocation || "";
+  document.getElementById('c-mood').value = comp.currentMood || "";
+  document.getElementById('c-clothing').value = comp.clothingState || "";
+  document.getElementById('c-body-type').value = comp.bodyType || "";
+  document.getElementById('c-vrm-path').value = comp.vrmModelPath || "";
+  
+  document.getElementById('importer-status-msg').textContent = "";
+  document.getElementById('asset-gen-status-msg').textContent = "";
+  document.getElementById('companion-creator-modal').style.display = "flex";
+}
+
+function closeCompanionCreator() {
+  document.getElementById('companion-creator-modal').style.display = "none";
+  resetCreatorFields();
+}
+
+function closeCompanionCreatorOnBg(e) {
+  if (e.target === document.getElementById('companion-creator-modal')) {
+    closeCompanionCreator();
+  }
+}
+
+function resetCreatorFields() {
+  document.getElementById('c-name').value = "";
+  document.getElementById('c-voice').value = "en_US-amy-medium";
+  document.getElementById('c-avatar-path').value = "";
+  document.getElementById('c-desc').value = "";
+  document.getElementById('c-personality').value = "";
+  document.getElementById('c-scenario').value = "";
+  document.getElementById('c-first-msg').value = "";
+  document.getElementById('c-system-prompt').value = "";
+  
+  document.getElementById('c-outfit').value = "";
+  document.getElementById('c-location').value = "";
+  document.getElementById('c-mood').value = "";
+  document.getElementById('c-clothing').value = "";
+  document.getElementById('c-body-type').value = "";
+  document.getElementById('c-vrm-path').value = "";
+  
+  document.getElementById('card-url-input').value = "";
+  document.getElementById('g-outfit-val').value = "";
+  document.getElementById('g-location-val').value = "";
+  document.getElementById('g-prompt-override').value = "";
+  
+  document.getElementById('importer-status-msg').textContent = "";
+  document.getElementById('asset-gen-status-msg').textContent = "";
+  document.getElementById('card-drop-zone').classList.remove('hover');
+}
+
+// Drag & Drop handlers
+function onCardDragOver(e) {
+  e.preventDefault();
+  document.getElementById('card-drop-zone').classList.add('hover');
+}
+
+function onCardDragLeave(e) {
+  e.preventDefault();
+  document.getElementById('card-drop-zone').classList.remove('hover');
+}
+
+function onCardDrop(e) {
+  e.preventDefault();
+  document.getElementById('card-drop-zone').classList.remove('hover');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    uploadCardFile(files[0]);
+  }
+}
+
+function onCardFileSelect(e) {
+  const files = e.target.files;
+  if (files.length > 0) {
+    uploadCardFile(files[0]);
+  }
+}
+
+async function uploadCardFile(file) {
+  if (file.type !== "image/png") {
+    setImporterStatus("File must be a PNG image card.", "err");
+    return;
+  }
+  
+  setImporterStatus("Extracting character metadata...", "ok");
+  const formData = new FormData();
+  formData.append("file", file);
+  
+  try {
+    const res = await fetch('/api/companions/import-card', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: formData
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || "Failed to parse character card.");
+    }
+    const data = await res.json();
+    populateCreatorFromConfig(data.character);
+    setImporterStatus("Character card imported successfully!", "ok");
+    toast("Character card imported successfully!", "success");
+  } catch (err) {
+    setImporterStatus(err.message, "err");
+    toast(err.message, "error");
+  }
+}
+
+async function importCardFromUrl() {
+  const url = document.getElementById('card-url-input').value.trim();
+  if (!url) {
+    setImporterStatus("Please enter a valid URL.", "err");
+    return;
+  }
+  
+  setImporterStatus("Downloading character card from URL...", "ok");
+  try {
+    const res = await fetch('/api/companions/import-card-url', {
+      method: 'POST',
+      headers: { 
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ url: url })
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || "Failed to download/parse card.");
+    }
+    const data = await res.json();
+    populateCreatorFromConfig(data.character);
+    setImporterStatus("Character card URL imported successfully!", "ok");
+    toast("Character card URL imported successfully!", "success");
+  } catch (err) {
+    setImporterStatus(err.message, "err");
+    toast(err.message, "error");
+  }
+}
+
+function populateCreatorFromConfig(comp) {
+  if (!comp) return;
+  document.getElementById('c-name').value = comp.name || "";
+  document.getElementById('c-voice').value = comp.voiceId || "en_US-amy-medium";
+  document.getElementById('c-avatar-path').value = comp.avatarPath || "";
+  document.getElementById('c-desc').value = comp.description || "";
+  document.getElementById('c-personality').value = comp.personality || "";
+  document.getElementById('c-scenario').value = comp.scenario || "";
+  document.getElementById('c-first-msg').value = comp.firstMessage || "";
+  document.getElementById('c-system-prompt').value = comp.systemPrompt || "";
+  
+  document.getElementById('c-outfit').value = comp.currentOutfit || "";
+  document.getElementById('c-location').value = comp.currentLocation || "";
+  document.getElementById('c-mood').value = comp.currentMood || "";
+  document.getElementById('c-clothing').value = comp.clothingState || "";
+  document.getElementById('c-body-type').value = comp.bodyType || "";
+  document.getElementById('c-vrm-path').value = comp.vrmModelPath || "";
+}
+
+function setImporterStatus(text, type) {
+  const el = document.getElementById('importer-status-msg');
+  el.textContent = text;
+  el.className = type === "err" ? "settings-msg err" : "settings-msg ok";
+}
+
+async function saveCompanionProfile() {
+  const name = document.getElementById('c-name').value.trim();
+  if (!name) {
+    toast("Companion name is required.", "error");
+    return;
+  }
+  
+  const payload = {
+    name: name,
+    voiceId: document.getElementById('c-voice').value.trim(),
+    avatarPath: document.getElementById('c-avatar-path').value.trim() || null,
+    description: document.getElementById('c-desc').value.trim(),
+    personality: document.getElementById('c-personality').value.trim(),
+    scenario: document.getElementById('c-scenario').value.trim(),
+    firstMessage: document.getElementById('c-first-msg').value.trim(),
+    systemPrompt: document.getElementById('c-system-prompt').value.trim(),
+    
+    currentOutfit: document.getElementById('c-outfit').value.trim() || "Standard",
+    currentLocation: document.getElementById('c-location').value.trim() || "Unknown",
+    currentMood: document.getElementById('c-mood').value.trim() || "Normal",
+    clothingState: document.getElementById('c-clothing').value.trim() || "dressed",
+    bodyType: document.getElementById('c-body-type').value.trim(),
+    vrmModelPath: document.getElementById('c-vrm-path').value.trim() || null
+  };
+  
+  try {
+    if (isEditMode && editingCompanionName && editingCompanionName !== name) {
+      if (!confirm(`You changed the companion name from "${editingCompanionName}" to "${name}". This will save as a new companion. Proceed?`)) {
+        return;
+      }
+    }
+    
+    const res = await fetch('/api/companions', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || "Failed to save companion.");
+    }
+    
+    toast(`Companion "${name}" saved successfully!`, "success");
+    closeCompanionCreator();
+    await loadCompanions();
+    
+    const select = document.getElementById('companion-select');
+    select.value = name;
+    onCompanionChange();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function deleteCompanionProfile() {
+  if (!isEditMode || !editingCompanionName) return;
+  if (!confirm(`Are you sure you want to delete "${editingCompanionName}"? This action cannot be undone.`)) {
+    return;
+  }
+  
+  try {
+    const res = await fetch(`/api/companions/${encodeURIComponent(editingCompanionName)}`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || "Failed to delete companion.");
+    }
+    
+    toast(`Companion "${editingCompanionName}" deleted.`, "success");
+    closeCompanionCreator();
+    await loadCompanions();
+    
+    document.getElementById('companion-select').value = "";
+    onCompanionChange();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function triggerAssetGeneration(type) {
+  if (!isEditMode || !editingCompanionName) return;
+  
+  const valEl = document.getElementById(type === 'outfit' ? 'g-outfit-val' : 'g-location-val');
+  const val = valEl.value.trim();
+  if (!val) {
+    toast(`Please enter a name for the ${type}.`, "error");
+    return;
+  }
+  
+  const promptOverride = document.getElementById('g-prompt-override').value.trim();
+  
+  setAssetGenStatus(`Generating AI ${type} using Stable Diffusion... This may take up to a minute.`, "ok");
+  
+  try {
+    const res = await fetch(`/api/companions/${encodeURIComponent(editingCompanionName)}/generate-asset`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        assetType: type,
+        value: val,
+        sdPromptOverride: promptOverride || null
+      })
+    });
+    
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || `Failed to generate ${type}.`);
+    }
+    
+    const data = await res.json();
+    setAssetGenStatus(`Successfully generated and applied ${type}!`, "ok");
+    toast(`AI ${type} generated successfully!`, "success");
+    
+    // Refresh form inputs
+    if (type === 'outfit') {
+      document.getElementById('c-outfit').value = val;
+      if (data.imagePath) {
+        document.getElementById('c-avatar-path').value = data.imagePath;
+      }
+    } else {
+      document.getElementById('c-location').value = val;
+    }
+    
+    // Clear prompt inputs
+    valEl.value = "";
+    document.getElementById('g-prompt-override').value = "";
+    
+    // Refresh companions list from server and update current chat view
+    await loadCompanions();
+    onCompanionChange();
+  } catch (err) {
+    setAssetGenStatus(err.message, "err");
+    toast(err.message, "error");
+  }
+}
+
+function setAssetGenStatus(text, type) {
+  const el = document.getElementById('asset-gen-status-msg');
+  el.textContent = text;
+  el.className = type === "err" ? "settings-msg err" : "settings-msg ok";
+}
+
 let companions = [];
 let selectedCompanion = null;
 
@@ -1726,6 +3091,128 @@ async function loadCompanions() {
   }
 }
 
+let isRightPanelOpen = localStorage.getItem('ash_right_panel_open') === 'true';
+
+function toggleRightPanel() {
+  isRightPanelOpen = !isRightPanelOpen;
+  localStorage.setItem('ash_right_panel_open', isRightPanelOpen);
+  const panel = document.getElementById('right-panel');
+  if (panel) {
+    panel.classList.toggle('collapsed', !isRightPanelOpen);
+    if (isRightPanelOpen) {
+      updateRightPanel();
+    }
+  }
+}
+
+async function loadCompanionVaultSummary(name) {
+  const vaultEl = document.getElementById('vault-list-summary');
+  if (!vaultEl) return;
+  try {
+    const res = await fetch(`/api/companions/${encodeURIComponent(name)}/memories`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!res.ok) throw new Error();
+    const memories = await res.json();
+    if (!memories || memories.length === 0) {
+      vaultEl.innerHTML = '<div class="vault-empty">No active memories loaded</div>';
+      return;
+    }
+    vaultEl.innerHTML = memories.slice(0, 3).map(m => {
+      const category = m.category || m.Category || 'General';
+      const content = m.content || m.Content || '';
+      const createdAt = m.createdAt || m.created_at || m.CreatedAt || '';
+      return `
+        <div class="vault-item">
+          <div class="vault-item-meta">${escHtml(category)} · ${formatDate(createdAt)}</div>
+          <div class="vault-item-content">${escHtml(content)}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    vaultEl.innerHTML = '<div class="vault-empty" style="color:var(--error);">Failed to load memories</div>';
+  }
+}
+
+async function loadCompanionDiariesSummary(name) {
+  const diariesEl = document.getElementById('reflections-list-summary');
+  if (!diariesEl) return;
+  try {
+    const res = await fetch(`/api/companions/${encodeURIComponent(name)}/diaries`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!res.ok) throw new Error();
+    const diaries = await res.json();
+    if (!diaries || diaries.length === 0) {
+      diariesEl.innerHTML = '<div class="vault-empty">No daily reflections written yet</div>';
+      return;
+    }
+    diariesEl.innerHTML = diaries.slice(0, 2).map(d => {
+      const dateStr = d.dateString || d.date_string || d.DateString || '';
+      const content = d.content || d.Content || '';
+      return `
+        <div class="vault-item">
+          <div class="vault-item-meta">JournalEntry · ${escHtml(dateStr)}</div>
+          <div class="vault-item-content">${escHtml(content)}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    diariesEl.innerHTML = '<div class="vault-empty" style="color:var(--error);">Failed to load reflections</div>';
+  }
+}
+
+function updateRightPanel() {
+  const panel = document.getElementById('right-panel');
+  if (!panel) return;
+  panel.classList.toggle('collapsed', !isRightPanelOpen);
+
+  const avatar = document.getElementById('companion-avatar-large');
+  const nameEl = document.getElementById('companion-name-large');
+  const levelTag = document.getElementById('companion-level-tag');
+  const xpText = document.getElementById('companion-xp-text');
+  const xpFill = document.getElementById('companion-xp-fill');
+  const locEl = document.getElementById('companion-state-location');
+  const outfitEl = document.getElementById('companion-state-outfit');
+  const moodEl = document.getElementById('companion-state-mood');
+
+  if (selectedCompanion) {
+    if (avatar) avatar.src = getCompanionAvatarUrl(selectedCompanion);
+    if (nameEl) nameEl.textContent = selectedCompanion.name;
+    
+    const xp = selectedCompanion.relationshipXp || selectedCompanion.RelationshipXp || 0;
+    const level = Math.floor(xp / 100) + 1;
+    const currentXp = xp % 100;
+    const relationshipStages = ["Acquaintance", "Friend", "Close Friend", "Confidant", "Intimate", "Soulmate"];
+    const stage = relationshipStages[Math.min(level - 1, relationshipStages.length - 1)];
+
+    if (levelTag) levelTag.textContent = `Level ${level} · ${stage}`;
+    if (xpText) xpText.textContent = `${currentXp} / 100 XP`;
+    if (xpFill) xpFill.style.width = `${currentXp}%`;
+
+    if (locEl) locEl.textContent = selectedCompanion.currentLocation || selectedCompanion.CurrentLocation || 'Unknown';
+    if (outfitEl) outfitEl.textContent = selectedCompanion.currentOutfit || selectedCompanion.CurrentOutfit || 'Standard';
+    if (moodEl) moodEl.textContent = selectedCompanion.currentMood || selectedCompanion.CurrentMood || 'Normal';
+
+    loadCompanionVaultSummary(selectedCompanion.name);
+    loadCompanionDiariesSummary(selectedCompanion.name);
+  } else {
+    if (avatar) avatar.src = '/static/logo.png';
+    if (nameEl) nameEl.textContent = 'Ash';
+    if (levelTag) levelTag.textContent = 'Level 1 · Close Companion';
+    if (xpText) xpText.textContent = '0 / 100 XP';
+    if (xpFill) xpFill.style.width = '0%';
+    if (locEl) locEl.textContent = 'Mainframe';
+    if (outfitEl) outfitEl.textContent = 'Default';
+    if (moodEl) moodEl.textContent = 'Warm';
+
+    const vaultSummary = document.getElementById('vault-list-summary');
+    if (vaultSummary) vaultSummary.innerHTML = '<div class="vault-empty">No active memories loaded</div>';
+    const reflectionsSummary = document.getElementById('reflections-list-summary');
+    if (reflectionsSummary) reflectionsSummary.innerHTML = '<div class="vault-empty">No daily reflections written yet</div>';
+  }
+}
+
 function onCompanionChange() {
   const name = document.getElementById('companion-select').value;
   selectedCompanion = companions.find(c => c.name === name) || null;
@@ -1737,6 +3224,8 @@ function onCompanionChange() {
   const avatarContainer = document.getElementById('header-avatar-container');
   const avatarImg = document.getElementById('header-avatar');
   
+  const root = document.documentElement;
+
   if (selectedCompanion) {
     if (chatTitle) chatTitle.textContent = selectedCompanion.name;
     if (welcomeTitle) welcomeTitle.textContent = `Hey, I'm ${selectedCompanion.name}`;
@@ -1751,6 +3240,27 @@ function onCompanionChange() {
     if (bgWallpaper) {
       bgWallpaper.style.backgroundImage = `url('${avUrl}')`;
     }
+
+    // Update dynamic colors and glow variables
+    if (selectedCompanion.name.toLowerCase() === 'nova') {
+      root.style.setProperty('--accent', '#c084fc');
+      root.style.setProperty('--accent-glow', 'rgba(168, 85, 247, 0.25)');
+      root.style.setProperty('--accent-dim', 'rgba(168, 85, 247, 0.12)');
+      root.style.setProperty('--glow-color-1', 'rgba(99, 102, 241, 0.15)');
+      root.style.setProperty('--glow-color-2', 'rgba(217, 70, 239, 0.12)');
+    } else if (selectedCompanion.name.toLowerCase() === 'mateo') {
+      root.style.setProperty('--accent', '#f59e0b');
+      root.style.setProperty('--accent-glow', 'rgba(245, 158, 11, 0.25)');
+      root.style.setProperty('--accent-dim', 'rgba(245, 158, 11, 0.12)');
+      root.style.setProperty('--glow-color-1', 'rgba(251, 146, 60, 0.15)');
+      root.style.setProperty('--glow-color-2', 'rgba(251, 191, 36, 0.1)');
+    } else {
+      root.style.setProperty('--accent', '#818cf8');
+      root.style.setProperty('--accent-glow', 'rgba(129, 140, 248, 0.25)');
+      root.style.setProperty('--accent-dim', 'rgba(129, 140, 248, 0.12)');
+      root.style.setProperty('--glow-color-1', 'rgba(99, 102, 241, 0.12)');
+      root.style.setProperty('--glow-color-2', 'rgba(168, 85, 247, 0.1)');
+    }
   } else {
     if (chatTitle) chatTitle.textContent = 'Haven';
     if (welcomeTitle) welcomeTitle.textContent = "Hey, I'm Ash";
@@ -1759,7 +3269,409 @@ function onCompanionChange() {
     // Hide Header Avatar & Wallpaper
     if (avatarContainer) avatarContainer.style.display = 'none';
     if (bgWallpaper) bgWallpaper.style.backgroundImage = '';
+
+    root.style.setProperty('--accent', '#c084fc');
+    root.style.setProperty('--accent-glow', 'rgba(168, 85, 247, 0.25)');
+    root.style.setProperty('--accent-dim', 'rgba(168, 85, 247, 0.15)');
+    root.style.setProperty('--glow-color-1', 'rgba(99, 102, 241, 0.12)');
+    root.style.setProperty('--glow-color-2', 'rgba(217, 70, 239, 0.1)');
   }
+
+  updateRightPanel();
+}
+
+// ── Voice TTS & STT Systems ────────────────────────────────────────────────
+let ttsEnabled = localStorage.getItem('tts_enabled') === 'true';
+let activeAudio = null;
+let recognition = null;
+let isRecording = false;
+
+function initTtsUI() {
+  const btn = document.getElementById('tts-toggle');
+  if (!btn) return;
+  if (ttsEnabled) {
+    btn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+    btn.style.color = 'var(--accent)';
+  } else {
+    btn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`;
+    btn.style.color = 'var(--text-dim)';
+  }
+}
+
+function toggleTts() {
+  ttsEnabled = !ttsEnabled;
+  localStorage.setItem('tts_enabled', ttsEnabled);
+  initTtsUI();
+  if (!ttsEnabled && activeAudio) {
+    activeAudio.pause();
+  }
+}
+
+async function speakMessage(text, companionName) {
+  if (!ttsEnabled || !text) return;
+  if (activeAudio) {
+    activeAudio.pause();
+  }
+  try {
+    let cleanText = text.replace(/[*_~`]/g, '').trim();
+    cleanText = cleanText.replace(/!\[.*?\]\(.*?\)/g, ''); // strip images
+    if (!cleanText) return;
+
+    let voice = 'en_US-amy-medium';
+    if (companionName) {
+      const compObj = companions.find(c => c.name.toLowerCase() === companionName.toLowerCase());
+      if (compObj && compObj.voiceId) {
+        voice = compObj.voiceId;
+      }
+    }
+
+    const res = await fetch('/api/companions/tts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        text: cleanText,
+        voice: voice,
+        companion: companionName
+      })
+    });
+    if (!res.ok) throw new Error('TTS synthesis request failed');
+    const data = await res.json();
+    if (data.url) {
+      activeAudio = new Audio(data.url);
+      activeAudio.play();
+    }
+  } catch (err) {
+    console.error('[tts] Synthesis playback error:', err);
+  }
+}
+
+function toggleStt() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    toast('Speech recognition is not supported in this browser.', 'error');
+    return;
+  }
+  const btn = document.getElementById('stt-record');
+  if (!recognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      isRecording = true;
+      btn.style.color = 'var(--error)';
+      toast('Listening...', 'info');
+    };
+    recognition.onresult = (event) => {
+      const resultText = event.results[0][0].transcript;
+      const field = document.getElementById('input-field');
+      if (field) {
+        field.value = (field.value.trim() + ' ' + resultText).trim();
+        autoResize(field);
+        updateSendBtn();
+      }
+    };
+    recognition.onerror = () => {
+      stopStt();
+    };
+    recognition.onend = () => {
+      stopStt();
+    };
+  }
+  if (isRecording) {
+    recognition.stop();
+  } else {
+    recognition.start();
+  }
+}
+
+function stopStt() {
+  isRecording = false;
+  const btn = document.getElementById('stt-record');
+  if (btn) btn.style.color = 'var(--text-dim)';
+}
+
+// ── Multi-Companion Group Chats ────────────────────────────────────────────
+function openGroupCreator() {
+  document.getElementById('g-id').value = '';
+  document.getElementById('g-name').value = '';
+  document.getElementById('g-scenario').value = '';
+  document.getElementById('g-prompt').value = '';
+  document.getElementById('group-creator-status').textContent = '';
+  document.getElementById('delete-group-btn').style.display = 'none';
+
+  const container = document.getElementById('g-companions-list');
+  container.innerHTML = '';
+  
+  // Render default Ash option
+  const ashDiv = document.createElement('div');
+  ashDiv.style = "display:flex; align-items:center; gap:8px;";
+  ashDiv.innerHTML = `<input type="checkbox" id="g-comp-ash" value="Ash" style="cursor:pointer;"><label for="g-comp-ash" style="font-size:13px; cursor:pointer;">Ash (Default)</label>`;
+  container.appendChild(ashDiv);
+
+  companions.forEach(c => {
+    const div = document.createElement('div');
+    div.style = "display:flex; align-items:center; gap:8px;";
+    div.innerHTML = `<input type="checkbox" id="g-comp-${c.name}" value="${c.name}" style="cursor:pointer;"><label for="g-comp-${c.name}" style="font-size:13px; cursor:pointer;">${c.name}</label>`;
+    container.appendChild(div);
+  });
+
+  document.getElementById('group-creator-modal').style.display = 'flex';
+}
+
+function openGroupEditor(group) {
+  document.getElementById('g-id').value = group.id;
+  document.getElementById('g-name').value = group.name;
+  document.getElementById('g-scenario').value = group.scenario || '';
+  document.getElementById('g-prompt').value = group.systemPrompt || '';
+  document.getElementById('group-creator-status').textContent = '';
+  document.getElementById('delete-group-btn').style.display = 'block';
+
+  const container = document.getElementById('g-companions-list');
+  container.innerHTML = '';
+
+  const activeNames = group.characterNames.split(',').map(n => n.trim());
+
+  // Ash
+  const ashDiv = document.createElement('div');
+  const ashChecked = activeNames.includes('Ash') ? 'checked' : '';
+  ashDiv.style = "display:flex; align-items:center; gap:8px;";
+  ashDiv.innerHTML = `<input type="checkbox" id="g-comp-ash" value="Ash" ${ashChecked} style="cursor:pointer;"><label for="g-comp-ash" style="font-size:13px; cursor:pointer;">Ash (Default)</label>`;
+  container.appendChild(ashDiv);
+
+  companions.forEach(c => {
+    const div = document.createElement('div');
+    const checked = activeNames.includes(c.name) ? 'checked' : '';
+    div.style = "display:flex; align-items:center; gap:8px;";
+    div.innerHTML = `<input type="checkbox" id="g-comp-${c.name}" value="${c.name}" ${checked} style="cursor:pointer;"><label for="g-comp-${c.name}" style="font-size:13px; cursor:pointer;">${c.name}</label>`;
+    container.appendChild(div);
+  });
+
+  document.getElementById('group-creator-modal').style.display = 'flex';
+}
+
+function closeGroupCreator() {
+  document.getElementById('group-creator-modal').style.display = 'none';
+}
+
+function closeGroupCreatorOnBg(e) {
+  if (e.target === document.getElementById('group-creator-modal')) closeGroupCreator();
+}
+
+async function saveGroupChat() {
+  const name = document.getElementById('g-name').value.trim();
+  if (!name) {
+    document.getElementById('group-creator-status').textContent = 'Room name is required.';
+    return;
+  }
+
+  const selectedComps = [];
+  const checks = document.querySelectorAll('#g-companions-list input[type="checkbox"]:checked');
+  checks.forEach(c => selectedComps.push(c.value));
+
+  if (selectedComps.length === 0) {
+    document.getElementById('group-creator-status').textContent = 'Select at least one companion.';
+    return;
+  }
+
+  const id = document.getElementById('g-id').value;
+  const scenario = document.getElementById('g-scenario').value.trim();
+  const systemPrompt = document.getElementById('g-prompt').value.trim();
+
+  try {
+    const res = await fetch('/api/groups', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        id: id || null,
+        name,
+        characterNames: selectedComps.join(','),
+        scenario: scenario || null,
+        systemPrompt: systemPrompt || null
+      })
+    });
+    if (!res.ok) throw new Error();
+    closeGroupCreator();
+    toast('Group room saved!', 'success');
+    await loadGroups();
+  } catch {
+    document.getElementById('group-creator-status').textContent = 'Failed to save group room.';
+  }
+}
+
+async function deleteGroupChat() {
+  const id = document.getElementById('g-id').value;
+  if (!id) return;
+  if (!confirm('Are you sure you want to delete this group room?')) return;
+  try {
+    const res = await fetch(`/api/groups/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!res.ok) throw new Error();
+    closeGroupCreator();
+    toast('Group room deleted', 'info');
+    if (activeGroupId === id) {
+      activeGroupId = null;
+      document.getElementById('group-companions-chips').style.display = 'none';
+      newConversation();
+    }
+    await loadGroups();
+  } catch {
+    document.getElementById('group-creator-status').textContent = 'Failed to delete room.';
+  }
+}
+
+async function loadGroups() {
+  try {
+    const res = await fetch('/api/groups', { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) return;
+    groupsList = await res.json();
+    renderGroupList();
+  } catch (err) {
+    console.error("Failed to load groups:", err);
+  }
+}
+
+function renderGroupList() {
+  const list = document.getElementById('group-list');
+  list.innerHTML = '';
+  if (groupsList.length === 0) {
+    list.innerHTML = '<div style="padding:8px 16px;font-size:12px;color:var(--text-dim)">No group rooms yet</div>';
+    return;
+  }
+
+  groupsList.forEach(g => {
+    const item = document.createElement('div');
+    item.className = 'conv-item' + (activeGroupId === g.id ? ' active' : '');
+    item.style = "display:flex; justify-content:space-between; align-items:center;";
+    item.onclick = () => selectGroup(g.id);
+
+    const left = document.createElement('div');
+    left.style = "display:flex; flex-direction:column; gap:2px; flex:1; cursor:pointer;";
+    left.innerHTML = `
+      <div class="conv-name" style="font-weight:600; color:var(--text);">${escHtml(g.name)}</div>
+      <div class="conv-last" style="font-size:10.5px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(g.characterNames)}</div>
+    `;
+
+    const editBtn = document.createElement('button');
+    editBtn.style = "background:none; border:none; color:var(--text-muted); cursor:pointer; padding:4px; display:flex; align-items:center;";
+    editBtn.innerHTML = `⚙️`;
+    editBtn.onclick = (e) => {
+      e.stopPropagation();
+      openGroupEditor(g);
+    };
+
+    item.appendChild(left);
+    item.appendChild(editBtn);
+    list.appendChild(item);
+  });
+}
+
+async function selectGroup(groupId) {
+  activeGroupId = groupId;
+  activeConvId = null;
+  selectedGroupSpeaker = null;
+  
+  document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+  renderGroupList();
+
+  hideWelcome();
+  
+  const mainList = document.getElementById('messages-inner');
+  mainList.innerHTML = '';
+
+  const group = groupsList.find(g => g.id === groupId);
+  if (!group) return;
+
+  document.getElementById('chat-title').textContent = group.name;
+  document.getElementById('chat-model-label').textContent = 'Group Chat Room';
+  document.getElementById('header-avatar-container').style.display = 'none';
+
+  renderGroupSpeakerChips(group);
+
+  try {
+    const res = await fetch(`/api/groups/${groupId}/messages`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (res.ok) {
+      const messages = await res.json();
+      messages.forEach(msg => {
+        const role = msg.sender === 'user' ? 'user' : 'assistant';
+        const speakerName = msg.characterName || (role === 'user' ? 'User' : 'Assistant');
+        appendGroupMessage(role, speakerName, msg.content);
+      });
+    }
+  } catch (err) {
+    console.error("Failed to load group messages:", err);
+  }
+}
+
+function renderGroupSpeakerChips(group) {
+  const container = document.getElementById('group-companions-chips');
+  container.innerHTML = '';
+  container.style.display = 'flex';
+
+  const autoChip = document.createElement('div');
+  autoChip.style = `padding: 4px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 500; cursor: pointer; border: 1.5px solid ${selectedGroupSpeaker === null ? 'var(--accent)' : 'var(--border)'}; background: ${selectedGroupSpeaker === null ? 'var(--accent-dim)' : 'var(--surface2)'}; color: ${selectedGroupSpeaker === null ? 'var(--accent)' : 'var(--text)'}; transition: all 0.2s;`;
+  autoChip.textContent = '🔄 Auto Turn';
+  autoChip.onclick = () => {
+    selectedGroupSpeaker = null;
+    renderGroupSpeakerChips(group);
+  };
+  container.appendChild(autoChip);
+
+  const characterNames = group.characterNames.split(',').map(n => n.trim());
+  characterNames.forEach(name => {
+    const chip = document.createElement('div');
+    const isSelected = selectedGroupSpeaker === name;
+    chip.style = `padding: 4px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 500; cursor: pointer; border: 1.5px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}; background: ${isSelected ? 'var(--accent-dim)' : 'var(--surface2)'}; color: ${isSelected ? 'var(--accent)' : 'var(--text)'}; transition: all 0.2s;`;
+    chip.textContent = name;
+    chip.onclick = () => {
+      selectedGroupSpeaker = name;
+      renderGroupSpeakerChips(group);
+    };
+    container.appendChild(chip);
+  });
+}
+
+function appendGroupMessageBubble(role, senderName, content) {
+  const outer = document.createElement('div');
+  outer.className = 'msg-row ' + (role === 'user' ? 'user' : 'assistant');
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble ' + (role === 'user' ? 'user' : 'assistant');
+  
+  const inner = document.createElement('div');
+  inner.className = 'bubble-content';
+  
+  const header = document.createElement('div');
+  header.style = "font-size: 11.5px; font-weight: 600; color: var(--accent); margin-bottom: 4px;";
+  header.textContent = senderName;
+  
+  const body = document.createElement('div');
+  body.className = 'bubble-text';
+  body.innerHTML = marked.parse(content);
+  
+  inner.appendChild(header);
+  inner.appendChild(body);
+  bubble.appendChild(inner);
+  outer.appendChild(bubble);
+  
+  document.getElementById('messages-inner').appendChild(outer);
+  scrollToBottom();
+  return outer;
+}
+
+function appendGroupMessage(role, senderName, content) {
+  appendGroupMessageBubble(role, senderName, content);
 }
 </script>
 </body>

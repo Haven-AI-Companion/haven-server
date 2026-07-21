@@ -446,6 +446,10 @@ select.form-input{cursor:pointer}
                   <span style="font-size:12px;">Context Size (tokens):</span>
                   <input type="number" id="cfg-llama-ctx" style="width:90px; background:var(--surface); border:1px solid var(--border); color:var(--text); padding:4px 6px; border-radius:4px; font-size:12px;" min="512" max="65536" step="512">
                 </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                  <span style="font-size:12px;">GPU Layers:</span>
+                  <input type="number" id="cfg-llama-gpu" style="width:70px; background:var(--surface); border:1px solid var(--border); color:var(--text); padding:4px 6px; border-radius:4px; font-size:12px;" min="0" max="100">
+                </div>
 
                 <div style="font-size:11px; font-weight:600; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:4px; margin-top:8px; color:var(--text-muted); letter-spacing:0.05em;">STABLE DIFFUSION CONFIG</div>
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
@@ -1723,6 +1727,9 @@ async function loadStats() {
       }
       if (document.activeElement !== document.getElementById('cfg-llama-ctx')) {
         document.getElementById('cfg-llama-ctx').value = llama.context_size || '';
+      }
+      if (document.activeElement !== document.getElementById('cfg-llama-gpu')) {
+        document.getElementById('cfg-llama-gpu').value = llama.gpu_layers !== undefined ? llama.gpu_layers : '';
       }
       if (document.activeElement !== document.getElementById('cfg-sd-steps')) {
         document.getElementById('cfg-sd-steps').value = sd.steps || '';
@@ -3538,6 +3545,7 @@ async function saveSidecarSettings() {
   try {
     const threads = parseInt(document.getElementById('cfg-llama-threads').value);
     const ctx = parseInt(document.getElementById('cfg-llama-ctx').value);
+    const gpu = parseInt(document.getElementById('cfg-llama-gpu').value);
     const steps = parseInt(document.getElementById('cfg-sd-steps').value);
     const sampling = document.getElementById('cfg-sd-sampling').value;
     const cfg = parseFloat(document.getElementById('cfg-sd-cfg').value);
@@ -3545,7 +3553,8 @@ async function saveSidecarSettings() {
     const payload = {
       llama: {
         threads: threads,
-        context_size: ctx
+        context_size: ctx,
+        gpu_layers: isNaN(gpu) ? 0 : gpu
       },
       stable_diffusion: {
         steps: steps,

@@ -224,6 +224,29 @@ public class ConversationsController : ControllerBase
         return Ok(new { ok = true });
     }
 
+    [HttpPut("{id}/messages/{messageId:int}")]
+    public async Task<IActionResult> UpdateMessage(string id, int messageId, [FromBody] Dictionary<string, string> body)
+    {
+        var conv = await _db.GetConversation(id, UserId);
+        if (conv == null) return NotFound();
+
+        var content = body.GetValueOrDefault("content") ?? "";
+        if (string.IsNullOrEmpty(content)) return BadRequest(new { error = "content required" });
+
+        await _db.UpdateMessage(messageId, content);
+        return Ok(new { ok = true });
+    }
+
+    [HttpDelete("{id}/messages/{messageId:int}")]
+    public async Task<IActionResult> DeleteMessage(string id, int messageId)
+    {
+        var conv = await _db.GetConversation(id, UserId);
+        if (conv == null) return NotFound();
+
+        await _db.DeleteMessage(messageId);
+        return Ok(new { ok = true });
+    }
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
@@ -257,6 +280,197 @@ public class ConversationsController : ControllerBase
                     new System.Text.Json.JsonSerializerOptions { WriteIndented = true })),
                 "application/json", $"{safeTitle}.json")
         };
+    }
+
+    [HttpPost("{id}/import")]
+    public async Task<IActionResult> Import(string id, IFormFile file)
+    {
+        var conv = await _db.GetConversation(id, UserId);
+        if (conv == null) return NotFound();
+
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "File is required." });
+
+        try
+        {
+            string content;
+            using (var reader = new StreamReader(file.OpenReadStream()))
+            {
+                content = await reader.ReadToEndAsync();
+            }
+
+            List<(string role, string text, string? senderName)> parsedMessages = new();
+
+            using var doc = System.Text.Json.JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in root.EnumerateArray())
+                {
+                    string name = item.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                    string mes = item.TryGetProperty("mes", out var m) ? m.GetString() ?? "" : "";
+                    bool isUser = item.TryGetProperty("is_user", out var iu) && iu.GetBoolean();
+                    bool isSystem = item.TryGetProperty("is_system", out var isy) && isy.GetBoolean();
+
+                    if (isSystem) continue;
+
+                    var role = isUser ? "user" : "assistant";
+                    parsedMessages.Add((role, mes, name));
+                }
+            }
+            else if (root.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                if (root.TryGetProperty("messages", out var msgs) && msgs.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var item in msgs.EnumerateArray())
+                    {
+                        string role = item.TryGetProperty("role", out var r) ? r.GetString() ?? "assistant" : "assistant";
+                        string text = item.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
+                        string? senderName = item.TryGetProperty("senderName", out var sn) ? sn.GetString() : null;
+                        parsedMessages.Add((role, text, senderName));
+                    }
+                }
+                else if (root.TryGetProperty("chat", out var chat) && chat.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var item in chat.EnumerateArray())
+                    {
+                        string name = item.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                        string mes = item.TryGetProperty("mes", out var m) ? m.GetString() ?? "" : "";
+                        bool isUser = item.TryGetProperty("is_user", out var iu) && iu.GetBoolean();
+
+                        var role = isUser ? "user" : "assistant";
+                        parsedMessages.Add((role, mes, name));
+                    }
+                }
+            }
+
+            if (parsedMessages.Count == 0)
+            {
+                return BadRequest(new { error = "No messages could be parsed from the file." });
+            }
+
+            await _db.ClearMessages(id);
+
+            foreach (var msg in parsedMessages)
+            {
+                await _db.AddMessage(id, msg.role, msg.text, msg.senderName);
+            }
+
+            return Ok(new { ok = true, importedCount = parsedMessages.Count });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Import failed: {ex.Message}" });
+        }
+    }
+
+    [HttpPost("{id}/import-text")]
+    public async Task<IActionResult> ImportText(string id, [FromBody] Dictionary<string, string> body)
+    {
+        var conv = await _db.GetConversation(id, UserId);
+        if (conv == null) return NotFound();
+
+        var rawText = body.GetValueOrDefault("text") ?? "";
+        if (string.IsNullOrWhiteSpace(rawText)) return BadRequest(new { error = "text required" });
+
+        var companionName = body.GetValueOrDefault("companion_name") ?? "Companion";
+        var userName = body.GetValueOrDefault("user_name") ?? "User";
+
+        try
+        {
+            var lines = rawText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None)
+                               .Select(l => l.Trim())
+                               .Where(l => !string.IsNullOrEmpty(l))
+                               .ToList();
+
+            List<(string role, string text)> parsedMessages = new();
+            string? currentRole = null;
+            System.Text.StringBuilder currentContent = new();
+
+            void FlushCurrent()
+            {
+                if (currentRole != null && currentContent.Length > 0)
+                {
+                    parsedMessages.Add((currentRole, currentContent.ToString().Trim()));
+                    currentContent.Clear();
+                }
+            }
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var line = lines[i];
+
+                // Skip timestamps
+                if (System.Text.RegularExpressions.Regex.IsMatch(line, @"^(?:\d{1,2}:\d{2}\s*(?:AM|PM)?|\d{4}-\d{2}-\d{2}.*)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    continue;
+
+                // Skip status headers
+                if (line.Equals("Online", StringComparison.OrdinalIgnoreCase) || line.Equals("Active now", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // 1. Inline speaker indicator format: "Name: message"
+                var match = System.Text.RegularExpressions.Regex.Match(line, $@"^(?:{System.Text.RegularExpressions.Regex.Escape(companionName)}|{System.Text.RegularExpressions.Regex.Escape(userName)}|You|Me)\s*:\s*(.*)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    FlushCurrent();
+                    var isUser = line.StartsWith("You", StringComparison.OrdinalIgnoreCase) || 
+                                 line.StartsWith("Me", StringComparison.OrdinalIgnoreCase) ||
+                                 line.StartsWith(userName, StringComparison.OrdinalIgnoreCase);
+                    currentRole = isUser ? "user" : "assistant";
+                    currentContent.Append(match.Groups[1].Value);
+                    continue;
+                }
+
+                // 2. Block speaker name indicator on its own line:
+                if (line.Equals(companionName, StringComparison.OrdinalIgnoreCase))
+                {
+                    FlushCurrent();
+                    currentRole = "assistant";
+                    continue;
+                }
+                if (line.Equals(userName, StringComparison.OrdinalIgnoreCase) || 
+                    line.Equals("You", StringComparison.OrdinalIgnoreCase) || 
+                    line.Equals("Me", StringComparison.OrdinalIgnoreCase))
+                {
+                    FlushCurrent();
+                    currentRole = "user";
+                    continue;
+                }
+
+                // 3. Continuation
+                if (currentRole != null)
+                {
+                    if (currentContent.Length > 0) currentContent.Append("\n");
+                    currentContent.Append(line);
+                }
+                else
+                {
+                    currentRole = "assistant";
+                    currentContent.Append(line);
+                }
+            }
+
+            FlushCurrent();
+
+            if (parsedMessages.Count == 0)
+            {
+                return BadRequest(new { error = "No messages could be parsed from the pasted text." });
+            }
+
+            await _db.ClearMessages(id);
+
+            foreach (var msg in parsedMessages)
+            {
+                await _db.AddMessage(id, msg.role, msg.text, msg.role == "user" ? userName : companionName);
+            }
+
+            return Ok(new { ok = true, importedCount = parsedMessages.Count });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Import failed: {ex.Message}" });
+        }
     }
 
     [HttpGet("search")]
@@ -522,6 +736,12 @@ public class ModelsController : ControllerBase
             }
         }
 
+        if (!string.IsNullOrEmpty(req.ConversationId) && TopicSummarizer.ActiveTopics.TryGetValue(req.ConversationId, out var activeTopic))
+        {
+            systemPrompt = $"[Active Topic Context: {activeTopic}]\n" + systemPrompt;
+            Console.WriteLine($"[chat] Injected active topic into system prompt: {activeTopic}");
+        }
+
         var messages = new List<ChatMessage>
         {
             new ChatMessage("system", systemPrompt),
@@ -612,17 +832,23 @@ public class ModelsController : ControllerBase
                     var existing = await _db.GetConversation(conversationId, userId);
                     if (existing == null)
                     {
-                        await _db.CreateConversation(userId, customId: conversationId);
+                        await _db.CreateConversation(userId, customId: conversationId, companionId: req.CompanionName);
+                    }
+                    else if (string.IsNullOrEmpty(existing.CompanionId) && !string.IsNullOrEmpty(req.CompanionName))
+                    {
+                        await _db.SetConversationCompanion(conversationId, req.CompanionName);
                     }
                 }
                 else
                 {
-                    conversationId = await _db.CreateConversation(userId);
+                    conversationId = await _db.CreateConversation(userId, companionId: req.CompanionName);
                 }
                 
                 var cleanUserMsg = ExtractUserMessage(promptText, req.DisplayName);
                 await _db.AddMessage(conversationId, "user", cleanUserMsg);
                 await _db.AddMessage(conversationId, "assistant", responseStr);
+                
+                _ = Task.Run(() => TopicSummarizer.SummarizeConversation(conversationId, _db, _backends));
             }
         }
         catch (Exception ex)
@@ -1272,6 +1498,37 @@ public class AdminController : ControllerBase
             database_references_updated = referencesUpdated,
             message = $"Successfully organized {filesMoved} legacy upload files into companion and user subfolders."
         });
+    }
+
+    [HttpGet("proactive")]
+    public IActionResult GetProactive()
+    {
+        var disabled = _config.GetValue<bool>("ai:DisableProactive", false);
+        return Ok(new { enabled = !disabled });
+    }
+
+    [HttpPost("proactive")]
+    public async Task<IActionResult> SetProactive([FromBody] System.Collections.Generic.Dictionary<string, bool> body)
+    {
+        if (body == null || !body.TryGetValue("enabled", out var enabled))
+            return BadRequest(new { error = "enabled is required" });
+
+        var path = ConfigPath;
+        if (!System.IO.File.Exists(path))
+            await System.IO.File.WriteAllTextAsync(path, "{}");
+
+        var raw = await System.IO.File.ReadAllTextAsync(path);
+        var root = System.Text.Json.Nodes.JsonNode.Parse(raw)!.AsObject();
+        
+        if (!root.ContainsKey("ai"))
+            root["ai"] = new System.Text.Json.Nodes.JsonObject();
+
+        root["ai"]!.AsObject()["DisableProactive"] = !enabled;
+
+        var opts = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+        await System.IO.File.WriteAllTextAsync(path, root.ToJsonString(opts));
+
+        return Ok(new { ok = true, enabled });
     }
 
     [HttpGet("tailscale")]
@@ -2528,6 +2785,7 @@ public class AdminController : ControllerBase
 
             if (llamaBody.ContainsKey("threads")) llamaObj["threads"] = llamaBody["threads"]?.GetValue<int>();
             if (llamaBody.ContainsKey("context_size")) llamaObj["context_size"] = llamaBody["context_size"]?.GetValue<int>();
+            if (llamaBody.ContainsKey("gpu_layers")) llamaObj["gpu_layers"] = llamaBody["gpu_layers"]?.GetValue<int>();
         }
 
         // Save SD configuration
@@ -3213,6 +3471,7 @@ public class HealthController : ControllerBase
                     model = _profiler.LlamaModel,
                     context_size = _profiler.LlamaContextSize,
                     threads = _profiler.LlamaThreads,
+                    gpu_layers = _profiler.LlamaGpuLayers,
                     health = llamaHealth,
                     cpu = _profiler.LlamaCpu,
                     ram_mb = _profiler.LlamaRamMb
@@ -3257,6 +3516,9 @@ public class ChatRequest
     public string? Model { get; set; }
     public string? ConversationId { get; set; }
     public string? DisplayName { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("companion_name")]
+    public string? CompanionName { get; set; }
 }
 
 // ── Companions endpoint (read folder of companions) ─────────────────────────
@@ -3282,7 +3544,7 @@ public class CompanionsController : ControllerBase
     private int UserId => int.Parse(User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)!);
 
     [HttpGet]
-    public IActionResult ListCompanions()
+    public async Task<IActionResult> ListCompanions()
     {
         var relativePath = _config["personality:path"] ?? "personality";
         var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
@@ -3293,58 +3555,50 @@ public class CompanionsController : ControllerBase
             Directory.CreateDirectory(baseDir);
         }
 
-        var companionsMap = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        var companionsMap = new Dictionary<string, CompanionConfig>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. Load default profiles
-        foreach (var file in Directory.GetFiles(baseDir, "*.json"))
+        // Helper to load files into CompanionConfig map
+        void LoadDir(string dir)
         {
-            try
-            {
-                var content = System.IO.File.ReadAllText(file);
-                using var doc = JsonDocument.Parse(content);
-                var root = doc.RootElement.Clone();
-                if (root.TryGetProperty("name", out var nameProp) || root.TryGetProperty("Name", out nameProp))
-                {
-                    var name = nameProp.GetString();
-                    if (!string.IsNullOrEmpty(name))
-                    {
-                        companionsMap[name] = root;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[companions] Failed to parse default profile {Path.GetFileName(file)}: {ex.Message}");
-            }
-        }
-
-        // 2. Load local overrides
-        if (Directory.Exists(localDir))
-        {
-            foreach (var file in Directory.GetFiles(localDir, "*.json"))
+            if (!Directory.Exists(dir)) return;
+            foreach (var file in Directory.GetFiles(dir, "*.json"))
             {
                 try
                 {
                     var content = System.IO.File.ReadAllText(file);
-                    using var doc = JsonDocument.Parse(content);
-                    var root = doc.RootElement.Clone();
-                    if (root.TryGetProperty("name", out var nameProp) || root.TryGetProperty("Name", out nameProp))
+                    var cfg = JsonSerializer.Deserialize<CompanionConfig>(content, new JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    if (cfg != null && !string.IsNullOrEmpty(cfg.Name))
                     {
-                        var name = nameProp.GetString();
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            companionsMap[name] = root;
-                        }
+                        companionsMap[cfg.Name] = cfg;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[companions] Failed to parse local override profile {Path.GetFileName(file)}: {ex.Message}");
+                    Console.Error.WriteLine($"[companions] Failed to parse profile {Path.GetFileName(file)}: {ex.Message}");
                 }
             }
         }
 
-        return Ok(companionsMap.Values.ToList());
+        LoadDir(baseDir);
+        LoadDir(localDir);
+
+        // Inject user-specific database properties: ConversationId
+        var resultList = new List<CompanionConfig>();
+        foreach (var pair in companionsMap)
+        {
+            var cfg = pair.Value;
+            var conv = await _db.GetConversationByCompanion(UserId, cfg.Name);
+            if (conv != null)
+            {
+                cfg.ConversationId = conv.Id;
+            }
+            resultList.Add(cfg);
+        }
+
+        return Ok(resultList);
     }
 
     [HttpPost]
@@ -3455,6 +3709,18 @@ public class CompanionsController : ControllerBase
         {
             return StatusCode(500, new { error = $"Failed to delete companion: {ex.Message}" });
         }
+    }
+
+    [HttpGet("{name}/memories")]
+    public async Task<IActionResult> GetCompanionMemories(string name)
+    {
+        return Ok(await _db.GetMemories(UserId, name));
+    }
+
+    [HttpGet("{name}/diaries")]
+    public async Task<IActionResult> GetCompanionDiaries(string name)
+    {
+        return Ok(await _db.GetDiaries(UserId, name));
     }
 
     [HttpPost("import-card")]
@@ -4340,4 +4606,146 @@ public class CompanionConfig
     public int RelationshipXp { get; set; }
     public int MessageCount { get; set; }
     public string? VrmModelPath { get; set; }
+    public System.Collections.Generic.Dictionary<string, string>? Outfits { get; set; }
+}
+
+public static class TopicSummarizer
+{
+    public static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ActiveTopics = new();
+
+    public static async Task SummarizeConversation(string conversationId, Database db, BackendManager backends)
+    {
+        try
+        {
+            var messages = await db.GetMessages(conversationId);
+            if (messages == null || messages.Count < 3) return;
+
+            var recentMessages = messages.OrderBy(m => m.CreatedAt).TakeLast(15).ToList();
+            
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Summarize the current active topic, task, user goal, or core point of this conversation in 1 short sentence (e.g. \"User is asking for help debugging a Kotlin compile error\"). If there is no clear active topic, output NONE.");
+            sb.AppendLine("Conversation history:");
+            foreach (var m in recentMessages)
+            {
+                sb.AppendLine($"{m.Role}: {m.Content}");
+            }
+
+            var promptMessages = new System.Collections.Generic.List<ChatMessage>
+            {
+                new ChatMessage("system", "You are a precise conversation analyzer. Respond ONLY with the 1-sentence topic summary or 'NONE'."),
+                new ChatMessage("user", sb.ToString())
+            };
+
+            using var cts = new System.Threading.CancellationTokenSource(System.TimeSpan.FromSeconds(25));
+            var fullResponse = new System.Text.StringBuilder();
+            
+            await foreach (var token in backends.StreamChat("default", promptMessages, cts.Token))
+            {
+                fullResponse.Append(token);
+            }
+
+            var summary = fullResponse.ToString().Trim();
+            if (!string.IsNullOrEmpty(summary) && !summary.Equals("NONE", System.StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveTopics[conversationId] = summary;
+                System.Console.WriteLine($"[TopicSummarizer] Updated active topic for {conversationId}: {summary}");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            System.Console.Error.WriteLine($"[TopicSummarizer] Error summarizing {conversationId}: {ex.Message}");
+        }
+    }
+}
+
+public class GroupSaveRequest
+{
+    [System.Text.Json.Serialization.JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("uuid")]
+    public string? Uuid { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("character_names")]
+    public string? CharacterNamesSnake { get; set; }
+    
+    [System.Text.Json.Serialization.JsonPropertyName("characterNames")]
+    public string? CharacterNamesCamel { get; set; }
+
+    public string CharacterNames => CharacterNamesSnake ?? CharacterNamesCamel ?? string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("scenario")]
+    public string? Scenario { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("system_prompt")]
+    public string? SystemPromptSnake { get; set; }
+    
+    [System.Text.Json.Serialization.JsonPropertyName("systemPrompt")]
+    public string? SystemPromptCamel { get; set; }
+
+    public string? SystemPrompt => SystemPromptSnake ?? SystemPromptCamel;
+}
+
+public class GroupMessageSaveRequest
+{
+    [System.Text.Json.Serialization.JsonPropertyName("sender")]
+    public string Sender { get; set; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("character_name")]
+    public string? CharacterNameSnake { get; set; }
+    
+    [System.Text.Json.Serialization.JsonPropertyName("characterName")]
+    public string? CharacterNameCamel { get; set; }
+
+    public string? CharacterName => CharacterNameSnake ?? CharacterNameCamel;
+
+    [System.Text.Json.Serialization.JsonPropertyName("content")]
+    public string Content { get; set; } = string.Empty;
+}
+
+[ApiController]
+[Route("api/groups")]
+[Authorize]
+public class GroupsController : ControllerBase
+{
+    private readonly Database _db;
+
+    private int UserId => int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+    public GroupsController(Database db)
+    {
+        _db = db;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Get()
+    {
+        var list = await _db.GetGroups(UserId);
+        return Ok(list);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Save([FromBody] GroupSaveRequest req)
+    {
+        var id = string.IsNullOrEmpty(req.Id) ? (string.IsNullOrEmpty(req.Uuid) ? Guid.NewGuid().ToString("N") : req.Uuid) : req.Id;
+        await _db.SaveGroup(UserId, id, req.Name, req.CharacterNames, req.Scenario, req.SystemPrompt);
+        return Ok(new { ok = true, id });
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string id)
+    {
+        await _db.DeleteGroup(UserId, id);
+        return Ok(new { ok = true });
+    }
+
+    [HttpGet("{id}/messages")]
+    public async Task<IActionResult> GetMessages(string id)
+    {
+        var messages = await _db.GetGroupMessages(id);
+        return Ok(messages);
+    }
 }

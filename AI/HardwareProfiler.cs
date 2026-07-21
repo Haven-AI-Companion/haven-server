@@ -173,11 +173,13 @@ public class HardwareProfiler
                 if (modelPath != null)
                 {
                     var mmprojPath = FindMmprojGguf(modelPath);
+                    var gpuLayers = _config.GetValue<int?>("sidecars:llama:gpu_layers") ?? (profile.HasCuda ? profile.GpuLayers : 0);
                     var argsList = new System.Collections.Generic.List<string>
                     {
                         "--model", $"\"{modelPath}\"",
                         "--threads", _config.GetValue("sidecars:llama:threads", profile.OptimalThreads).ToString(),
                         "--ctx-size", _config.GetValue("sidecars:llama:context_size", 16384).ToString(),
+                        "--n-gpu-layers", gpuLayers.ToString(),
                         "--host", "127.0.0.1",
                         "--port", LocalPort.ToString(),
                         "--batch-size", "512",
@@ -423,6 +425,7 @@ public class HardwareProfiler
     public int LlamaContextSize => _config.GetValue("sidecars:llama:context_size", 16384);
     public string LlamaModelPath => FindModelGguf() ?? "";
     public int LlamaThreads => _config.GetValue("sidecars:llama:threads", ProfileSystem().OptimalThreads);
+    public int LlamaGpuLayers => _config.GetValue<int?>("sidecars:llama:gpu_layers") ?? (ProfileSystem().HasCuda ? ProfileSystem().GpuLayers : 0);
 
     public string SdModel => "DreamShaper8_LCM_q8_0.gguf";
     public int SdSteps => _config.GetValue("sidecars:stable_diffusion:steps", 8);

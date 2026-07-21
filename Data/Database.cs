@@ -540,6 +540,26 @@ public class Database
         cmd.ExecuteNonQuery();
     });
 
+    public Task ClearMessages(string conversationId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM messages WHERE conversation_id = $id";
+        cmd.Parameters.AddWithValue("$id", conversationId);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<Conversation?> GetConversationByCompanion(int userId, string companionName) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, user_id, title, created_at, updated_at, companion_id FROM conversations WHERE user_id = $u AND companion_id = $cname ORDER BY updated_at DESC LIMIT 1";
+        cmd.Parameters.AddWithValue("$u", userId);
+        cmd.Parameters.AddWithValue("$cname", companionName);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? MapConversation(r) : (Conversation?)null;
+    });
+
     public Task RenameConversation(string id, int userId, string title) => Task.Run(() =>
     {
         using var conn = Open();
@@ -642,6 +662,25 @@ public class Database
         cmd.Parameters.AddWithValue("$r", role);
         cmd.Parameters.AddWithValue("$cnt", content);
         cmd.Parameters.AddWithValue("$s", (object?)senderName ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task UpdateMessage(int messageId, string content) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE messages SET content = $cnt WHERE id = $id";
+        cmd.Parameters.AddWithValue("$cnt", content);
+        cmd.Parameters.AddWithValue("$id", messageId);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task DeleteMessage(int messageId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM messages WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", messageId);
         cmd.ExecuteNonQuery();
     });
 

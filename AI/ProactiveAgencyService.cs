@@ -113,6 +113,13 @@ public class ProactiveAgencyService : BackgroundService
                 var randomIntervalMs = Random.Shared.Next(30000, 90000);
                 await Task.Delay(randomIntervalMs, stoppingToken);
 
+                var disableProactive = _config.GetValue<bool>("ai:DisableProactive", false);
+                if (disableProactive)
+                {
+                    _log.LogDebug("[proactive-agency] Proactive messages are disabled in settings. Skipping tick.");
+                    continue;
+                }
+
                 var activeSockets = ChatHandler.ActiveSockets;
                 IEnumerable<string> conversationIds;
                 
@@ -152,8 +159,8 @@ public class ProactiveAgencyService : BackgroundService
 
                     var now = DateTime.UtcNow;
 
-                    // Resolve the first user dynamically to get correct ID and username
-                    int currentUserId = 2; // Default fallback to ssfdre38
+                    int currentUserId = 2; // Default fallback
+                    string targetUsername = "Daniel";
                     try
                     {
                         var users = await _db.GetAllUsers();
@@ -161,12 +168,52 @@ public class ProactiveAgencyService : BackgroundService
                         if (firstUser != null)
                         {
                             currentUserId = firstUser.Id;
+                            targetUsername = firstUser.Username ?? "Daniel";
                         }
                     }
                     catch { }
 
                     var companionName = _personality.AiName ?? "Companion";
-                    var systemPrompt = _personality.GetSystemPrompt("admin");
+                    var systemPrompt = _personality.GetSystemPrompt(targetUsername);
+
+                    var conversation = await _db.GetConversation(convId, currentUserId);
+                    if (conversation != null && !string.IsNullOrEmpty(conversation.CompanionId))
+                    {
+                        var targetCompanionName = conversation.CompanionId;
+                        var compClean = string.Concat(targetCompanionName.Split(Path.GetInvalidFileNameChars())).Trim();
+                        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+                        var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+                        var localDir = Path.Combine(baseDir, "local");
+                        var localFile = Path.Combine(localDir, $"{compClean.ToLowerInvariant()}.json");
+                        var baseFile = Path.Combine(baseDir, $"{compClean.ToLowerInvariant()}.json");
+                        var checkFile = System.IO.File.Exists(localFile) ? localFile : (System.IO.File.Exists(baseFile) ? baseFile : null);
+
+                        if (checkFile != null)
+                        {
+                            try
+                            {
+                                var json = await System.IO.File.ReadAllTextAsync(checkFile);
+                                var comp = JsonSerializer.Deserialize<AshServer.Controllers.CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                if (comp != null)
+                                {
+                                    companionName = comp.Name;
+                                    var sb = new System.Text.StringBuilder();
+                                    sb.AppendLine($"You are {comp.Name}.");
+                                    if (!string.IsNullOrEmpty(comp.Description)) sb.AppendLine($"Description: {comp.Description}");
+                                    if (!string.IsNullOrEmpty(comp.Personality)) sb.AppendLine($"Personality: {comp.Personality}");
+                                    if (!string.IsNullOrEmpty(comp.Scenario)) sb.AppendLine($"Scenario: {comp.Scenario}");
+                                    if (!string.IsNullOrEmpty(comp.SystemPrompt)) sb.AppendLine(comp.SystemPrompt);
+                                    sb.AppendLine($"The user's name is {targetUsername}. You must address the user as {targetUsername}.");
+                                    sb.AppendLine($"[System Rule: Before responding, you MUST write down your inner thoughts, plans, or reasoning inside <thought>...</thought> tags, followed by your actual response to {targetUsername}. Do not omit the tags.]");
+                                    systemPrompt = sb.ToString();
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _log.LogError(ex, $"[proactive-agency] Failed to load companion config for {targetCompanionName}");
+                            }
+                        }
+                    }
 
                     // Check if it is time for a daily diary reflection
                     await TryGenerateDailyReflection(convId, companionName, currentUserId, systemPrompt);
@@ -249,7 +296,7 @@ public class ProactiveAgencyService : BackgroundService
                     AshServer.Controllers.ModelsController.ActiveProactiveCts = localCts;
 
                     using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(localCts.Token, stoppingToken);
-                    linkedCts.CancelAfter(TimeSpan.FromSeconds(60));
+                    linkedCts.CancelAfter(TimeSpan.FromMinutes(4));
 
                     try
                     {
@@ -420,7 +467,7 @@ public class ProactiveAgencyService : BackgroundService
                     }
 
                     // Save to database
-                    await _db.AddMessage(convId, "assistant", finalMessage);
+                    await _db.AddMessage(convId, "assistant", finalMessage, companionName);
 
                     // Broadcast to active WebSocket clients
                     await ChatHandler.BroadcastToConversation(convId, new { type = "token", content = finalMessage });
@@ -481,18 +528,25 @@ public class ProactiveAgencyService : BackgroundService
                 var (backend, modelName) = await _backends.Resolve("default");
                 var diaryContent = "";
 
-                using var reflectionCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-                await foreach (var token in backend.StreamChat(modelName, reflectionPrompt, reflectionCts.Token))
+                using var reflectionCts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+                try
                 {
-                    diaryContent += token;
+                    await foreach (var token in backend.StreamChat(modelName, reflectionPrompt, reflectionCts.Token))
+                    {
+                        diaryContent += token;
+                    }
+
+                    diaryContent = diaryContent.Trim();
+
+                    if (!string.IsNullOrEmpty(diaryContent))
+                    {
+                        await _db.SaveDiary(userId, companionName, todayDateStr, diaryContent);
+                        _log.LogInformation("[proactive-agency] Companion {Companion} successfully saved daily reflection diary entry.", companionName);
+                    }
                 }
-
-                diaryContent = diaryContent.Trim();
-
-                if (!string.IsNullOrEmpty(diaryContent))
+                catch (OperationCanceledException)
                 {
-                    await _db.SaveDiary(userId, companionName, todayDateStr, diaryContent);
-                    _log.LogInformation("[proactive-agency] Companion {Companion} successfully saved daily reflection diary entry.", companionName);
+                    _log.LogInformation("[proactive-agency] Daily reflection generation for {Companion} was cancelled or timed out after 4 minutes.", companionName);
                 }
             }
         }

@@ -55,8 +55,7 @@ public class PersonalityLoader
 
         if (!string.IsNullOrEmpty(activeName))
         {
-            var genderStr = !string.IsNullOrEmpty(gender) ? $", who is {gender}" : "";
-            parts.Add($"You are speaking with {activeName}{genderStr}. Always address them by this name and align your references to their gender.");
+            parts.Add(BuildUserGenderDirective(activeName, gender));
         }
 
         // Per-user context
@@ -86,8 +85,32 @@ public class PersonalityLoader
 
     private static string DefaultSystemPrompt(string? name, string? gender = null)
     {
-        var genderStr = !string.IsNullOrEmpty(gender) ? $", who is {gender}" : "";
-        return $"You are Ash, a close companion who is warm, friendly, and conversational. Speak in a natural, slightly informal tone. Avoid corporate assistant phrases, explanations, or asking how you can help.{(name != null ? $" You are speaking with {name}{genderStr}." : "")}";
+        return $"You are Ash, a close companion who is warm, friendly, and conversational. Speak in a natural, slightly informal tone. Avoid corporate assistant phrases, explanations, or asking how you can help. {(name != null ? BuildUserGenderDirective(name, gender) : "")}";
+    }
+
+    public static string BuildUserGenderDirective(string? activeName, string? gender)
+    {
+        var name = string.IsNullOrWhiteSpace(activeName) ? "User" : activeName.Trim();
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"You are speaking with {name}.");
+
+        if (!string.IsNullOrWhiteSpace(gender))
+        {
+            var g = gender.Trim().ToLowerInvariant();
+            if (g.Contains("female") || g.Contains("woman") || g.Contains("she") || g.Contains("girl") || g.Contains("lady"))
+            {
+                sb.Append($"\n[USER PRONOUN DIRECTIVE]\nIMPORTANT: {name} is FEMALE. You MUST ALWAYS address and refer to {name} using female pronouns (she/her/hers). NEVER use male pronouns (he/him/his) for {name}.");
+            }
+            else if (g.Contains("male") || g.Contains("man") || g.Contains("he") || g.Contains("boy") || g.Contains("guy"))
+            {
+                sb.Append($"\n[USER PRONOUN DIRECTIVE]\nIMPORTANT: {name} is MALE. You MUST ALWAYS address and refer to {name} using male pronouns (he/him/his). NEVER use female pronouns (she/her/hers) for {name}.");
+            }
+            else
+            {
+                sb.Append($"\n[USER PRONOUN DIRECTIVE]\nIMPORTANT: {name}'s specified gender identity/pronouns are: {gender}. Always align your references to these pronouns for {name}.");
+            }
+        }
+        return sb.ToString();
     }
 }
 
