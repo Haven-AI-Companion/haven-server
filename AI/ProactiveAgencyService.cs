@@ -556,10 +556,16 @@ public class ProactiveAgencyService : BackgroundService
         }
     }
 
-    private async Task UpdateCompanionStateOnServer(string companionName, string? location, string? outfit, string? mood, string? clothingState)
+    private async Task UpdateCompanionStateOnServer(string companionName, string? location, string? outfit, string? mood, string? clothingState, string? convId = null)
     {
         try
         {
+            if (!string.IsNullOrEmpty(convId))
+            {
+                await _db.SaveConversationState(convId, location, outfit, mood, clothingState);
+                _log.LogInformation("[proactive-agency] Saved conversation-scoped state for Conv {ConvId}: Loc={Loc}, Outfit={Out}, Mood={Mood}", convId, location, outfit, mood);
+            }
+
             var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
             var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
             var localDir = Path.Combine(baseDir, "local");
@@ -586,7 +592,7 @@ public class ProactiveAgencyService : BackgroundService
                     if (!Directory.Exists(localDir)) Directory.CreateDirectory(localDir);
                     var localFilePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
                     await File.WriteAllTextAsync(localFilePath, updatedJson);
-                    _log.LogInformation("[proactive-agency] Updated state for companion {Name} in config files: Location={Loc}, Outfit={Out}, Mood={Mood}", companionName, location, outfit, mood);
+                    _log.LogInformation("[proactive-agency] Updated master config for companion {Name}: Location={Loc}, Outfit={Out}, Mood={Mood}", companionName, location, outfit, mood);
                 }
             }
         }

@@ -334,7 +334,7 @@ public class ChatHandler
                     var activeUser = await _db.GetUserById(userId);
                     var systemPrompt = !string.IsNullOrEmpty(customSystemPrompt)
                         ? customSystemPrompt
-                        : GetCompanionSystemPrompt(companionName, username, activeUser?.DisplayName, activeUser?.Gender);
+                        : GetCompanionSystemPrompt(companionName, username, activeUser?.DisplayName, activeUser?.Gender, conversationId);
                     var messages = new List<ChatMessage> { new("system", systemPrompt) };
                     // Don't pass images on history replay — only the current message
                     lock (history)
@@ -837,7 +837,7 @@ public class ChatHandler
         }
     }
 
-    private string GetCompanionSystemPrompt(string companionName, string? username, string? displayName, string? gender)
+    private string GetCompanionSystemPrompt(string companionName, string? username, string? displayName, string? gender, string? convId = null)
     {
         var activeName = displayName ?? username;
         var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
@@ -863,12 +863,28 @@ public class ChatHandler
             });
             if (comp != null)
             {
+                AshServer.Data.ConversationState? convState = null;
+                if (!string.IsNullOrEmpty(convId))
+                {
+                    convState = _db.GetConversationState(convId).GetAwaiter().GetResult();
+                }
+
+                var activeLocation = convState?.Location ?? comp.CurrentLocation;
+                var activeOutfit = convState?.Outfit ?? comp.CurrentOutfit;
+                var activeMood = convState?.Mood ?? comp.CurrentMood;
+                var activeClothing = convState?.ClothingState ?? comp.ClothingState;
+
                 var sb = new System.Text.StringBuilder();
                 sb.AppendLine($"You are {comp.Name}.");
                 if (!string.IsNullOrEmpty(comp.Description)) sb.AppendLine(comp.Description);
                 if (!string.IsNullOrEmpty(comp.Personality)) sb.AppendLine($"Personality: {comp.Personality}");
                 if (!string.IsNullOrEmpty(comp.Scenario)) sb.AppendLine($"Scenario: {comp.Scenario}");
                 if (!string.IsNullOrEmpty(comp.SystemPrompt)) sb.AppendLine(comp.SystemPrompt);
+
+                if (!string.IsNullOrEmpty(activeLocation)) sb.AppendLine($"Current Location: {activeLocation}");
+                if (!string.IsNullOrEmpty(activeOutfit)) sb.AppendLine($"Current Outfit: {activeOutfit}");
+                if (!string.IsNullOrEmpty(activeMood)) sb.AppendLine($"Current Expression/Mood: {activeMood}");
+                if (!string.IsNullOrEmpty(activeClothing)) sb.AppendLine($"Current Clothing State: {activeClothing}");
                 
                 if (!string.IsNullOrEmpty(activeName))
                 {

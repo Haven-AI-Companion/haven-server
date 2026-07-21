@@ -163,6 +163,17 @@ public class Database
                 UNIQUE(provider, channel_key)
             );
 
+            CREATE TABLE IF NOT EXISTS conversation_states (
+                conv_id        TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+                location       TEXT,
+                outfit         TEXT,
+                mood           TEXT,
+                clothing_state TEXT,
+                body_type      TEXT,
+                body_shape     TEXT,
+                updated_at     TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS document_chunks (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 document_id TEXT NOT NULL,
@@ -1565,6 +1576,53 @@ public class Database
         cmd.ExecuteNonQuery();
     });
 
+    // ── Conversation Scoped State ───────────────────────────────────────────
+    public Task<ConversationState?> GetConversationState(string convId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT conv_id, location, outfit, mood, clothing_state, body_type, body_shape FROM conversation_states WHERE conv_id = $id";
+        cmd.Parameters.AddWithValue("$id", convId);
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return (ConversationState?)null;
+        return new ConversationState
+        {
+            ConvId = r.GetString(0),
+            Location = r.IsDBNull(1) ? null : r.GetString(1),
+            Outfit = r.IsDBNull(2) ? null : r.GetString(2),
+            Mood = r.IsDBNull(3) ? null : r.GetString(3),
+            ClothingState = r.IsDBNull(4) ? null : r.GetString(4),
+            BodyType = r.IsDBNull(5) ? null : r.GetString(5),
+            BodyShape = r.IsDBNull(6) ? null : r.GetString(6)
+        };
+    });
+
+    public Task SaveConversationState(string convId, string? location, string? outfit, string? mood, string? clothingState, string? bodyType = null, string? bodyShape = null) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO conversation_states (conv_id, location, outfit, mood, clothing_state, body_type, body_shape, updated_at)
+            VALUES ($id, $loc, $out, $mood, $cs, $bt, $bs, datetime('now'))
+            ON CONFLICT(conv_id) DO UPDATE SET
+                location = COALESCE($loc, location),
+                outfit = COALESCE($out, outfit),
+                mood = COALESCE($mood, mood),
+                clothing_state = COALESCE($cs, clothing_state),
+                body_type = COALESCE($bt, body_type),
+                body_shape = COALESCE($bs, body_shape),
+                updated_at = datetime('now');
+            """;
+        cmd.Parameters.AddWithValue("$id", convId);
+        cmd.Parameters.AddWithValue("$loc", (object?)location ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$out", (object?)outfit ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$mood", (object?)mood ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$cs", (object?)clothingState ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$bt", (object?)bodyType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$bs", (object?)bodyShape ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+    });
+
     public Task UpdateRepositoryLastSynced(int id, string lastSynced) => Task.Run(() =>
     {
         using var conn = Open();
@@ -1574,4 +1632,15 @@ public class Database
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
     });
+}
+
+public class ConversationState
+{
+    public string ConvId { get; set; } = "";
+    public string? Location { get; set; }
+    public string? Outfit { get; set; }
+    public string? Mood { get; set; }
+    public string? ClothingState { get; set; }
+    public string? BodyType { get; set; }
+    public string? BodyShape { get; set; }
 }
