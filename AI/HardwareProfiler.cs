@@ -349,13 +349,14 @@ public class HardwareProfiler
                 var modelPath = Path.Combine(sdDir, @"models\DreamShaper8_LCM_q8_0.gguf");
                 var taesdPath = Path.Combine(sdDir, @"models\taesd.safetensors");
                 var embdDir = Path.Combine(sdDir, @"models\embeddings");
+                var loraDir = Path.Combine(sdDir, @"models\lora-models");
 
                 if (File.Exists(modelPath))
                 {
                     var steps = _config.GetValue("sidecars:stable_diffusion:steps", 8);
                     var sampling = _config.GetValue("sidecars:stable_diffusion:sampling_method", "lcm");
                     var cfgScale = _config.GetValue("sidecars:stable_diffusion:cfg_scale", 2.0);
-                    var args = $"--model \"{modelPath}\" --taesd \"{taesdPath}\" --embd-dir \"{embdDir}\" --listen-ip 127.0.0.1 --listen-port {sdPort} --steps {steps} --sampling-method {sampling} --cfg-scale {cfgScale.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}";
+                    var args = $"--model \"{modelPath}\" --taesd \"{taesdPath}\" --embd-dir \"{embdDir}\" --lora-model-dir \"{loraDir}\" --listen-ip 127.0.0.1 --listen-port {sdPort} --steps {steps} --sampling-method {sampling} --cfg-scale {cfgScale.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}";
                     
                     var psi = new ProcessStartInfo
                     {
