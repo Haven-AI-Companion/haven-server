@@ -472,7 +472,7 @@ public class ModelManagerController : ControllerBase
             }
 
             using var doc = JsonDocument.Parse(output);
-            return Ok(new { ok = true, results = doc.RootElement });
+            return Ok(new { ok = true, results = doc.RootElement.Clone() });
         }
         catch (Exception ex)
         {
