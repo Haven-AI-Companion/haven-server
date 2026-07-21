@@ -298,9 +298,10 @@ public class ModelManagerController : ControllerBase
 
         try
         {
+            var pythonPath = GetPythonExecutable();
             var psi = new ProcessStartInfo
             {
-                FileName = "python",
+                FileName = pythonPath,
                 Arguments = "-c \"import sys, json; " +
                             "try: " +
                             "  import huggingface_hub; " +
@@ -355,9 +356,10 @@ public class ModelManagerController : ControllerBase
     {
         try
         {
+            var pythonPath = GetPythonExecutable();
             var psi = new ProcessStartInfo
             {
-                FileName = "python",
+                FileName = pythonPath,
                 Arguments = "-m pip install -U \"huggingface_hub[cli]\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -395,9 +397,10 @@ public class ModelManagerController : ControllerBase
 
         try
         {
+            var pythonPath = GetPythonExecutable();
             var psi = new ProcessStartInfo
             {
-                FileName = "python",
+                FileName = pythonPath,
                 Arguments = $"-c \"import sys; " +
                             "try: " +
                             "  from huggingface_hub import login; " +
@@ -434,9 +437,75 @@ public class ModelManagerController : ControllerBase
         }
     }
 
+    [HttpGet("search")]
+    public async Task<IActionResult> SearchModels([FromQuery] string q)
+    {
+        if (string.IsNullOrWhiteSpace(q))
+            return BadRequest(new { error = "Search query 'q' is required." });
+
+        try
+        {
+            var pythonPath = GetPythonExecutable();
+            var scriptPath = Path.Combine(UserProfileDir, "haven-server", "search_helper.py");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = pythonPath,
+                Arguments = $"\"{scriptPath}\" \"{q.Replace("\"", "\\\"")}\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+                return StatusCode(500, new { error = "Failed to start search process." });
+
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                return BadRequest(new { error = string.IsNullOrWhiteSpace(error) ? "Search exited with code " + process.ExitCode : error.Trim() });
+            }
+
+            using var doc = JsonDocument.Parse(output);
+            return Ok(new { ok = true, results = doc.RootElement });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    private static string GetPythonExecutable()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        
+        // 1. Check AppData Local Python binary location directly (Windows custom installs)
+        var pythonLocalPath = Path.Combine(localAppData, "Python", "bin", "python.exe");
+        if (System.IO.File.Exists(pythonLocalPath)) return pythonLocalPath;
+        
+        // 2. Check AppData Programs Python location (standard installers)
+        var programsPath = Path.Combine(localAppData, "Programs", "Python");
+        if (Directory.Exists(programsPath))
+        {
+            var versions = Directory.GetDirectories(programsPath, "Python*");
+            foreach (var v in versions)
+            {
+                var p = Path.Combine(v, "python.exe");
+                if (System.IO.File.Exists(p)) return p;
+            }
+        }
+
+        // 3. Fallback to path-based "python"
+        return "python";
+    }
+
     private async Task UpdateActiveModelInConfig(string modelFilename)
     {
-        // Try absolute root path first
         var configPath = Path.Combine(AppContext.BaseDirectory, "../../../config.json");
         if (!System.IO.File.Exists(configPath))
         {
@@ -459,7 +528,6 @@ public class ModelManagerController : ControllerBase
 
                 await System.IO.File.WriteAllTextAsync(configPath, configNode.ToString());
                 
-                // Reload configuration in memory
                 if (_config is IConfigurationRoot root)
                 {
                     root.Reload();

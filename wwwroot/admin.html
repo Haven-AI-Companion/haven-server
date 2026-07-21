@@ -772,6 +772,20 @@ select.form-input{cursor:pointer}
           <!-- Download Model / LoRA Form -->
           <div style="border-top:1px solid var(--border); padding-top:16px;">
             <div style="font-weight:600; margin-bottom:12px;">Download Models/LoRAs from Hugging Face</div>
+            
+            <!-- Model Search Box -->
+            <div style="background:var(--surface2); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:16px;">
+              <label class="form-label" style="font-weight:600;">Search Hugging Face Hub</label>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <input type="text" id="hf-search-query" class="form-input" style="flex:1;" placeholder="e.g. gemma-2-2b or detail-tweaker" onkeydown="if(event.key === 'Enter') searchHfModels()">
+                <button class="btn btn-primary" onclick="searchHfModels()">Search Hub</button>
+              </div>
+              <div id="hf-search-results" style="margin-top:12px; max-height:220px; overflow-y:auto; display:none; flex-direction:column; gap:8px;">
+                <!-- Search results injected here -->
+              </div>
+            </div>
+
+            <div style="font-size:11px; font-weight:600; margin-bottom:8px; text-transform:uppercase; color:var(--text-muted);">Or Download Manually via Repo ID</div>
             <div class="form-row" style="display:grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap:12px; align-items:flex-end;">
               <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label">Repository ID</label>
@@ -3261,6 +3275,58 @@ async function updateDownloadStatus() {
       }
     }
   } catch {}
+}
+
+async function searchHfModels() {
+  const queryInput = document.getElementById('hf-search-query');
+  const resultsDiv = document.getElementById('hf-search-results');
+  if (!queryInput || !queryInput.value.trim() || !resultsDiv) return;
+  
+  resultsDiv.style.display = 'flex';
+  resultsDiv.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:8px;">Searching Hugging Face Hub...</div>';
+  
+  try {
+    const res = await fetch(`/api/admin/models/search?q=${encodeURIComponent(queryInput.value.trim())}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Search failed');
+    const data = await res.json();
+    
+    if (data.ok && data.results && data.results.length) {
+      resultsDiv.innerHTML = data.results.map(m => {
+        const tags = m.tags || [];
+        const isLora = tags.includes('lora') || m.id.toLowerCase().includes('lora');
+        const defaultType = isLora ? 'lora' : 'gguf';
+        const typeLabel = isLora ? 'LoRA' : 'Model (GGUF)';
+        
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface1); padding:8px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:12px;">
+            <div style="flex:1; margin-right:12px; text-align:left;">
+              <div style="font-weight:600; color:var(--text); word-break:break-all;">${m.id}</div>
+              <div style="font-size:11px; margin-top:2px;" class="txt-muted">
+                Downloads: ${m.downloads.toLocaleString()} | Likes: ${m.likes.toLocaleString()} | Tagged: ${typeLabel}
+              </div>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-sm btn-primary" onclick="selectSearchModel('${m.id}', '${defaultType}')">Select</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } else {
+      resultsDiv.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:8px;">No matching models found.</div>';
+    }
+  } catch (err) {
+    resultsDiv.innerHTML = `<div style="font-size:12px; color:var(--text-error); padding:8px;">Error: ${err.message}</div>`;
+  }
+}
+
+function selectSearchModel(repoId, defaultType) {
+  const dlRepoInput = document.getElementById('dl-repo-id');
+  const dlTypeSelect = document.getElementById('dl-type');
+  if (dlRepoInput) dlRepoInput.value = repoId;
+  if (dlTypeSelect) dlTypeSelect.value = defaultType;
+  toast(`Selected: ${repoId}. Enter the exact filename below to start downloading!`);
 }
 
 /* ── External Identity Links ─────────────────────────────────────────────── */
