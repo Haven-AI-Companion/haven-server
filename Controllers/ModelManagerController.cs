@@ -270,6 +270,101 @@ public class ModelManagerController : ControllerBase
         });
     }
 
+    [HttpGet("hf-status")]
+    public async Task<IActionResult> GetHfStatus()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "python",
+                Arguments = "-c \"import sys, json; " +
+                            "try: " +
+                            "  import huggingface_hub; " +
+                            "  api = huggingface_hub.HfApi(); " +
+                            "  try: " +
+                            "    user = api.whoami(); " +
+                            "    print(json.dumps({'installed': True, 'loggedIn': True, 'username': user.get('name')})); " +
+                            "  except: " +
+                            "    print(json.dumps({'installed': True, 'loggedIn': False})); " +
+                            "except Exception as e: " +
+                            "  print(json.dumps({'installed': False, 'loggedIn': False, 'error': str(e)}));\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                return Ok(new { ok = true, status = new { installed = false, loggedIn = false } });
+            }
+
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                return Ok(new { ok = true, status = new { installed = false, loggedIn = false } });
+            }
+
+            using var doc = JsonDocument.Parse(output);
+            return Ok(new { ok = true, status = doc.RootElement });
+        }
+        catch (Exception ex)
+        {
+            return Ok(new { ok = true, status = new { installed = false, loggedIn = false, error = ex.Message } });
+        }
+    }
+
+    [HttpPost("hf-login")]
+    public async Task<IActionResult> HfLogin([FromBody] HfLoginRequest req)
+    {
+        if (req == null || string.IsNullOrWhiteSpace(req.Token))
+            return BadRequest(new { error = "Hugging Face token is required." });
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "python",
+                Arguments = $"-c \"import sys; " +
+                            "try: " +
+                            "  from huggingface_hub import login; " +
+                            $"  login(token='{req.Token.Trim()}'); " +
+                            "  print('SUCCESS'); " +
+                            "except Exception as e: " +
+                            "  print('ERROR:', str(e));\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+                return StatusCode(500, new { error = "Failed to start python login process." });
+
+            var output = (await process.StandardOutput.ReadToEndAsync()).Trim();
+            await process.WaitForExitAsync();
+
+            if (output == "SUCCESS")
+            {
+                return Ok(new { ok = true, message = "Successfully logged in to Hugging Face." });
+            }
+            else
+            {
+                var err = await process.StandardError.ReadToEndAsync();
+                return BadRequest(new { error = string.IsNullOrWhiteSpace(err) ? output : err.Trim() });
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     private async Task UpdateActiveModelInConfig(string modelFilename)
     {
         // Try absolute root path first
@@ -326,4 +421,9 @@ public class DownloadStatusInfo
     public string State { get; set; } = "Pending";
     public string? ErrorMessage { get; set; }
     public string StartedAt { get; set; } = string.Empty;
+}
+
+public class HfLoginRequest
+{
+    public string Token { get; set; } = string.Empty;
 }
