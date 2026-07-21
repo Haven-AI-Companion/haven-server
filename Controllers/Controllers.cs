@@ -787,6 +787,9 @@ public class ModelsController : ControllerBase
                         var baseFile = Path.Combine(baseDir, $"{compClean.ToLowerInvariant()}.json");
                         var checkFile = System.IO.File.Exists(localFile) ? localFile : (System.IO.File.Exists(baseFile) ? baseFile : null);
 
+                        var convId = string.IsNullOrWhiteSpace(req.ConversationId) ? $"char_{compClean}" : req.ConversationId;
+                        var convState = await _db.GetConversationState(convId);
+
                         CompanionConfig? comp = null;
                         if (checkFile != null)
                         {
@@ -795,13 +798,17 @@ public class ModelsController : ControllerBase
                         }
 
                         var details = comp?.Description ?? comp?.Personality ?? "";
-                        var location = comp?.CurrentLocation ?? "";
-                        var outfit = comp?.CurrentOutfit ?? "";
-                        var mood = comp?.CurrentMood ?? "";
-                        var clothing = comp?.ClothingState ?? "";
+                        var location = convState?.Location ?? comp?.CurrentLocation ?? "";
+                        var outfit = convState?.Outfit ?? comp?.CurrentOutfit ?? "";
+                        var mood = convState?.Mood ?? comp?.CurrentMood ?? "";
+                        var clothing = convState?.ClothingState ?? comp?.ClothingState ?? "";
+                        var bodyType = convState?.BodyType ?? comp?.BodyType ?? "";
+                        var bodyShape = convState?.BodyShape ?? comp?.BodyShape ?? "";
 
                         var sdPrompt = $"digital art portrait of {companionName}, highly detailed";
                         if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
+                        if (!string.IsNullOrWhiteSpace(bodyType)) sdPrompt += $", body type: {bodyType}";
+                        if (!string.IsNullOrWhiteSpace(bodyShape)) sdPrompt += $", body shape: {bodyShape}";
                         if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
                         if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
                         if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
@@ -4363,10 +4370,13 @@ public class CompanionsController : ControllerBase
         var targetFilename = $"{cleanName}/user_{UserId}/{assetType}_{value.ToLowerInvariant()}.webp";
 
         string sdPromptToUse;
+        var btPart = !string.IsNullOrWhiteSpace(config.BodyType) ? $", body type: {config.BodyType}" : "";
+        var bsPart = !string.IsNullOrWhiteSpace(config.BodyShape) ? $", body shape: {config.BodyShape}" : "";
+
         if (assetType == "outfit")
         {
             sdPromptToUse = string.IsNullOrWhiteSpace(req.SdPromptOverride)
-                ? $"digital art portrait of {config.Name} wearing {value}, highly detailed, {config.Description}"
+                ? $"digital art portrait of {config.Name} wearing {value}{btPart}{bsPart}, highly detailed, {config.Description}"
                 : req.SdPromptOverride;
         }
         else if (assetType == "location")
@@ -4378,7 +4388,7 @@ public class CompanionsController : ControllerBase
         else if (assetType == "mood")
         {
             sdPromptToUse = string.IsNullOrWhiteSpace(req.SdPromptOverride)
-                ? $"digital art portrait of {config.Name}, {value} facial expression, highly detailed, {config.Description}"
+                ? $"digital art portrait of {config.Name}, {value} facial expression{btPart}{bsPart}, highly detailed, {config.Description}"
                 : req.SdPromptOverride;
         }
         else
