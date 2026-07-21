@@ -3120,7 +3120,7 @@ async function updateInstalledModels() {
     if (data.ok) {
       const activeRes = await fetch('/api/admin/models/active', { headers: { Authorization: `Bearer ${token}` } });
       const activeData = await activeRes.json();
-      const activeModel = activeData.activeGguf || '';
+      const activeModel = activeData.activeGguf || activeData.active_gguf || '';
 
       if (data.gguf && data.gguf.length) {
         select.innerHTML = data.gguf.map(g => `
@@ -3164,14 +3164,20 @@ async function updateActiveModels() {
     const res = await fetch('/api/admin/models/active', { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
     if (data.ok) {
-      if (data.isLlamaRunning) {
-        llamaStatus.innerHTML = `Status: <span class="txt-success">● Active</span> (PID: ${data.llamaPid}, Model: <code>${data.activeGguf}</code>)`;
+      const isLlamaRunning = data.isLlamaRunning || data.is_llama_running || false;
+      const isSdRunning = data.isSdRunning || data.is_sd_running || false;
+      const llamaPid = data.llamaPid || data.llama_pid || '';
+      const sdPid = data.sdPid || data.sd_pid || '';
+      const activeGguf = data.activeGguf || data.active_gguf || '';
+
+      if (isLlamaRunning) {
+        llamaStatus.innerHTML = `Status: <span class="txt-success">● Active</span> (PID: ${llamaPid}, Model: <code>${activeGguf}</code>)`;
       } else {
         llamaStatus.innerHTML = `Status: <span class="txt-error">Offline</span> (Offline / Restarting)`;
       }
 
-      if (data.isSdRunning) {
-        sdStatus.innerHTML = `Status: <span class="txt-success">● Active</span> (PID: ${data.sdPid})`;
+      if (isSdRunning) {
+        sdStatus.innerHTML = `Status: <span class="txt-success">● Active</span> (PID: ${sdPid})`;
       } else {
         sdStatus.innerHTML = `Status: <span class="txt-error">Offline</span> (Offline / Restarting)`;
       }
