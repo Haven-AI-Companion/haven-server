@@ -4216,7 +4216,10 @@ public class CompanionsController : ControllerBase
                                "  \"personality\": \"Detailed personality traits, habits, and speech mannerisms.\",\n" +
                                "  \"scenario\": \"Current roleplay setting or circumstances.\",\n" +
                                "  \"firstMessage\": \"The initial welcoming message the companion says to start the chat.\",\n" +
-                               "  \"systemPrompt\": \"System directives for how this companion should act.\"\n" +
+                               "  \"systemPrompt\": \"System directives for how this companion should act.\",\n" +
+                               "  \"bodyType\": \"Optional physical body characteristics, e.g. curvy, futanari, athletic.\",\n" +
+                               "  \"bodyShape\": \"Optional details about shape, e.g. hourglass, futanari, muscular.\",\n" +
+                               "  \"clothingState\": \"Active starting clothing state, e.g. fully clothed, naked, underwear.\"\n" +
                                "}\n" +
                                "Do not write any extra conversational text, notes, or markdown codeblocks around the JSON. Output only the raw JSON.";
 
@@ -4296,6 +4299,25 @@ public class CompanionsController : ControllerBase
                 Console.Error.WriteLine($"[CompanionsController] SD generation failed: {ex.Message}");
             }
 
+            string bodyType = root.TryGetProperty("bodyType", out var bt) ? bt.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(bodyType))
+                bodyType = root.TryGetProperty("body_type", out var bt2) ? bt2.GetString() ?? "" : "";
+
+            string bodyShape = root.TryGetProperty("bodyShape", out var bs) ? bs.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(bodyShape))
+                bodyShape = root.TryGetProperty("body_shape", out var bs2) ? bs2.GetString() ?? "" : "";
+
+            string clothingState = root.TryGetProperty("clothingState", out var cs) ? cs.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(clothingState))
+                clothingState = root.TryGetProperty("clothing_state", out var cs2) ? cs2.GetString() ?? "" : "";
+
+            // Fallback: If prompt explicitly requested futanari/futa or custom anatomical properties, force-match them into config fields
+            if (req.Prompt.Contains("futa", StringComparison.OrdinalIgnoreCase) || req.Prompt.Contains("futanari", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(bodyType)) bodyType = "futanari";
+                if (string.IsNullOrWhiteSpace(bodyShape)) bodyShape = "futanari";
+            }
+
             var config = new CompanionConfig
             {
                 Name = name,
@@ -4305,7 +4327,10 @@ public class CompanionsController : ControllerBase
                 Scenario = scenario,
                 FirstMessage = firstMsg,
                 SystemPrompt = systemPromptStr,
-                AvatarPath = relativeImagePath
+                AvatarPath = relativeImagePath,
+                BodyType = bodyType,
+                BodyShape = bodyShape,
+                ClothingState = !string.IsNullOrWhiteSpace(clothingState) ? clothingState : "fully clothed"
             };
 
             var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
