@@ -21,6 +21,10 @@ public class ModelManagerController : ControllerBase
     private readonly IConfiguration _config;
     private readonly HardwareProfiler _profiler;
     private static readonly ConcurrentDictionary<string, DownloadStatusInfo> Downloads = new();
+    
+    private static readonly string UserProfileDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private static readonly string GgufDir = Path.Combine(UserProfileDir, "gemma4-turbo-family");
+    private static readonly string LoraDir = Path.Combine(UserProfileDir, "stable-diffusion-cpp", "models", "lora-models");
 
     public ModelManagerController(IConfiguration config, HardwareProfiler profiler)
     {
@@ -56,11 +60,10 @@ public class ModelManagerController : ControllerBase
             return BadRequest(new { error = "ModelFilename is required." });
 
         var modelFilename = req.ModelFilename.Trim();
-        var ggufDir = @"C:\Users\admin\gemma4-turbo-family";
-        var modelPath = Path.Combine(ggufDir, modelFilename);
+        var modelPath = Path.Combine(GgufDir, modelFilename);
 
         if (!System.IO.File.Exists(modelPath))
-            return BadRequest(new { error = $"Model file '{modelFilename}' does not exist in {ggufDir}." });
+            return BadRequest(new { error = $"Model file '{modelFilename}' does not exist in {GgufDir}." });
 
         try
         {
@@ -104,8 +107,8 @@ public class ModelManagerController : ControllerBase
     {
         try
         {
-            var ggufDir = @"C:\Users\admin\gemma4-turbo-family";
-            var loraDir = @"C:\Users\admin\stable-diffusion-cpp\models\lora-models";
+            var ggufDir = GgufDir;
+            var loraDir = LoraDir;
 
             var ggufFiles = new List<object>();
             if (Directory.Exists(ggufDir))
@@ -170,9 +173,7 @@ public class ModelManagerController : ControllerBase
             return Ok(new { ok = true, message = "Download is already in progress.", status = existingStatus });
         }
 
-        var destDir = modelType == "lora"
-            ? @"C:\Users\admin\stable-diffusion-cpp\models\lora-models"
-            : @"C:\Users\admin\gemma4-turbo-family";
+        var destDir = modelType == "lora" ? LoraDir : GgufDir;
 
         var status = new DownloadStatusInfo
         {
@@ -193,10 +194,11 @@ public class ModelManagerController : ControllerBase
             {
                 status.State = "Downloading";
                 
+                var scriptPath = Path.Combine(UserProfileDir, "haven-server", "download_helper.py");
                 var psi = new ProcessStartInfo
                 {
                     FileName = "python",
-                    Arguments = $"\"C:\\Users\\admin\\haven-server\\download_helper.py\" --repo-id \"{status.RepoId}\" --filename \"{status.Filename}\" --dest-dir \"{destDir}\"",
+                    Arguments = $"\"{scriptPath}\" --repo-id \"{status.RepoId}\" --filename \"{status.Filename}\" --dest-dir \"{destDir}\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -273,6 +275,27 @@ public class ModelManagerController : ControllerBase
     [HttpGet("hf-status")]
     public async Task<IActionResult> GetHfStatus()
     {
+        var cliInstalled = false;
+        try
+        {
+            var checkPsi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/c where huggingface-cli",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            using var checkProc = Process.Start(checkPsi);
+            if (checkProc != null)
+            {
+                await checkProc.WaitForExitAsync();
+                cliInstalled = checkProc.ExitCode == 0;
+            }
+        }
+        catch {}
+
         try
         {
             var psi = new ProcessStartInfo
@@ -298,7 +321,7 @@ public class ModelManagerController : ControllerBase
             using var process = Process.Start(psi);
             if (process == null)
             {
-                return Ok(new { ok = true, status = new { installed = false, loggedIn = false } });
+                return Ok(new { ok = true, status = new { installed = false, cliInstalled, loggedIn = false } });
             }
 
             var output = await process.StandardOutput.ReadToEndAsync();
@@ -306,15 +329,61 @@ public class ModelManagerController : ControllerBase
 
             if (string.IsNullOrWhiteSpace(output))
             {
-                return Ok(new { ok = true, status = new { installed = false, loggedIn = false } });
+                return Ok(new { ok = true, status = new { installed = false, cliInstalled, loggedIn = false } });
             }
 
             using var doc = JsonDocument.Parse(output);
-            return Ok(new { ok = true, status = doc.RootElement });
+            var statusObj = doc.RootElement;
+            return Ok(new { 
+                ok = true, 
+                status = new { 
+                    installed = statusObj.GetProperty("installed").GetBoolean(),
+                    cliInstalled = cliInstalled,
+                    loggedIn = statusObj.GetProperty("loggedIn").GetBoolean(),
+                    username = statusObj.TryGetProperty("username", out var nameVal) ? nameVal.GetString() : null
+                }
+            });
         }
         catch (Exception ex)
         {
-            return Ok(new { ok = true, status = new { installed = false, loggedIn = false, error = ex.Message } });
+            return Ok(new { ok = true, status = new { installed = false, cliInstalled, loggedIn = false, error = ex.Message } });
+        }
+    }
+
+    [HttpPost("hf-install")]
+    public async Task<IActionResult> HfInstall()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "python",
+                Arguments = "-m pip install -U \"huggingface_hub[cli]\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+                return StatusCode(500, new { error = "Failed to start python installation process." });
+
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode == 0)
+            {
+                return Ok(new { ok = true, message = "Successfully installed Hugging Face CLI." });
+            }
+            else
+            {
+                var err = await process.StandardError.ReadToEndAsync();
+                return BadRequest(new { error = string.IsNullOrWhiteSpace(err) ? $"Pip exited with error code {process.ExitCode}" : err.Trim() });
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
         }
     }
 

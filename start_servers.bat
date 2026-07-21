@@ -9,29 +9,29 @@ echo.
 
 :: 1. Start Llama Server in a new window (listening strictly on localhost to let NetBird IP Helper proxy it)
 echo [1/3] Starting Llama Server (Inference)...
-start "Llama Server" /d "C:\Users\admin\haven-server" powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\admin\source\ash-bot-cs\start-ash-server.ps1" -BindHost 127.0.0.1
+start "Llama Server" /d "%USERPROFILE%\haven-server" powershell -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\source\ash-bot-cs\start-ash-server.ps1" -BindHost 127.0.0.1
 echo [OK] Llama Server launched in a new window.
 echo.
 
 :: 2. Start Stable Diffusion Server in a new window
 echo [2/3] Starting Stable Diffusion Server...
-cd /d "C:\Users\admin\stable-diffusion-cpp"
+cd /d "%USERPROFILE%\stable-diffusion-cpp"
 if not exist "sd-server.exe" (
-    echo [ERROR] sd-server.exe not found in C:\Users\admin\stable-diffusion-cpp
+    echo [ERROR] sd-server.exe not found in %USERPROFILE%\stable-diffusion-cpp
     goto error
 )
-start "Stable Diffusion Server" /d "C:\Users\admin\stable-diffusion-cpp" sd-server.exe --model "C:\Users\admin\stable-diffusion-cpp\models\DreamShaper8_LCM_q8_0.gguf" --taesd "C:\Users\admin\stable-diffusion-cpp\models\taesd.safetensors" --embd-dir "C:\Users\admin\stable-diffusion-cpp\models\embeddings" --listen-ip 127.0.0.1 --listen-port 8080 --steps 8 --sampling-method lcm --cfg-scale 2.0
+start "Stable Diffusion Server" /d "%USERPROFILE%\stable-diffusion-cpp" sd-server.exe --model "%USERPROFILE%\stable-diffusion-cpp\models\DreamShaper8_LCM_q8_0.gguf" --taesd "%USERPROFILE%\stable-diffusion-cpp\models\taesd.safetensors" --embd-dir "%USERPROFILE%\stable-diffusion-cpp\models\embeddings" --listen-ip 127.0.0.1 --listen-port 8080 --steps 8 --sampling-method lcm --cfg-scale 2.0
 echo [OK] SD Server launched in a new window.
 echo.
 
 :: 3. Start Haven Server in a new window
 echo [3/3] Starting Haven Server (C#)...
-cd /d "C:\Users\admin\haven-server"
+cd /d "%USERPROFILE%\haven-server"
 if not exist "bin\Debug\net10.0\win-x64\haven-server.exe" (
     echo [ERROR] haven-server.exe not found in bin\Debug\net10.0\win-x64
     goto error
 )
-start "Haven Server" /d "C:\Users\admin\haven-server" bin\Debug\net10.0\win-x64\haven-server.exe
+start "Haven Server" /d "%USERPROFILE%\haven-server" bin\Debug\net10.0\win-x64\haven-server.exe
 echo [OK] Haven Server launched in a new window.
 echo.
 echo ==========================================================

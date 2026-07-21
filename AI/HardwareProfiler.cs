@@ -251,7 +251,7 @@ public class HardwareProfiler
 
     private string? FindModelGguf()
     {
-        var dir = @"C:\Users\admin\gemma4-turbo-family";
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "gemma4-turbo-family");
         if (!Directory.Exists(dir)) return null;
 
         // Try reading custom configured model from appsettings / config first
@@ -313,7 +313,7 @@ public class HardwareProfiler
         if (File.Exists(binPath)) return binPath;
 
         // Check gemma4-turbo-family local path candidate
-        var gemmaTurboPath = Path.Combine(@"C:\Users\admin\gemma4-turbo-family\llama-cpp", name);
+        var gemmaTurboPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "gemma4-turbo-family", "llama-cpp", name);
         if (File.Exists(gemmaTurboPath)) return gemmaTurboPath;
 
         // Check system PATH
@@ -341,7 +341,7 @@ public class HardwareProfiler
         }
         else
         {
-            var sdDir = @"C:\Users\admin\stable-diffusion-cpp";
+            var sdDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "stable-diffusion-cpp");
             var execPath = Path.Combine(sdDir, "sd-server.exe");
 
             if (File.Exists(execPath))

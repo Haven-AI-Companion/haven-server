@@ -2988,15 +2988,23 @@ async function updateHfStatus() {
     if (data.ok && data.status) {
       const s = data.status;
       if (!s.installed) {
-        badge.innerHTML = '<span class="badge badge-muted">HF SDK Not Found</span>';
-        text.innerHTML = 'Python <code>huggingface_hub</code> package is not installed in the server environment.';
-        actions.innerHTML = '<button class="btn btn-sm" onclick="installHfSdk(this)">Install SDK</button>';
+        badge.innerHTML = '<span class="badge badge-muted">HF CLI Not Installed</span>';
+        text.innerHTML = 'Hugging Face CLI (<code>huggingface_hub</code>) is not installed in the server environment.';
+        actions.innerHTML = '<button class="btn btn-sm" onclick="installHfSdk(this)">Install CLI</button>';
       } else if (s.loggedIn) {
-        badge.innerHTML = `<span class="badge badge-success">✓ Logged In</span>`;
+        if (!s.cliInstalled) {
+          badge.innerHTML = `<span class="badge badge-success">✓ Logged In</span> <span class="badge badge-warn" title="huggingface-cli command is not available in system PATH. Dynamic panel actions will still work.">CLI Not in PATH</span>`;
+        } else {
+          badge.innerHTML = `<span class="badge badge-success">✓ Logged In</span>`;
+        }
         text.innerHTML = `Authenticated as Hugging Face user: <strong>${s.username}</strong>`;
         actions.innerHTML = '<button class="btn btn-sm btn-danger" onclick="logoutHf(this)">Logout</button>';
       } else {
-        badge.innerHTML = '<span class="badge badge-muted">Not Logged In</span>';
+        if (!s.cliInstalled) {
+          badge.innerHTML = '<span class="badge badge-muted">Not Logged In</span> <span class="badge badge-warn" title="huggingface-cli command is not available in system PATH. Dynamic panel actions will still work.">CLI Not in PATH</span>';
+        } else {
+          badge.innerHTML = '<span class="badge badge-muted">Not Logged In</span>';
+        }
         text.innerHTML = 'Credentials not found. Paste your Hugging Face User Access Token to download gated models.';
         actions.innerHTML = `
           <input type="password" id="hf-token-input" class="form-input form-input-sm" style="width:160px;" placeholder="hf_...">
@@ -3059,7 +3067,25 @@ async function logoutHf(btn) {
 }
 
 async function installHfSdk(btn) {
-  toast('Run "pip install huggingface_hub" on your server console.', 'info');
+  const origText = btn.textContent;
+  btn.textContent = '...'; btn.disabled = true;
+  toast('Starting Hugging Face CLI installation in background...');
+  try {
+    const res = await fetch('/api/admin/models/hf-install', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Installation failed');
+    }
+    toast('Hugging Face CLI successfully installed!');
+    updateHfStatus();
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.textContent = origText; btn.disabled = false;
+  }
 }
 
 async function updateInstalledModels() {
