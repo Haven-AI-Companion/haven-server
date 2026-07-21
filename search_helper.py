@@ -13,8 +13,7 @@ def main():
         models = api.list_models(
             search=query,
             limit=15,
-            sort="downloads",
-            direction=-1
+            sort="downloads"
         )
         
         results = []
