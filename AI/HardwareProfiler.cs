@@ -254,6 +254,16 @@ public class HardwareProfiler
         var dir = @"C:\Users\admin\gemma4-turbo-family";
         if (!Directory.Exists(dir)) return null;
 
+        // Try reading custom configured model from appsettings / config first
+        var configuredModel = _config["ai:model"] ?? _config["sidecars:llama:active_model"];
+        if (!string.IsNullOrWhiteSpace(configuredModel))
+        {
+            var p = Path.Combine(dir, configuredModel);
+            if (File.Exists(p)) return p;
+
+            if (File.Exists(configuredModel)) return configuredModel;
+        }
+
         var candidates = new[]
         {
             "gemma4-e4b-merged-iq4xs-turbo.gguf",

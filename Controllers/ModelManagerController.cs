@@ -4,10 +4,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using AshServer.AI;
 
 namespace AshServer.Controllers;
 
@@ -17,11 +19,84 @@ namespace AshServer.Controllers;
 public class ModelManagerController : ControllerBase
 {
     private readonly IConfiguration _config;
+    private readonly HardwareProfiler _profiler;
     private static readonly ConcurrentDictionary<string, DownloadStatusInfo> Downloads = new();
 
-    public ModelManagerController(IConfiguration config)
+    public ModelManagerController(IConfiguration config, HardwareProfiler profiler)
     {
         _config = config;
+        _profiler = profiler;
+    }
+
+    [HttpGet("active")]
+    public IActionResult GetActiveModel()
+    {
+        try
+        {
+            return Ok(new
+            {
+                ok = true,
+                activeGguf = _profiler.LlamaModel,
+                isLlamaRunning = _profiler.IsLlamaRunning,
+                isSdRunning = _profiler.IsSdRunning,
+                llamaPid = _profiler.LlamaPid,
+                sdPid = _profiler.SdPid
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to retrieve active model status: {ex.Message}" });
+        }
+    }
+
+    [HttpPost("activate")]
+    public async Task<IActionResult> ActivateModel([FromBody] ActivateModelRequest req)
+    {
+        if (req == null || string.IsNullOrWhiteSpace(req.ModelFilename))
+            return BadRequest(new { error = "ModelFilename is required." });
+
+        var modelFilename = req.ModelFilename.Trim();
+        var ggufDir = @"C:\Users\admin\gemma4-turbo-family";
+        var modelPath = Path.Combine(ggufDir, modelFilename);
+
+        if (!System.IO.File.Exists(modelPath))
+            return BadRequest(new { error = $"Model file '{modelFilename}' does not exist in {ggufDir}." });
+
+        try
+        {
+            // 1. Update config.json on disk
+            await UpdateActiveModelInConfig(modelFilename);
+
+            // 2. Restart backend in the background so request completes instantly
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    Console.WriteLine("[ModelsAdmin] Stop requested to apply new model configuration...");
+                    _profiler.StopLocalBackend();
+                    
+                    // Give process termination a moment to release handles/ports
+                    await Task.Delay(2000);
+
+                    Console.WriteLine($"[ModelsAdmin] Restarting local backends with active model: {modelFilename}...");
+                    await _profiler.InitializeLocalBackendAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[ModelsAdmin] Error during backend restart: {ex.Message}");
+                }
+            });
+
+            return Ok(new
+            {
+                ok = true,
+                message = $"Active model set to '{modelFilename}'. The AI backend is restarting in the background."
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Failed to activate model: {ex.Message}" });
+        }
     }
 
     [HttpGet("installed")]
@@ -194,6 +269,45 @@ public class ModelManagerController : ControllerBase
             downloads = Downloads.Values.ToList()
         });
     }
+
+    private async Task UpdateActiveModelInConfig(string modelFilename)
+    {
+        // Try absolute root path first
+        var configPath = Path.Combine(AppContext.BaseDirectory, "../../../config.json");
+        if (!System.IO.File.Exists(configPath))
+        {
+            configPath = Path.Combine(AppContext.BaseDirectory, "config.json");
+        }
+
+        if (System.IO.File.Exists(configPath))
+        {
+            var jsonText = await System.IO.File.ReadAllTextAsync(configPath);
+            var configNode = System.Text.Json.Nodes.JsonNode.Parse(jsonText);
+            if (configNode != null)
+            {
+                var aiNode = configNode["ai"];
+                if (aiNode == null)
+                {
+                    configNode["ai"] = new System.Text.Json.Nodes.JsonObject();
+                    aiNode = configNode["ai"];
+                }
+                aiNode!["model"] = modelFilename;
+
+                await System.IO.File.WriteAllTextAsync(configPath, configNode.ToString());
+                
+                // Reload configuration in memory
+                if (_config is IConfigurationRoot root)
+                {
+                    root.Reload();
+                }
+            }
+        }
+    }
+}
+
+public class ActivateModelRequest
+{
+    public string ModelFilename { get; set; } = string.Empty;
 }
 
 public class DownloadRequestInfo
