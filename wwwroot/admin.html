@@ -3264,28 +3264,52 @@ async function updateDownloadStatus() {
     const data = await res.json();
     
     if (data.ok && data.downloads && data.downloads.length) {
-      const activeDl = data.downloads.filter(d => d.state === 'Downloading' || d.state === 'Pending');
-      if (activeDl.length) {
-        section.style.display = 'block';
-        list.innerHTML = activeDl.map(d => `
-          <div style="background:var(--surface1); padding:8px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:12px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-              <strong>${d.filename}</strong>
-              <span class="txt-muted">${d.state} (${d.progress})</span>
+      section.style.display = 'block';
+      list.innerHTML = data.downloads.map(d => {
+        const state = d.state || 'Pending';
+        const progress = d.progress || '0%';
+        const filename = d.filename || '';
+        const errorMessage = d.error_message || d.errorMessage || '';
+        
+        let statusHtml = '';
+        let borderStyle = 'border: 1px solid var(--border);';
+        
+        if (state === 'Downloading' || state === 'Pending') {
+          statusHtml = `<span class="txt-muted">${state} (${progress})</span>`;
+        } else if (state === 'Completed') {
+          statusHtml = `<span style="color:#2ec4b6; font-weight:600;">✓ Completed</span>`;
+          borderStyle = 'border: 1px solid rgba(46, 196, 182, 0.3); background: rgba(46, 196, 182, 0.05);';
+        } else if (state === 'Failed') {
+          statusHtml = `<span style="color:#e71d36; font-weight:600;">✗ Failed</span>`;
+          borderStyle = 'border: 1px solid rgba(231, 29, 54, 0.3); background: rgba(231, 29, 54, 0.05);';
+        }
+
+        return `
+          <div style="padding:10px; border-radius:var(--radius-sm); margin-bottom:8px; display:flex; flex-direction:column; gap:6px; ${borderStyle} font-size:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong>${filename}</strong>
+              ${statusHtml}
             </div>
+            ${(state === 'Downloading' || state === 'Pending') ? `
             <div style="width:100%; height:6px; background:var(--surface2); border-radius:3px; overflow:hidden;">
-              <div style="width:${d.progress}; height:100%; background:var(--accent); transition: width 0.5s ease;"></div>
+              <div style="width:${progress}; height:100%; background:var(--accent); transition: width 0.5s ease;"></div>
             </div>
+            ` : ''}
+            ${(state === 'Failed' && errorMessage) ? `
+            <div style="color:#e71d36; font-size:11px; margin-top:2px;">
+              Error: ${errorMessage}
+            </div>
+            ` : ''}
           </div>
-        `).join('');
-      } else {
-        section.style.display = 'none';
-      }
-      
+        `;
+      }).join('');
+
       const completed = data.downloads.some(d => d.state === 'Completed');
       if (completed) {
         updateInstalledModels();
       }
+    } else {
+      section.style.display = 'none';
     }
   } catch {}
 }
