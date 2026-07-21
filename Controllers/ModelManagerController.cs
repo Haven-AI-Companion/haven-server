@@ -158,8 +158,18 @@ public class ModelManagerController : ControllerBase
     [HttpPost("download")]
     public IActionResult DownloadModel([FromBody] DownloadRequestInfo req)
     {
-        if (req == null || string.IsNullOrWhiteSpace(req.RepoId) || string.IsNullOrWhiteSpace(req.Filename))
+        if (req == null)
+        {
+            Console.WriteLine("[download] Request body parsed as null!");
+            return BadRequest(new { error = "Request body is null." });
+        }
+
+        Console.WriteLine($"[download] Received: RepoId='{req.RepoId}', Filename='{req.Filename}', ModelType='{req.ModelType}'");
+
+        if (string.IsNullOrWhiteSpace(req.RepoId) || string.IsNullOrWhiteSpace(req.Filename))
+        {
             return BadRequest(new { error = "RepoId and Filename are required parameters." });
+        }
 
         var modelType = string.IsNullOrWhiteSpace(req.ModelType) ? "lora" : req.ModelType.Trim().ToLowerInvariant();
         if (modelType != "lora" && modelType != "gguf")
