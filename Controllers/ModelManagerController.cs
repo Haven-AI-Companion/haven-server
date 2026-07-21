@@ -303,8 +303,7 @@ public class ModelManagerController : ControllerBase
                 var pythonDir = Path.Combine(localAppData, "Python");
                 if (Directory.Exists(pythonDir))
                 {
-                    var files = Directory.GetFiles(pythonDir, "huggingface-cli.exe", SearchOption.AllDirectories);
-                    if (files.Length > 0)
+                    if (SafeSearchCliExecutable(pythonDir))
                     {
                         cliInstalled = true;
                     }
@@ -534,6 +533,28 @@ public class ModelManagerController : ControllerBase
 
         // 3. Fallback to path-based "python"
         return "python";
+    }
+
+    private static bool SafeSearchCliExecutable(string pythonDir)
+    {
+        try
+        {
+            if (!Directory.Exists(pythonDir)) return false;
+            
+            var target = Path.Combine(pythonDir, "huggingface-cli.exe");
+            if (System.IO.File.Exists(target)) return true;
+            
+            foreach (var sub in Directory.GetDirectories(pythonDir))
+            {
+                try
+                {
+                    if (SafeSearchCliExecutable(sub)) return true;
+                }
+                catch {}
+            }
+        }
+        catch {}
+        return false;
     }
 
     private async Task UpdateActiveModelInConfig(string modelFilename)

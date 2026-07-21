@@ -2996,7 +2996,7 @@ async function updateHfStatus() {
   if (!badge || !text || !actions) return;
   
   try {
-    const res = await fetch('/api/admin/models/hf-status', { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch('/api/admin/models/hf-status?_t=' + Date.now(), { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
     
     if (data.ok && data.status) {
