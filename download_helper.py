@@ -54,6 +54,29 @@ def main():
             local_dir=dest_dir,
             local_dir_use_symlinks=False
         )
+        
+        # Automatically flatten file hierarchy: if the downloaded file is nested in subfolders,
+        # move it to the root dest_dir so sidecars (llama-server/sd-server) can find it immediately.
+        basename = os.path.basename(local_path)
+        final_dest_path = os.path.join(dest_dir, basename)
+        if os.path.abspath(local_path) != os.path.abspath(final_dest_path):
+            import shutil
+            print(f"Flattening directory structure: moving {local_path} to {final_dest_path}...", flush=True)
+            if os.path.exists(final_dest_path):
+                os.remove(final_dest_path)
+            shutil.move(local_path, final_dest_path)
+            
+            # Clean up empty parent subdirectories
+            parent_dir = os.path.dirname(local_path)
+            while parent_dir and os.path.abspath(parent_dir) != os.path.abspath(dest_dir):
+                try:
+                    if not os.listdir(parent_dir):
+                        os.rmdir(parent_dir)
+                    parent_dir = os.path.dirname(parent_dir)
+                except Exception:
+                    break
+            local_path = final_dest_path
+
         print(f"SUCCESS: Saved file to {local_path}", flush=True)
         sys.exit(0)
     except Exception as e:
