@@ -3231,8 +3231,10 @@ async function triggerDownload() {
       },
       body: JSON.stringify({
         repoId: repoId,
+        repo_id: repoId,
         filename: filename,
-        modelType: type
+        modelType: type,
+        model_type: type
       })
     });
     if (!res.ok) throw new Error('Failed to start download');
