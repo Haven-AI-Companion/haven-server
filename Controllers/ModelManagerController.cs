@@ -195,9 +195,10 @@ public class ModelManagerController : ControllerBase
                 status.State = "Downloading";
                 
                 var scriptPath = Path.Combine(UserProfileDir, "haven-server", "download_helper.py");
+                var pythonPath = GetPythonExecutable();
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "python",
+                    FileName = pythonPath,
                     Arguments = $"\"{scriptPath}\" --repo-id \"{status.RepoId}\" --filename \"{status.Filename}\" --dest-dir \"{destDir}\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
@@ -278,10 +279,11 @@ public class ModelManagerController : ControllerBase
         var cliInstalled = false;
         try
         {
+            var pythonPath = GetPythonExecutable();
             var checkPsi = new ProcessStartInfo
             {
-                FileName = "cmd.exe",
-                Arguments = "/c where huggingface-cli",
+                FileName = pythonPath,
+                Arguments = "-c \"import huggingface_hub.cli.hf\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
