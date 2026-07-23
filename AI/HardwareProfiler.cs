@@ -368,12 +368,28 @@ public class HardwareProfiler
     public async Task InitializeSdBackendAsync()
     {
         var sdPort = 8080;
-        if (IsPortInUse(sdPort))
+        bool isAlreadyResponding = await IsSdServerRespondingAsync(sdPort);
+        if (isAlreadyResponding)
         {
-            Console.WriteLine($"[profiler] Port {sdPort} is already in use. Assuming Stable Diffusion server is running externally.");
+            Console.WriteLine($"[profiler] Port {sdPort} is active and responding. Assuming Stable Diffusion server is running externally.");
         }
         else
         {
+            if (IsPortInUse(sdPort))
+            {
+                Console.WriteLine($"[profiler] Port {sdPort} listener detected but not responding. Cleaning up stale process...");
+                try
+                {
+                    if (_sdProcess != null && !_sdProcess.HasExited)
+                    {
+                        _sdProcess.Kill(true);
+                        _sdProcess.WaitForExit(1000);
+                    }
+                }
+                catch { }
+                await Task.Delay(500);
+            }
+
             var sdDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "stable-diffusion-cpp");
             var execPath = Path.Combine(sdDir, "sd-server.exe");
 
@@ -426,7 +442,20 @@ public class HardwareProfiler
                 Console.Error.WriteLine("[profiler] sd-server.exe not found at C:\\Users\\admin\\stable-diffusion-cpp\\sd-server.exe");
             }
         }
-        await Task.CompletedTask;
+    }
+
+    private async Task<bool> IsSdServerRespondingAsync(int port)
+    {
+        try
+        {
+            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            var resp = await client.GetAsync($"http://127.0.0.1:{port}/");
+            return resp.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void StopLocalBackend()
