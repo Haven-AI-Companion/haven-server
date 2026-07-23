@@ -332,9 +332,14 @@ public class ChatHandler
                     var companionName = string.IsNullOrEmpty(conversation?.CompanionId) ? (payloadCompanionName ?? _personality.AiName ?? "Default") : conversation.CompanionId;
 
                     var activeUser = await _db.GetUserById(userId);
-                    var systemPrompt = !string.IsNullOrEmpty(customSystemPrompt)
+                    var userGenderDirective = AshServer.Personality.PersonalityLoader.BuildUserGenderDirective(activeUser?.DisplayName ?? username, activeUser?.Gender);
+                    var baseSystemPrompt = !string.IsNullOrEmpty(customSystemPrompt)
                         ? customSystemPrompt
                         : GetCompanionSystemPrompt(companionName, username, activeUser?.DisplayName, activeUser?.Gender, conversationId);
+
+                    var systemPrompt = baseSystemPrompt.Contains("[STRICT USER PRONOUN & GENDER DIRECTIVE]")
+                        ? baseSystemPrompt
+                        : baseSystemPrompt + "\n" + userGenderDirective;
                     var messages = new List<ChatMessage> { new("system", systemPrompt) };
                     // Don't pass images on history replay — only the current message
                     lock (history)
