@@ -517,7 +517,7 @@ public class Database
         cmd.ExecuteNonQuery();
     });
 
-    public async Task<string> GetOrCreateCompanionConversation(int userId, string? companionId, string? customId = null)
+    public async Task<string> GetOrCreateCompanionConversation(int userId, string? companionId, string? companionName = null, string? customId = null)
     {
         if (string.IsNullOrWhiteSpace(companionId))
         {
@@ -525,6 +525,7 @@ public class Database
         }
 
         var cleanCompId = companionId.Trim();
+        var displayName = !string.IsNullOrWhiteSpace(companionName) ? companionName.Trim() : cleanCompId;
         var targetId = !string.IsNullOrWhiteSpace(customId) ? customId : $"conv_{cleanCompId.ToLowerInvariant().Replace(" ", "_")}";
 
         using var conn = Open();
@@ -533,7 +534,7 @@ public class Database
         cmd.Parameters.AddWithValue("$u", userId);
         cmd.Parameters.AddWithValue("$targetId", targetId);
         cmd.Parameters.AddWithValue("$c", cleanCompId);
-        cmd.Parameters.AddWithValue("$t", $"{cleanCompId} Chat".ToLowerInvariant());
+        cmd.Parameters.AddWithValue("$t", $"{displayName} Chat".ToLowerInvariant());
         var existingId = cmd.ExecuteScalar()?.ToString();
 
         if (!string.IsNullOrEmpty(existingId))
@@ -547,7 +548,7 @@ public class Database
             return existingId;
         }
 
-        var newTitle = $"{cleanCompId} Chat";
+        var newTitle = $"{displayName} Chat";
         return await CreateConversation(userId, newTitle, customId: targetId, companionId: cleanCompId);
     }
 

@@ -842,7 +842,7 @@ public class ModelsController : ControllerBase
             }
 
                 var userId = UserId;
-                var conversationId = await _db.GetOrCreateCompanionConversation(userId, req.CompanionName, customId: req.ConversationId);
+                var conversationId = await _db.GetOrCreateCompanionConversation(userId, req.CompanionId ?? req.CompanionName, req.CompanionName, customId: req.ConversationId);
                 
                 var cleanUserMsg = ExtractUserMessage(promptText, req.DisplayName);
                 await _db.AddMessage(conversationId, "user", cleanUserMsg);
@@ -3545,6 +3545,9 @@ public class ChatRequest
 
     [System.Text.Json.Serialization.JsonPropertyName("companion_name")]
     public string? CompanionName { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("companion_id")]
+    public string? CompanionId { get; set; }
 }
 
 // ── Companions endpoint (read folder of companions) ─────────────────────────

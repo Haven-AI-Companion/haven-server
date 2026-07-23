@@ -188,6 +188,11 @@ public class ChatHandler
                     {
                         payloadCompanionName = cn.GetString();
                     }
+                    string? payloadCompanionId = null;
+                    if (root.TryGetProperty("companion_id", out var ci) && !string.IsNullOrEmpty(ci.GetString()))
+                    {
+                        payloadCompanionId = ci.GetString();
+                    }
 
                     string? groupId = null;
                     if (root.TryGetProperty("group_id", out var gProp) && !string.IsNullOrEmpty(gProp.GetString()))
@@ -210,16 +215,16 @@ public class ChatHandler
                             if (conv != null)
                             {
                                 conversationId = reqId;
-                                if (string.IsNullOrEmpty(conv.CompanionId) && !string.IsNullOrEmpty(payloadCompanionName))
+                                if (string.IsNullOrEmpty(conv.CompanionId) && !string.IsNullOrEmpty(payloadCompanionId ?? payloadCompanionName))
                                 {
-                                    await _db.SetConversationCompanion(conversationId, payloadCompanionName);
+                                    await _db.SetConversationCompanion(conversationId, payloadCompanionId ?? payloadCompanionName!);
                                 }
                                 if (!_convCache.TryGetValue(conversationId, out List<ChatMessage>? _))
                                     await LoadConvToCache(conversationId);
                             }
                             else
                             {
-                                conversationId = await _db.GetOrCreateCompanionConversation(userId, payloadCompanionName, customId: reqId);
+                                conversationId = await _db.GetOrCreateCompanionConversation(userId, payloadCompanionId ?? payloadCompanionName, payloadCompanionName, customId: reqId);
                                 if (!_convCache.TryGetValue(conversationId, out List<ChatMessage>? _))
                                     await LoadConvToCache(conversationId);
                             }
@@ -230,7 +235,7 @@ public class ChatHandler
 
                     if (conversationId == null)
                     {
-                        conversationId = await _db.GetOrCreateCompanionConversation(userId, payloadCompanionName);
+                        conversationId = await _db.GetOrCreateCompanionConversation(userId, payloadCompanionId ?? payloadCompanionName, payloadCompanionName);
                         _convCache.Set(conversationId, new List<ChatMessage>(), CacheTtl);
                         await SafeSend(new { type = "conversation_id", content = conversationId }, cts.Token);
                     }
