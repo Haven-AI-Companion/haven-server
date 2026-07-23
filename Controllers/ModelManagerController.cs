@@ -56,20 +56,21 @@ public class ModelManagerController : ControllerBase
     [HttpPost("activate")]
     public async Task<IActionResult> ActivateModel([FromBody] ActivateModelRequest req)
     {
-        if (req == null || string.IsNullOrWhiteSpace(req.ModelFilename))
+        var rawFilename = req?.GetFilename();
+        if (string.IsNullOrWhiteSpace(rawFilename))
             return BadRequest(new { error = "ModelFilename is required." });
 
-        var modelFilename = req.ModelFilename.Trim();
+        var modelFilename = rawFilename;
         if (!modelFilename.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
         {
             modelFilename += ".gguf";
         }
 
         var modelPath = Path.Combine(GgufDir, modelFilename);
-        if (!System.IO.File.Exists(modelPath) && System.IO.File.Exists(req.ModelFilename))
+        if (!System.IO.File.Exists(modelPath) && System.IO.File.Exists(rawFilename))
         {
-            modelPath = req.ModelFilename;
-            modelFilename = Path.GetFileName(req.ModelFilename);
+            modelPath = rawFilename;
+            modelFilename = Path.GetFileName(rawFilename);
         }
 
         if (!System.IO.File.Exists(modelPath))
@@ -684,7 +685,22 @@ public class ModelManagerController : ControllerBase
 
 public class ActivateModelRequest
 {
-    public string ModelFilename { get; set; } = string.Empty;
+    [System.Text.Json.Serialization.JsonPropertyName("modelFilename")]
+    public string? ModelFilename { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("model_filename")]
+    public string? ModelFilenameSnake { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("model")]
+    public string? ModelShort { get; set; }
+
+    public string GetFilename()
+    {
+        if (!string.IsNullOrWhiteSpace(ModelFilename)) return ModelFilename.Trim();
+        if (!string.IsNullOrWhiteSpace(ModelFilenameSnake)) return ModelFilenameSnake.Trim();
+        if (!string.IsNullOrWhiteSpace(ModelShort)) return ModelShort.Trim();
+        return string.Empty;
+    }
 }
 
 public class DownloadRequestInfo
