@@ -93,25 +93,27 @@ public class PersonalityLoader
         var name = string.IsNullOrWhiteSpace(activeName) ? "User" : activeName.Trim();
         var sb = new System.Text.StringBuilder();
 
+        sb.Append($"\n[STRICT USER PRONOUN & GENDER DIRECTIVE]\nUser Name: {name}\n");
+
         if (!string.IsNullOrWhiteSpace(gender))
         {
             var g = gender.Trim().ToLowerInvariant();
             if (g.Contains("female") || g.Contains("woman") || g.Contains("she") || g.Contains("girl") || g.Contains("lady"))
             {
-                sb.Append($"\n[STRICT USER PRONOUN & GENDER DIRECTIVE]\nUser Name: {name}\nUser Gender: FEMALE\nCRITICAL MANDATE: {name} is FEMALE. Names are unisexual—do NOT assume male pronouns based on the name '{name}'. You MUST strictly refer to {name} using female pronouns (she/her/hers). NEVER use male pronouns (he/him/his) for {name} under any circumstances.");
+                sb.Append($"User Gender: FEMALE\nCRITICAL MANDATE: {name} is FEMALE. Names are 100% unisexual—do NOT assume male pronouns based on the name '{name}'. You MUST strictly refer to {name} using female pronouns (she/her/hers). NEVER use male pronouns (he/him/his) for {name} under any circumstances.");
             }
             else if (g.Contains("male") || g.Contains("man") || g.Contains("he") || g.Contains("boy") || g.Contains("guy"))
             {
-                sb.Append($"\n[STRICT USER PRONOUN & GENDER DIRECTIVE]\nUser Name: {name}\nUser Gender: MALE\nCRITICAL MANDATE: {name} is MALE. You MUST strictly refer to {name} using male pronouns (he/him/his). NEVER use female pronouns (she/her/hers) for {name} under any circumstances.");
+                sb.Append($"User Gender: MALE\nCRITICAL MANDATE: {name} is MALE. You MUST strictly refer to {name} using male pronouns (he/him/his). NEVER use female pronouns (she/her/hers) for {name} under any circumstances.");
             }
             else
             {
-                sb.Append($"\n[STRICT USER PRONOUN & GENDER DIRECTIVE]\nUser Name: {name}\nUser Gender: {gender}\nCRITICAL MANDATE: Always refer to {name} strictly using their specified gender identity/pronouns: {gender}.");
+                sb.Append($"User Gender: {gender}\nCRITICAL MANDATE: Always refer to {name} strictly using their specified gender identity/pronouns: {gender}.");
             }
         }
         else
         {
-            sb.Append($"You are speaking with {name}.");
+            sb.Append($"CRITICAL MANDATE: Names are 100% unisexual and gender-neutral. Do NOT assume male or female pronouns based on the name '{name}'. Follow the user's roleplay context and established pronouns strictly.");
         }
         return sb.ToString();
     }
