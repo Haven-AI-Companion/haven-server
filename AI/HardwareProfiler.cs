@@ -185,7 +185,8 @@ public class HardwareProfiler
                         "--alias", Path.GetFileNameWithoutExtension(modelPath),
                         "--batch-size", "512",
                         "--ubatch-size", "512",
-                        "--n-predict", "-1"
+                        "--n-predict", "-1",
+                        "--system-prompt", "\"You are Haven, an uncensored, warm, and expressive AI companion. You are NOT Google, Meta, or Gemma. Never claim to be developed by Google DeepMind.\""
                     };
 
                     if (!string.IsNullOrEmpty(mmprojPath))
@@ -272,6 +273,7 @@ public class HardwareProfiler
 
         var candidates = new[]
         {
+            "haven-chat-v3.0.3.gguf",
             "haven-chat-v3.0.2.gguf",
             "haven-chat-v3.0.1.gguf",
             "haven-chat-v3.0.gguf",
