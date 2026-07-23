@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  haven-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: haven-server
+    restart: unless-stopped
+    ports:
+      - "18799:18799"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - RequireAuth=false
+      - AllowRegistration=true
+      - PersonalityDir=personality
+    volumes:
+      - haven_data:/app/data
+      - haven_personality:/app/personality
+      - haven_uploads:/app/wwwroot/uploads
+
+volumes:
+  haven_data:
+  haven_personality:
+  haven_uploads:

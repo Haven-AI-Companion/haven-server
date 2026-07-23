@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haven-server
+  labels:
+    app: haven-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: haven-server
+  template:
+    metadata:
+      labels:
+        app: haven-server
+    spec:
+      containers:
+      - name: haven-server
+        image: havenaicompanion/haven-server:v3.0
+        ports:
+        - containerPort: 18799
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: RequireAuth
+          value: "false"
+        resources:
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: haven-server-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: haven-server
+  ports:
+  - port: 18799
+    targetPort: 18799

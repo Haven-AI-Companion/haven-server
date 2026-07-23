@@ -19,6 +19,12 @@ public record UserProfileRequest(
     string? Gender
 );
 
+public record CompanionMemoryReq(
+    string Fact,
+    string? Category = "personal_fact",
+    int Importance = 1
+);
+
 public record Role(
     int Id,
     string Name,

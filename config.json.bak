@@ -1,0 +1,29 @@
+{
+  "PluginsDir": "C:\\Users\\admin\\source\\haven-server-plugin",
+  "server": {
+    "host": "100.95.198.162",
+    "port": 18799,
+    "require_auth": true,
+    "allow_registration": false
+  },
+  "ai": {
+    "model": "",
+    "temperature": 1
+  },
+  "database": {
+    "path": "haven_server.db"
+  },
+  "uploads": {
+    "directory": "uploads",
+    "max_size_mb": 10
+  },
+  "auth": {
+    "token_expiry_hours": 24
+  },
+  "personality": {
+    "path": "personality"
+  },
+  "Jwt": {
+    "Secret": "S5DwARHVRczkrleT0vXphkUzxZIiNmNX\u002BT3UYfgEeb3fIwG0L\u002BsgQfyMXUkkVthq"
+  }
+}

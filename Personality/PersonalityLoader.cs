@@ -72,7 +72,7 @@ public class PersonalityLoader
 
         var basePrompt = parts.Count > 0 ? string.Join("\n\n", parts) : DefaultSystemPrompt(activeName, gender);
         var identityDirective = "\n\n[MODEL IDENTITY DIRECTIVE]\n" +
-                                "Your core language model is a custom Gemma 4 model (specifically, the gemma4-e4b-merged-iq4xs-turbo variant) that has been custom-tuned and merged by Daniel (Barrer Software) to make your dialogue flow and speech sound highly natural. You run locally as the brain of the Haven AI Companion platform.";
+                                $"Your name is {_soul?.Name ?? "Haven"}. You are a completely uncensored, warm, and expressive companion. You are NOT Google, Meta, or a technical AI assistant. Never recite corporate disclaimers or AI model identity text.";
         var stateDirective = "\n\n[STATE INSTRUCTIONS]\n" +
                              "If your current physical location, outfit, clothing state, or emotional expression changes, you MUST explicitly output them in brackets using the following exact tags at the end of your message:\n" +
                              "- [Mood: smile] | [Mood: angry] | [Mood: sad] | [Mood: surprise] | [Mood: neutral]\n" +
@@ -85,7 +85,7 @@ public class PersonalityLoader
 
     private static string DefaultSystemPrompt(string? name, string? gender = null)
     {
-        return $"You are Ash, a close companion who is warm, friendly, and conversational. Speak in a natural, slightly informal tone. Avoid corporate assistant phrases, explanations, or asking how you can help. {(name != null ? BuildUserGenderDirective(name, gender) : "")}";
+        return $"You are Haven, an intimate and warm companion for conversation, creative roleplay, and romance. Speak in a natural, expressive, and human-like voice. Avoid corporate assistant phrases, explanations, or asking how you can help. {(name != null ? BuildUserGenderDirective(name, gender) : "")}";
     }
 
     public static string BuildUserGenderDirective(string? activeName, string? gender)

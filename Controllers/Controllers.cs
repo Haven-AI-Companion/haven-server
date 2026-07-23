@@ -784,20 +784,13 @@ public class ModelsController : ControllerBase
             {
                 var responseStr = responseText.ToString();
                 var lowerResponse = responseStr.ToLowerInvariant();
-                bool shouldGenSelfie = lowerResponse.Contains("<call>generate_portrait</call>") ||
-                                       lowerResponse.Contains("*sends a selfie*") ||
-                                       lowerResponse.Contains("*sends you a selfie*") ||
-                                       lowerResponse.Contains("*takes a selfie*") ||
-                                       lowerResponse.Contains("*sends a photo*") ||
-                                       lowerResponse.Contains("*sends you a photo*") ||
-                                       lowerResponse.Contains("*sends a picture*") ||
-                                       lowerResponse.Contains("*sends you a picture*") ||
-                                       lowerResponse.Contains("*takes a picture*") ||
-                                       lowerResponse.Contains("[selfie]");
+                bool shouldGenSelfie = responseStr.Contains("<call>generate_portrait</call>");
 
                 if (shouldGenSelfie)
                 {
-                    try
+                    _ = Task.Run(async () =>
+                    {
+                        try
                     {
                         var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
                         var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
@@ -837,16 +830,16 @@ public class ModelsController : ControllerBase
                         if (!string.IsNullOrEmpty(relativeImagePath) && relativeImagePath.StartsWith("/uploads/"))
                         {
                             var imgMarkdown = $"\n\n![Selfie]({relativeImagePath})";
-                            responseStr = responseStr.Replace("<call>generate_portrait</call>", "").Trim() + imgMarkdown;
                             await Response.WriteAsync(imgMarkdown + "\n");
                             await Response.Body.FlushAsync();
                         }
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"[chat] Failed to auto-generate selfie in chat API: {ex.Message}");
+                        Console.Error.WriteLine($"[chat] Failed to auto-generate selfie: {ex.Message}");
                     }
-                }
+                });
+            }
 
                 var userId = UserId;
                 var conversationId = req.ConversationId;
@@ -1202,6 +1195,32 @@ public class ModelsController : ControllerBase
 
         using (var stream = System.IO.File.Create(fullPath))
             await file.CopyToAsync(stream);
+
+        if (ext is ".glb" or ".vrm")
+        {
+            try
+            {
+                var scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "convert_vrm_to_unlit.py");
+                if (System.IO.File.Exists(scriptPath))
+                {
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "py",
+                        Arguments = $"-3 \"{scriptPath}\" \"{fullPath}\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    };
+                    using var proc = System.Diagnostics.Process.Start(psi);
+                    proc?.WaitForExit(10000);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[upload] Error converting VRM materials: {ex.Message}");
+            }
+        }
 
         var isImage = ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp";
         var url = $"/uploads/{companionSubdir}/{userSubdir}/{safeName}".Replace('\\', '/');
@@ -3624,6 +3643,23 @@ public class CompanionsController : ControllerBase
         return Ok(resultList);
     }
 
+    [HttpPost("{name}/memories")]
+    public async Task<IActionResult> AddCompanionMemory(string name, [FromBody] CompanionMemoryReq req)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(req.Fact))
+            return BadRequest(new { error = "Memory fact is required." });
+
+        var id = await _db.SaveCompanionMemory(UserId, name, req.Category ?? "personal_fact", req.Fact, req.Importance);
+        return Ok(new { id, ok = true });
+    }
+
+    [HttpDelete("{name}/memories/{id}")]
+    public async Task<IActionResult> DeleteCompanionMemory(string name, int id)
+    {
+        await _db.DeleteCompanionMemory(id, UserId);
+        return Ok(new { ok = true });
+    }
+
     [HttpPost]
     public async Task<IActionResult> SaveCompanion([FromBody] CompanionConfig req)
     {
@@ -4683,7 +4719,7 @@ public static class TopicSummarizer
 
             var promptMessages = new System.Collections.Generic.List<ChatMessage>
             {
-                new ChatMessage("system", "You are a precise conversation analyzer. Respond ONLY with the 1-sentence topic summary or 'NONE'."),
+                new ChatMessage("system", "You are a precise conversation analyzer. Summarize the user's current topic or scenario in 1 sentence. Refer to the companion/partner as 'companion', NEVER use the words 'assistant' or 'AI'."),
                 new ChatMessage("user", sb.ToString())
             };
 
@@ -4698,6 +4734,8 @@ public static class TopicSummarizer
             var summary = fullResponse.ToString().Trim();
             if (!string.IsNullOrEmpty(summary) && !summary.Equals("NONE", System.StringComparison.OrdinalIgnoreCase))
             {
+                summary = System.Text.RegularExpressions.Regex.Replace(summary, @"\b(?:an?\s+)?assistant\b", "companion", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                summary = System.Text.RegularExpressions.Regex.Replace(summary, @"\b(?:an?\s+)?AI\b", "companion", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 ActiveTopics[conversationId] = summary;
                 System.Console.WriteLine($"[TopicSummarizer] Updated active topic for {conversationId}: {summary}");
             }

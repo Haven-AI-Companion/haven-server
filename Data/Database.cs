@@ -1632,6 +1632,89 @@ public class Database
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
     });
+
+    // ── Companion Episodic Memories ──────────────────────────────────────────
+    public Task<int> SaveCompanionMemory(int userId, string companionName, string category, string fact, int importance = 1) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS companion_memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                companion_name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'personal_fact',
+                fact TEXT NOT NULL,
+                importance INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_companion_memories_user_comp ON companion_memories(user_id, companion_name);
+
+            INSERT INTO companion_memories (user_id, companion_name, category, fact, importance)
+            VALUES ($uid, $comp, $cat, $fact, $imp);
+            SELECT last_insert_rowid();
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$comp", companionName);
+        cmd.Parameters.AddWithValue("$cat", category);
+        cmd.Parameters.AddWithValue("$fact", fact);
+        cmd.Parameters.AddWithValue("$imp", importance);
+        var id = Convert.ToInt32(cmd.ExecuteScalar());
+        return id;
+    });
+
+    public Task<List<CompanionMemory>> GetCompanionMemories(int userId, string companionName, int limit = 20) => Task.Run(() =>
+    {
+        var result = new List<CompanionMemory>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS companion_memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                companion_name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'personal_fact',
+                fact TEXT NOT NULL,
+                importance INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            SELECT id, user_id, companion_name, category, fact, importance, created_at
+            FROM companion_memories
+            WHERE user_id = $uid AND LOWER(companion_name) = LOWER($comp)
+            ORDER BY importance DESC, id DESC
+            LIMIT $lim;
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$comp", companionName);
+        cmd.Parameters.AddWithValue("$lim", limit);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            result.Add(new CompanionMemory
+            {
+                Id = reader.GetInt32(0),
+                UserId = reader.GetInt32(1),
+                CompanionName = reader.GetString(2),
+                Category = reader.GetString(3),
+                Fact = reader.GetString(4),
+                Importance = reader.GetInt32(5),
+                CreatedAt = reader.IsDBNull(6) ? "" : reader.GetString(6)
+            });
+        }
+        return result;
+    });
+
+    public Task DeleteCompanionMemory(int id, int userId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM companion_memories WHERE id = $id AND user_id = $uid;";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.ExecuteNonQuery();
+    });
 }
 
 public class ConversationState
@@ -1643,4 +1726,15 @@ public class ConversationState
     public string? ClothingState { get; set; }
     public string? BodyType { get; set; }
     public string? BodyShape { get; set; }
+}
+
+public class CompanionMemory
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string CompanionName { get; set; } = "";
+    public string Category { get; set; } = "personal_fact";
+    public string Fact { get; set; } = "";
+    public int Importance { get; set; } = 1;
+    public string CreatedAt { get; set; } = "";
 }

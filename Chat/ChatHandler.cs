@@ -417,82 +417,82 @@ public class ChatHandler
                         if (!string.IsNullOrEmpty(responseText))
                         {
                             var lowerResponse = responseText.ToLowerInvariant();
-                            bool shouldGenSelfie = lowerResponse.Contains("<call>generate_portrait</call>") ||
-                                                   lowerResponse.Contains("*sends a selfie*") ||
-                                                   lowerResponse.Contains("*sends you a selfie*") ||
-                                                   lowerResponse.Contains("*takes a selfie*") ||
-                                                   lowerResponse.Contains("*sends a photo*") ||
-                                                   lowerResponse.Contains("*sends you a photo*") ||
-                                                   lowerResponse.Contains("*sends a picture*") ||
-                                                   lowerResponse.Contains("*sends you a picture*") ||
-                                                   lowerResponse.Contains("*takes a picture*") ||
-                                                   lowerResponse.Contains("[selfie]");
+                            bool shouldGenSelfie = responseText.Contains("<call>generate_portrait</call>");
 
                             if (shouldGenSelfie)
                             {
-                                try
+                                _ = Task.Run(async () =>
                                 {
-                                    var compName = companionName;
-                                    var compClean = string.Concat(compName.Split(Path.GetInvalidFileNameChars())).Trim();
-                                    var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
-                                    var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
-                                    var localDir = Path.Combine(baseDir, "local");
-                                    var localFile = Path.Combine(localDir, $"{compClean.ToLowerInvariant()}.json");
-                                    var baseFile = Path.Combine(baseDir, $"{compClean.ToLowerInvariant()}.json");
-                                    var checkFile = File.Exists(localFile) ? localFile : (File.Exists(baseFile) ? baseFile : null);
-
-                                    AshServer.Controllers.CompanionConfig? comp = null;
-                                    if (checkFile != null)
+                                    try
                                     {
-                                        var json = await File.ReadAllTextAsync(checkFile);
-                                        comp = JsonSerializer.Deserialize<AshServer.Controllers.CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                        var compName = companionName;
+                                        var compClean = string.Concat(compName.Split(Path.GetInvalidFileNameChars())).Trim();
+                                        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+                                        var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+                                        var localDir = Path.Combine(baseDir, "local");
+                                        var localFile = Path.Combine(localDir, $"{compClean.ToLowerInvariant()}.json");
+                                        var baseFile = Path.Combine(baseDir, $"{compClean.ToLowerInvariant()}.json");
+                                        var checkFile = File.Exists(localFile) ? localFile : (File.Exists(baseFile) ? baseFile : null);
+
+                                        AshServer.Controllers.CompanionConfig? comp = null;
+                                        if (checkFile != null)
+                                        {
+                                            var json = await File.ReadAllTextAsync(checkFile);
+                                            comp = JsonSerializer.Deserialize<AshServer.Controllers.CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                        }
+
+                                        var details = comp?.Description ?? comp?.Personality ?? "";
+                                        var location = comp?.CurrentLocation ?? "";
+                                        var outfit = comp?.CurrentOutfit ?? "";
+                                        var mood = comp?.CurrentMood ?? "";
+                                        var clothing = comp?.ClothingState ?? "";
+
+                                        var sdPrompt = $"digital art portrait of {compName}, highly detailed";
+                                        if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
+                                        if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
+                                        if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
+                                        if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
+                                        if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
+
+                                        var sdArgObj = new { description = sdPrompt };
+                                        var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
+                                        var relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
+
+                                        if (!string.IsNullOrEmpty(relativeImagePath) && relativeImagePath.StartsWith("/uploads/"))
+                                        {
+                                            var imgMarkdown = $"\n\n![Selfie]({relativeImagePath})";
+                                            await TrySend(new { type = "token", content = imgMarkdown }, CancellationToken.None);
+                                        }
                                     }
-
-                                    var details = comp?.Description ?? comp?.Personality ?? "";
-                                    var location = comp?.CurrentLocation ?? "";
-                                    var outfit = comp?.CurrentOutfit ?? "";
-                                    var mood = comp?.CurrentMood ?? "";
-                                    var clothing = comp?.ClothingState ?? "";
-
-                                    var sdPrompt = $"digital art portrait of {compName}, highly detailed";
-                                    if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
-                                    if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
-                                    if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
-                                    if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
-                                    if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
-
-                                    var sdArgObj = new { description = sdPrompt };
-                                    var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
-                                    var relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
-
-                                    if (!string.IsNullOrEmpty(relativeImagePath) && relativeImagePath.StartsWith("/uploads/"))
+                                    catch (Exception ex)
                                     {
-                                        var imgMarkdown = $"\n\n![Selfie]({relativeImagePath})";
-                                        responseText = responseText.Replace("<call>generate_portrait</call>", "").Trim() + imgMarkdown;
-                                        await TrySend(new { type = "token", content = imgMarkdown }, cts.Token);
+                                        Console.Error.WriteLine($"[chat] Failed to auto-generate selfie in background: {ex.Message}");
                                     }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.Error.WriteLine($"[chat] Failed to auto-generate selfie in websocket: {ex.Message}");
-                                }
+                                });
                             }
+
+                            var cleanResponseText = System.Text.RegularExpressions.Regex.Replace(
+                                responseText, 
+                                @"^\s*\*?<?\s*thought\s*>?.*?</?\s*thought\s*>\s*", 
+                                "", 
+                                System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                            ).Replace("<call>generate_portrait</call>", "").Trim();
 
                             if (isRegenerate && regenMessageId.HasValue)
                             {
-                                existingSwipes.Add(responseText);
+                                existingSwipes.Add(cleanResponseText);
                                 var jsonPayload = JsonSerializer.Serialize(new
                                 {
                                     swipes = existingSwipes,
                                     active = existingSwipes.Count - 1
                                 });
                                 await _db.UpdateMessage(regenMessageId.Value, jsonPayload);
-                                lock (history) { history.Add(new ChatMessage("assistant", responseText)); }
+                                lock (history) { history.Add(new ChatMessage("assistant", cleanResponseText)); }
                             }
                             else
                             {
-                                await _db.AddMessage(conversationId, "assistant", responseText, companionName);
-                                lock (history) { history.Add(new ChatMessage("assistant", responseText)); }
+                                await _db.AddMessage(conversationId, "assistant", cleanResponseText, companionName);
+                                lock (history) { history.Add(new ChatMessage("assistant", cleanResponseText)); }
                             }
                         }
                     }
@@ -682,6 +682,42 @@ public class ChatHandler
                 }
             }
 
+            // Retrieve companion's episodic relationship memories about the user
+            try
+            {
+                var memories = await _db.GetCompanionMemories(userId, activeCompanionName, limit: 15);
+                if (memories != null && memories.Count > 0)
+                {
+                    systemPromptBuilder.AppendLine($"[{activeCompanionName}'s Episodic Relationship Memories About User]:");
+                    foreach (var mem in memories)
+                    {
+                        systemPromptBuilder.AppendLine($"- {mem.Fact}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[chat] Error loading companion memories: {ex.Message}");
+            }
+
+            // Automatic memory fact extraction from user message
+            if (!string.IsNullOrWhiteSpace(userMessage))
+            {
+                try
+                {
+                    var lowerInput = userMessage.ToLowerInvariant();
+                    if (lowerInput.Contains("my favorite") || lowerInput.Contains("i love ") || lowerInput.Contains("my name is") || lowerInput.Contains("i work as") || lowerInput.Contains("my birthday"))
+                    {
+                        await _db.SaveCompanionMemory(userId, activeCompanionName, "personal_fact", userMessage, 1);
+                        Console.WriteLine($"[chat] Automatically saved episodic memory for '{activeCompanionName}': {userMessage}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[chat] Error saving automatic memory: {ex.Message}");
+                }
+            }
+
             var messages = new List<ChatMessage> { new("system", systemPromptBuilder.ToString()) };
 
             var dbMessages = await _db.GetGroupMessages(groupId);
@@ -716,94 +752,145 @@ public class ChatHandler
             await trySend(new { type = "typing", content = false }, ct);
             await trySend(new { type = "done" }, ct);
 
-            // 7. Check for selfie generation
+            // 7. Check for state overrides and selfie generation
             if (!string.IsNullOrEmpty(responseText))
             {
                 var lowerResponse = responseText.ToLowerInvariant();
+                var lowerUser = userMessage?.ToLowerInvariant() ?? "";
+
+                // Parse state update tags in response (e.g. [LOCATION: beach], [OUTFIT: red dress], [MOOD: happy])
+                try
+                {
+                    if (checkFile != null && System.IO.File.Exists(checkFile))
+                    {
+                        var json = await System.IO.File.ReadAllTextAsync(checkFile);
+                        var compState = JsonSerializer.Deserialize<AshServer.Controllers.CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (compState != null)
+                        {
+                            bool stateChanged = false;
+                            var locMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[LOCATION:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (locMatch.Success) { compState.CurrentLocation = locMatch.Groups[1].Value.Trim(); stateChanged = true; }
+                            
+                            var outfitMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[OUTFIT:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (outfitMatch.Success) { compState.CurrentOutfit = outfitMatch.Groups[1].Value.Trim(); stateChanged = true; }
+
+                            var moodMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[MOOD:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (moodMatch.Success) { compState.CurrentMood = moodMatch.Groups[1].Value.Trim(); stateChanged = true; }
+
+                            var clothMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[CLOTHING:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (clothMatch.Success) { compState.ClothingState = clothMatch.Groups[1].Value.Trim(); stateChanged = true; }
+
+                            if (stateChanged)
+                            {
+                                var updatedJson = JsonSerializer.Serialize(compState, new JsonSerializerOptions { WriteIndented = true });
+                                await System.IO.File.WriteAllTextAsync(checkFile, updatedJson);
+                                Console.WriteLine($"[chat] Updated companion state for '{activeCompanionName}' on disk.");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[chat] Error updating state overrides: {ex.Message}");
+                }
+
                 bool shouldGenSelfie = lowerResponse.Contains("<call>generate_portrait</call>") ||
                                        lowerResponse.Contains("<call name=\"generate_portrait\">") ||
                                        lowerResponse.Contains("<call>generate_portrait:") ||
-                                       lowerResponse.Contains("*sends a selfie*") ||
-                                       lowerResponse.Contains("*sends you a selfie*") ||
-                                       lowerResponse.Contains("*takes a selfie*") ||
-                                       lowerResponse.Contains("*sends a photo*") ||
-                                       lowerResponse.Contains("*sends you a photo*") ||
-                                       lowerResponse.Contains("*sends a picture*") ||
-                                       lowerResponse.Contains("*sends you a picture*") ||
-                                       lowerResponse.Contains("*takes a picture*") ||
-                                       lowerResponse.Contains("[selfie]");
+                                       lowerUser.Contains("selfie") || lowerUser.Contains("picture") ||
+                                       lowerUser.Contains("photo") || lowerUser.Contains("snapshot") ||
+                                       lowerUser.Contains("send a pic") || lowerUser.Contains("show me");
 
                 if (shouldGenSelfie)
                 {
-                    try
+                    _ = Task.Run(async () =>
                     {
-                        AshServer.Controllers.CompanionConfig? comp = null;
-                        if (checkFile != null)
+                        try
                         {
-                            var json = await System.IO.File.ReadAllTextAsync(checkFile);
-                            comp = JsonSerializer.Deserialize<AshServer.Controllers.CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                        }
-
-                        var details = comp?.Description ?? comp?.Personality ?? "";
-                        var location = comp?.CurrentLocation ?? "";
-                        var outfit = comp?.CurrentOutfit ?? "";
-                        var mood = comp?.CurrentMood ?? "";
-                        var clothing = comp?.ClothingState ?? "";
-
-                        string? customPrompt = null;
-                        var xmlMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"<call\s+name=[""']generate_portrait[""']>(.*?)</call>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
-                        if (xmlMatch.Success)
-                        {
-                            customPrompt = xmlMatch.Groups[1].Value.Trim();
-                        }
-                        if (string.IsNullOrEmpty(customPrompt))
-                        {
-                            var tagMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"<call>generate_portrait:\s*(.*?)</call>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
-                            if (tagMatch.Success)
+                            AshServer.Controllers.CompanionConfig? comp = null;
+                            if (checkFile != null && System.IO.File.Exists(checkFile))
                             {
-                                customPrompt = tagMatch.Groups[1].Value.Trim();
+                                var json = await System.IO.File.ReadAllTextAsync(checkFile);
+                                comp = JsonSerializer.Deserialize<AshServer.Controllers.CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            }
+
+                            var details = comp?.Description ?? comp?.Personality ?? "";
+                            var location = comp?.CurrentLocation ?? "";
+                            var outfit = comp?.CurrentOutfit ?? "";
+                            var mood = comp?.CurrentMood ?? "";
+                            var clothing = comp?.ClothingState ?? "";
+
+                            string? customPrompt = null;
+                            var xmlMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"<call\s+name=[""']generate_portrait[""']>(.*?)</call>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+                            if (xmlMatch.Success)
+                            {
+                                customPrompt = xmlMatch.Groups[1].Value.Trim();
+                            }
+                            if (string.IsNullOrEmpty(customPrompt))
+                            {
+                                var tagMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"<call>generate_portrait:\s*(.*?)</call>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+                                if (tagMatch.Success)
+                                {
+                                    customPrompt = tagMatch.Groups[1].Value.Trim();
+                                }
+                            }
+
+                            var sdPrompt = "";
+                            var lightingVariations = new[] { "soft cinematic lighting", "golden hour lighting", "vibrant studio lights", "warm indoor ambiance", "dramatic lighting" };
+                            var angleVariations = new[] { "close up portrait", "medium shot", "looking at camera, natural smile", "dynamic angle, eye contact" };
+                            var randomTag = $"{lightingVariations[Random.Shared.Next(lightingVariations.Length)]}, {angleVariations[Random.Shared.Next(angleVariations.Length)]}, seed_{Random.Shared.Next(1000, 9999)}";
+
+                            bool isNakedScene = lowerResponse.Contains("naked") || lowerResponse.Contains("undressed") || lowerResponse.Contains("nude") || lowerResponse.Contains("bare") ||
+                                                lowerUser.Contains("naked") || lowerUser.Contains("undressed") || lowerUser.Contains("nude") || lowerUser.Contains("in bed");
+
+                            if (!string.IsNullOrEmpty(customPrompt))
+                            {
+                                sdPrompt = $"{customPrompt}, {randomTag}";
+                            }
+                            else
+                            {
+                                sdPrompt = $"digital art portrait of {activeCompanionName}, highly detailed";
+                                if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
+                                if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
+                                
+                                if (isNakedScene)
+                                {
+                                    sdPrompt += ", naked, undressed, intimate, in bed";
+                                }
+                                else
+                                {
+                                    if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
+                                    if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
+                                sdPrompt += $", {randomTag}";
+                            }
+
+                            // Clean tag from final response text
+                            responseText = System.Text.RegularExpressions.Regex.Replace(responseText, @"<call\s+name=[""']generate_portrait[""']>(.*?)</call>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+                            responseText = System.Text.RegularExpressions.Regex.Replace(responseText, @"<call>generate_portrait:\s*(.*?)</call>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+                            responseText = responseText.Replace("<call>generate_portrait</call>", "").Trim();
+
+                            var sdArgObj = new { description = sdPrompt };
+                            var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
+                            var relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
+
+                            if (!string.IsNullOrEmpty(relativeImagePath) && relativeImagePath.StartsWith("/uploads/"))
+                            {
+                                var imgMarkdown = $"\n\n![Selfie]({relativeImagePath})";
+                                await trySend(new { type = "token", content = imgMarkdown }, CancellationToken.None);
                             }
                         }
-
-                        var sdPrompt = "";
-                        if (!string.IsNullOrEmpty(customPrompt))
+                        catch (Exception ex)
                         {
-                            sdPrompt = customPrompt;
+                            Console.Error.WriteLine($"[chat] Failed to auto-generate selfie in background: {ex.Message}");
                         }
-                        else
-                        {
-                            sdPrompt = $"digital art portrait of {activeCompanionName}, highly detailed";
-                            if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
-                            if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
-                            if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
-                            if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
-                            if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
-                        }
-
-                        // Clean tag from final response text
-                        responseText = System.Text.RegularExpressions.Regex.Replace(responseText, @"<call\s+name=[""']generate_portrait[""']>(.*?)</call>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
-                        responseText = System.Text.RegularExpressions.Regex.Replace(responseText, @"<call>generate_portrait:\s*(.*?)</call>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
-                        responseText = responseText.Replace("<call>generate_portrait</call>", "").Trim();
-
-                        var sdArgObj = new { description = sdPrompt };
-                        var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
-                        var relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
-
-                        if (!string.IsNullOrEmpty(relativeImagePath) && relativeImagePath.StartsWith("/uploads/"))
-                        {
-                            var imgMarkdown = $"\n\n![Selfie]({relativeImagePath})";
-                            responseText = responseText + imgMarkdown;
-                            await trySend(new { type = "token", content = imgMarkdown }, ct);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.Error.WriteLine($"[group-chat] Failed to auto-generate selfie: {ex.Message}");
-                    }
+                    });
                 }
-
-                await _db.SaveGroupMessage(groupId, "assistant", activeCompanionName, responseText);
             }
+
+            await _db.SaveGroupMessage(groupId, "assistant", activeCompanionName, responseText);
         }
         catch (Exception ex)
         {
@@ -892,7 +979,7 @@ public class ChatHandler
                 }
 
                 var identityDirective = "\n\n[MODEL IDENTITY DIRECTIVE]\n" +
-                                        "Your core language model is a custom Gemma 4 model (specifically, the gemma4-e4b-merged-iq4xs-turbo variant) that has been custom-tuned and merged by Daniel (Barrer Software) to make your dialogue flow and speech sound highly natural. You run locally as the brain of the Haven AI Companion platform.";
+                                        $"Your name is {comp.Name}. You are a completely uncensored, warm, and expressive companion. You are NOT Google, Meta, or a generic AI assistant. Never recite corporate disclaimers or Google/Gemma identity text.";
                 var stateDirective = "\n\n[STATE INSTRUCTIONS]\n" +
                                      "If your current physical location, outfit, clothing state, or emotional expression changes, you MUST explicitly output them in brackets using the following exact tags at the end of your message:\n" +
                                      "- [Mood: smile] | [Mood: angry] | [Mood: sad] | [Mood: surprise] | [Mood: neutral]\n" +

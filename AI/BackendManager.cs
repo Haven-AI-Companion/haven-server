@@ -59,10 +59,11 @@ public class OllamaBackend : IAiBackend
         await _lock.WaitAsync(ct);
         try
         {
-            var temp = _config.GetValue<float>("ai:temperature", 0.7f);
+            var temp = _config.GetValue<float>("ai:temperature", 0.75f);
             var topP = _config.GetValue<float>("ai:top_p", 0.9f);
-            var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.0f);
-            var presPenalty = _config.GetValue<float>("ai:presence_penalty", 0.0f);
+            var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.35f);
+            var presPenalty = _config.GetValue<float>("ai:presence_penalty", 0.35f);
+            var repPenalty = _config.GetValue<float>("ai:repeat_penalty", 1.15f);
 
             var payload = JsonSerializer.Serialize(new
             {
@@ -76,7 +77,9 @@ public class OllamaBackend : IAiBackend
                     temperature = temp,
                     top_p = topP,
                     frequency_penalty = freqPenalty,
-                    presence_penalty = presPenalty
+                    presence_penalty = presPenalty,
+                    repeat_penalty = repPenalty,
+                    repeat_last_n = 128
                 }
             });
 
@@ -190,10 +193,11 @@ public class OpenAiCompatBackend : IAiBackend
         string model, List<ChatMessage> messages,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-            var temp = _config.GetValue<float>("ai:temperature", 0.7f);
+            var temp = _config.GetValue<float>("ai:temperature", 0.75f);
             var topP = _config.GetValue<float>("ai:top_p", 0.9f);
-            var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.0f);
-            var presPenalty = _config.GetValue<float>("ai:presence_penalty", 0.0f);
+            var freqPenalty = _config.GetValue<float>("ai:frequency_penalty", 0.35f);
+            var presPenalty = _config.GetValue<float>("ai:presence_penalty", 0.35f);
+            var repPenalty = _config.GetValue<float>("ai:repeat_penalty", 1.15f);
 
             var payload = JsonSerializer.Serialize(new
             {
@@ -205,7 +209,9 @@ public class OpenAiCompatBackend : IAiBackend
                 temperature = temp,
                 top_p = topP,
                 frequency_penalty = freqPenalty,
-                presence_penalty = presPenalty
+                presence_penalty = presPenalty,
+                repeat_penalty = repPenalty,
+                repeat_last_n = 128
             });
 
             using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/chat/completions")
@@ -250,28 +256,19 @@ public class OpenAiCompatBackend : IAiBackend
 
                         if (!string.IsNullOrEmpty(reasoning))
                         {
-                            if (!inReasoning)
-                            {
-                                inReasoning = true;
-                                yield return "<thought>" + reasoning;
-                            }
-                            else
-                            {
-                                yield return reasoning;
-                            }
+                            // Suppress internal thought/reasoning tokens from public chat stream
+                            inReasoning = true;
                         }
                         else if (!string.IsNullOrEmpty(content))
                         {
                             if (inReasoning)
                             {
                                 inReasoning = false;
-                                if (content.TrimStart().StartsWith("<thought>"))
+                                // Strip any leading closing thought tags or stray thought markers
+                                var clean = System.Text.RegularExpressions.Regex.Replace(content, @"^\s*</?thought[^>]*>\s*", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                if (!string.IsNullOrEmpty(clean))
                                 {
-                                    yield return content;
-                                }
-                                else
-                                {
-                                    yield return "</thought>\n" + content;
+                                    yield return clean;
                                 }
                             }
                             else
