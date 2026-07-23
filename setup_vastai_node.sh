@@ -7,7 +7,7 @@ echo "   🌸 Haven AI Companion - Vast.ai GPU Node Auto-Setup   "
 echo "=========================================================="
 
 # 1. Update packages and install dependencies
-apt-get update && apt-get install -y wget curl git build-essential cmake netbird
+apt-get update && apt-get install -y wget curl git build-essential cmake aria2 unzip netbird
 
 # 2. Download llama.cpp binary if needed
 mkdir -p ~/bin ~/models
@@ -21,8 +21,8 @@ fi
 # 3. Download Haven-Chat-v3.0.1.gguf model
 MODEL_PATH=~/models/haven-chat-v3.0.1.gguf
 if [ ! -f "$MODEL_PATH" ]; then
-    echo "[Haven Setup] Downloading Haven-Chat-v3.0.1.gguf (5.09 GB) from Hugging Face..."
-    wget -q --show-progress https://huggingface.co/haven-ai-companion/haven-chat-v3.0.1/resolve/main/haven-chat-v3.0.1.gguf -O "$MODEL_PATH"
+    echo "[Haven Setup] Multi-thread downloading Haven-Chat-v3.0.1.gguf (5.09 GB) from Hugging Face..."
+    aria2c -x 16 -s 16 -k 1M https://huggingface.co/haven-ai-companion/haven-chat-v3.0.1/resolve/main/haven-chat-v3.0.1.gguf -d ~/models -o haven-chat-v3.0.1.gguf
 fi
 
 # 4. Launch llama-server on GPU
