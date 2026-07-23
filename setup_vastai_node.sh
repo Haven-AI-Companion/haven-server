@@ -62,6 +62,18 @@ if [ -f ~/bin/sd-server ]; then
         --type f16 > ~/sd_server.log 2>&1 &
 fi
 
+# 6. Check NetBird Connection
+if command -v netbird >/dev/null 2>&1; then
+    if ! netbird status 2>/dev/null | grep -q "Connected"; then
+        if [ -n "$NETBIRD_KEY" ]; then
+            echo "[Haven Setup] Connecting NetBird mesh network with provided NETBIRD_KEY..."
+            netbird up --key "$NETBIRD_KEY"
+        else
+            echo "[Haven Setup] NetBird is installed. Run 'netbird up --key <YOUR_KEY>' to connect your private mesh!"
+        fi
+    fi
+fi
+
 sleep 3
 echo "=========================================================="
 echo "   ✅ Vast.ai GPU Node is ONLINE and serving v3.0.1!    "
