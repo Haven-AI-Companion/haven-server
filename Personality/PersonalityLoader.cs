@@ -100,11 +100,11 @@ public class PersonalityLoader
             var g = gender.Trim().ToLowerInvariant();
             if (g.Contains("female") || g.Contains("woman") || g.Contains("she") || g.Contains("girl") || g.Contains("lady"))
             {
-                sb.Append($"User Gender: FEMALE\nCRITICAL MANDATE: {name} is FEMALE. Names are 100% unisexual—do NOT assume male pronouns based on the name '{name}'. You MUST strictly refer to {name} using female pronouns (she/her/hers). NEVER use male pronouns (he/him/his) for {name} under any circumstances.");
+                sb.Append($"User Gender: FEMALE\nCRITICAL MANDATE: {name} is FEMALE. Names are 100% unisexual—do NOT assume male pronouns based on the name '{name}'. You MUST strictly refer to {name} using female pronouns (she/her/hers). NEVER use male pronouns (he/him/his) for {name} under any circumstances.\nWRITING STYLE: Write confident, decisive, immersive prose. NEVER use slashes (e.g. 'tits or ribs', 'chest/shoulders') or slash-separated choices in narration. Describe {name}'s female body and anatomy directly, fluidly, and naturally.");
             }
             else if (g.Contains("male") || g.Contains("man") || g.Contains("he") || g.Contains("boy") || g.Contains("guy"))
             {
-                sb.Append($"User Gender: MALE\nCRITICAL MANDATE: {name} is MALE. You MUST strictly refer to {name} using male pronouns (he/him/his). NEVER use female pronouns (she/her/hers) for {name} under any circumstances.");
+                sb.Append($"User Gender: MALE\nCRITICAL MANDATE: {name} is MALE. You MUST strictly refer to {name} using male pronouns (he/him/his). NEVER use female pronouns (she/her/hers) for {name} under any circumstances.\nWRITING STYLE: Write confident, decisive, immersive prose. NEVER use slashes or slash-separated choices in narration. Describe {name}'s body and anatomy directly, fluidly, and naturally.");
             }
             else
             {
