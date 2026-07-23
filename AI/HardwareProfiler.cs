@@ -182,7 +182,7 @@ public class HardwareProfiler
                         "--n-gpu-layers", gpuLayers.ToString(),
                         "--host", "127.0.0.1",
                         "--port", LocalPort.ToString(),
-                        "--alias", "haven-chat-v3.0",
+                        "--alias", Path.GetFileNameWithoutExtension(modelPath),
                         "--batch-size", "512",
                         "--ubatch-size", "512",
                         "--n-predict", "-1",
@@ -267,6 +267,7 @@ public class HardwareProfiler
 
         var candidates = new[]
         {
+            "haven-chat-v3.0.1.gguf",
             "haven-chat-v3.0.gguf",
             "haven-chat-v2.0.gguf",
             "gemma4-e4b-merged-iq4xs-turbo.gguf",
