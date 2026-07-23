@@ -27,12 +27,14 @@
     <PackageReference Include="Telegram.Bot" Version="22.4.0" />
   </ItemGroup>
 
-  <!-- Exclude plugin-sdk subdirectories from compilation -->
+  <!-- Exclude plugin-sdk and uploads subdirectories from compilation/asset indexing -->
   <ItemGroup>
     <Compile Remove="plugin-sdk/**" />
     <Content Remove="plugin-sdk/**" />
     <EmbeddedResource Remove="plugin-sdk/**" />
     <None Remove="plugin-sdk/**" />
+    <Content Remove="wwwroot/uploads/**" />
+    <None Remove="wwwroot/uploads/**" />
   </ItemGroup>
 
   <!-- Copy personality starter files to personality/ in the publish output -->
