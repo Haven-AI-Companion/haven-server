@@ -3201,7 +3201,14 @@ async function activateModel() {
       },
       body: JSON.stringify({ modelFilename: select.value })
     });
-    if (!res.ok) throw new Error('Activation failed');
+    if (!res.ok) {
+      let errMsg = 'Activation failed';
+      try {
+        const errData = await res.json();
+        if (errData && errData.error) errMsg = errData.error;
+      } catch (_) {}
+      throw new Error(errMsg);
+    }
     toast('Model change requested. Server sidecar is restarting in background!');
     setTimeout(updateActiveModels, 2000);
     setTimeout(updateActiveModels, 5000);
