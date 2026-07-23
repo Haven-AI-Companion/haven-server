@@ -185,8 +185,7 @@ public class HardwareProfiler
                         "--alias", Path.GetFileNameWithoutExtension(modelPath),
                         "--batch-size", "512",
                         "--ubatch-size", "512",
-                        "--n-predict", "-1",
-                        "--log-disable"
+                        "--n-predict", "-1"
                     };
 
                     if (!string.IsNullOrEmpty(mmprojPath))
@@ -201,14 +200,20 @@ public class HardwareProfiler
                         Arguments = string.Join(" ", argsList),
                         UseShellExecute = false,
                         CreateNoWindow = true,
-                        RedirectStandardOutput = false,
-                        RedirectStandardError = false
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
                     };
+
+                    _llamaProcess = new Process { StartInfo = psi };
+                    _llamaProcess.OutputDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) Console.WriteLine($"[llama-server] {e.Data}"); };
+                    _llamaProcess.ErrorDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) Console.Error.WriteLine($"[llama-server] {e.Data}"); };
 
                     Console.WriteLine($"[profiler] Starting llama-server sidecar: {execPath} {psi.Arguments}");
                     try
                     {
-                        _llamaProcess = Process.Start(psi);
+                        _llamaProcess.Start();
+                        _llamaProcess.BeginOutputReadLine();
+                        _llamaProcess.BeginErrorReadLine();
                         if (_llamaProcess != null)
                         {
                             Console.WriteLine($"[profiler] llama-server started successfully (PID: {_llamaProcess.Id})");
@@ -287,7 +292,7 @@ public class HardwareProfiler
 
     private string? FindMmprojGguf(string modelPath)
     {
-        if (modelPath.Contains("merged")) return null; // Merged models are self-contained and don't need a separate --mmproj argument
+        if (modelPath.Contains("merged") || modelPath.Contains("haven-chat")) return null; // Merged or fine-tuned text chat models don't use mmproj
 
         var dir = Path.GetDirectoryName(modelPath);
         if (dir == null) return null;
