@@ -1505,6 +1505,17 @@ async function loadConversations() {
     if (!res.ok) return;
     const data = await res.json();
     conversations = Array.isArray(data) ? data : (data.conversations || []);
+    if (!activeConvId && selectedCompanion) {
+      const matched = conversations.find(c => 
+        (c.companionId && c.companionId.toLowerCase() === selectedCompanion.name.toLowerCase()) ||
+        (c.companion_id && c.companion_id.toLowerCase() === selectedCompanion.name.toLowerCase()) ||
+        (c.title && c.title.toLowerCase() === `${selectedCompanion.name.toLowerCase()} chat`)
+      );
+      if (matched) {
+        loadConversation(matched.id);
+        return;
+      }
+    }
     renderConvList();
   } catch {}
 }
@@ -1904,7 +1915,7 @@ function connectWebSocket() {
       window.dispatchEvent(new CustomEvent('media_ready', { detail: { url: targetUrl, tool: msg.tool } }));
     } else if (msg.type === 'conversation_id') {
       activeConvId = msg.content;
-      renderConvList();
+      loadConversations();
     }
   };
 }
@@ -3260,6 +3271,15 @@ function onCompanionChange() {
       root.style.setProperty('--accent-dim', 'rgba(129, 140, 248, 0.12)');
       root.style.setProperty('--glow-color-1', 'rgba(99, 102, 241, 0.12)');
       root.style.setProperty('--glow-color-2', 'rgba(168, 85, 247, 0.1)');
+    }
+
+    const matchedConv = conversations.find(c => 
+      (c.companionId && c.companionId.toLowerCase() === selectedCompanion.name.toLowerCase()) ||
+      (c.companion_id && c.companion_id.toLowerCase() === selectedCompanion.name.toLowerCase()) ||
+      (c.title && c.title.toLowerCase() === `${selectedCompanion.name.toLowerCase()} chat`)
+    );
+    if (matchedConv && matchedConv.id !== activeConvId) {
+      loadConversation(matchedConv.id);
     }
   } else {
     if (chatTitle) chatTitle.textContent = 'Haven';
