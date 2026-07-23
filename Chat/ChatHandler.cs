@@ -224,7 +224,7 @@ public class ChatHandler
 
                     if (conversationId == null)
                     {
-                        conversationId = await _db.CreateConversation(userId, companionId: payloadCompanionName);
+                        conversationId = await _db.GetOrCreateCompanionConversation(userId, payloadCompanionName);
                         _convCache.Set(conversationId, new List<ChatMessage>(), CacheTtl);
                         await SafeSend(new { type = "conversation_id", content = conversationId }, cts.Token);
                     }
@@ -279,7 +279,7 @@ public class ChatHandler
                         catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 19)
                         {
                             // Conversation was deleted mid-session — create a fresh one and retry
-                            conversationId = await _db.CreateConversation(userId, companionId: payloadCompanionName);
+                            conversationId = await _db.GetOrCreateCompanionConversation(userId, payloadCompanionName);
                             _convCache.Remove(conversationId);
                             _convCache.Set(conversationId, new List<ChatMessage>(), CacheTtl);
                             await SafeSend(new { type = "conversation_id", content = conversationId }, cts.Token);

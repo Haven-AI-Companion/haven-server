@@ -190,7 +190,7 @@ public class ConversationsController : ControllerBase
     {
         var title = body?.GetValueOrDefault("title") ?? "New Conversation";
         var companionId = body?.GetValueOrDefault("companion_id");
-        var id = await _db.CreateConversation(UserId, title, null, companionId);
+        var id = await _db.GetOrCreateCompanionConversation(UserId, companionId ?? title);
         return Ok(new { id, title, companionId });
     }
 
@@ -857,7 +857,7 @@ public class ModelsController : ControllerBase
                 }
                 else
                 {
-                    conversationId = await _db.CreateConversation(userId, companionId: req.CompanionName);
+                    conversationId = await _db.GetOrCreateCompanionConversation(userId, req.CompanionName);
                 }
                 
                 var cleanUserMsg = ExtractUserMessage(promptText, req.DisplayName);

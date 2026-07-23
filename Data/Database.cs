@@ -517,6 +517,37 @@ public class Database
         cmd.ExecuteNonQuery();
     });
 
+    public async Task<string> GetOrCreateCompanionConversation(int userId, string? companionId)
+    {
+        if (string.IsNullOrWhiteSpace(companionId))
+        {
+            return await CreateConversation(userId, "New Conversation");
+        }
+
+        var cleanCompId = companionId.Trim();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id FROM conversations WHERE user_id = $u AND (LOWER(companion_id) = LOWER($c) OR LOWER(title) = LOWER($t)) ORDER BY updated_at DESC LIMIT 1";
+        cmd.Parameters.AddWithValue("$u", userId);
+        cmd.Parameters.AddWithValue("$c", cleanCompId);
+        cmd.Parameters.AddWithValue("$t", $"{cleanCompId} Chat".ToLowerInvariant());
+        var existingId = cmd.ExecuteScalar()?.ToString();
+
+        if (!string.IsNullOrEmpty(existingId))
+        {
+            using var updateCmd = conn.CreateCommand();
+            updateCmd.CommandText = "UPDATE conversations SET companion_id = $c, updated_at = CURRENT_TIMESTAMP WHERE id = $id";
+            updateCmd.Parameters.AddWithValue("$c", cleanCompId);
+            updateCmd.Parameters.AddWithValue("$id", existingId);
+            updateCmd.ExecuteNonQuery();
+
+            return existingId;
+        }
+
+        var newTitle = $"{cleanCompId} Chat";
+        return await CreateConversation(userId, newTitle, companionId: cleanCompId);
+    }
+
 
     public Task<List<Conversation>> GetConversations(int userId) => Task.Run(() =>
     {
