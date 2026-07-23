@@ -188,7 +188,7 @@ public class HardwareProfiler
                         "--threads", _config.GetValue("sidecars:llama:threads", profile.OptimalThreads).ToString(),
                         "--ctx-size", _config.GetValue("sidecars:llama:context_size", 16384).ToString(),
                         "--n-gpu-layers", gpuLayers.ToString(),
-                        "--host", "127.0.0.1",
+                        "--host", "0.0.0.0",
                         "--port", LocalPort.ToString(),
                         "--alias", Path.GetFileNameWithoutExtension(modelPath),
                         "--batch-size", "512",
@@ -405,7 +405,7 @@ public class HardwareProfiler
                     var steps = _config.GetValue("sidecars:stable_diffusion:steps", 8);
                     var sampling = _config.GetValue("sidecars:stable_diffusion:sampling_method", "lcm");
                     var cfgScale = _config.GetValue("sidecars:stable_diffusion:cfg_scale", 2.0);
-                    var args = $"--model \"{modelPath}\" --taesd \"{taesdPath}\" --embd-dir \"{embdDir}\" --lora-model-dir \"{loraDir}\" --listen-ip 127.0.0.1 --listen-port {sdPort} --steps {steps} --sampling-method {sampling} --cfg-scale {cfgScale.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}";
+                    var args = $"--model \"{modelPath}\" --taesd \"{taesdPath}\" --embd-dir \"{embdDir}\" --lora-model-dir \"{loraDir}\" --listen-ip 0.0.0.0 --listen-port {sdPort} --steps {steps} --sampling-method {sampling} --cfg-scale {cfgScale.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}";
                     
                     var psi = new ProcessStartInfo
                     {
