@@ -65,11 +65,15 @@ fi
 # 6. Check NetBird Connection
 if command -v netbird >/dev/null 2>&1; then
     if ! netbird status 2>/dev/null | grep -q "Connected"; then
+        MGMT_FLAG=""
+        if [ -n "$NETBIRD_MGMT_URL" ]; then
+            MGMT_FLAG="--management-url $NETBIRD_MGMT_URL"
+        fi
         if [ -n "$NETBIRD_KEY" ]; then
-            echo "[Haven Setup] Connecting NetBird mesh network with provided NETBIRD_KEY..."
-            netbird up --key "$NETBIRD_KEY"
+            echo "[Haven Setup] Connecting self-hosted NetBird mesh network..."
+            netbird up $MGMT_FLAG --key "$NETBIRD_KEY"
         else
-            echo "[Haven Setup] NetBird is installed. Run 'netbird up --key <YOUR_KEY>' to connect your private mesh!"
+            echo "[Haven Setup] NetBird is installed. Run 'netbird up $MGMT_FLAG --key <YOUR_KEY>' to connect your private mesh!"
         fi
     fi
 fi
