@@ -60,7 +60,17 @@ public class ModelManagerController : ControllerBase
             return BadRequest(new { error = "ModelFilename is required." });
 
         var modelFilename = req.ModelFilename.Trim();
+        if (!modelFilename.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
+        {
+            modelFilename += ".gguf";
+        }
+
         var modelPath = Path.Combine(GgufDir, modelFilename);
+        if (!System.IO.File.Exists(modelPath) && System.IO.File.Exists(req.ModelFilename))
+        {
+            modelPath = req.ModelFilename;
+            modelFilename = Path.GetFileName(req.ModelFilename);
+        }
 
         if (!System.IO.File.Exists(modelPath))
             return BadRequest(new { error = $"Model file '{modelFilename}' does not exist in {GgufDir}." });
