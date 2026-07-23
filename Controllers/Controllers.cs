@@ -841,14 +841,20 @@ public class ModelsController : ControllerBase
                 });
             }
 
-                var userId = UserId;
-                var conversationId = await _db.GetOrCreateCompanionConversation(userId, req.CompanionId ?? req.CompanionName, req.CompanionName, customId: req.ConversationId);
-                
-                var cleanUserMsg = ExtractUserMessage(promptText, req.DisplayName);
-                await _db.AddMessage(conversationId, "user", cleanUserMsg);
-                await _db.AddMessage(conversationId, "assistant", responseStr);
-                
-                _ = Task.Run(() => TopicSummarizer.SummarizeConversation(conversationId, _db, _backends));
+                bool isInternalUtilityPrompt = promptText.StartsWith("Extract key facts", StringComparison.OrdinalIgnoreCase) ||
+                                               promptText.StartsWith("Write a short, intimate", StringComparison.OrdinalIgnoreCase);
+
+                if (!isInternalUtilityPrompt)
+                {
+                    var userId = UserId;
+                    var conversationId = await _db.GetOrCreateCompanionConversation(userId, req.CompanionId ?? req.CompanionName, req.CompanionName, customId: req.ConversationId);
+                    
+                    var cleanUserMsg = ExtractUserMessage(promptText, req.DisplayName);
+                    await _db.AddMessage(conversationId, "user", cleanUserMsg);
+                    await _db.AddMessage(conversationId, "assistant", responseStr);
+                    
+                    _ = Task.Run(() => TopicSummarizer.SummarizeConversation(conversationId, _db, _backends));
+                }
             }
         }
         catch (Exception ex)
