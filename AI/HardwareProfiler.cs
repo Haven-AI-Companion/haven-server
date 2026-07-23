@@ -272,6 +272,7 @@ public class HardwareProfiler
 
         var candidates = new[]
         {
+            "haven-chat-v3.0.2.gguf",
             "haven-chat-v3.0.1.gguf",
             "haven-chat-v3.0.gguf",
             "haven-chat-v2.0.gguf",
