@@ -842,23 +842,7 @@ public class ModelsController : ControllerBase
             }
 
                 var userId = UserId;
-                var conversationId = req.ConversationId;
-                if (!string.IsNullOrEmpty(conversationId))
-                {
-                    var existing = await _db.GetConversation(conversationId, userId);
-                    if (existing == null)
-                    {
-                        await _db.CreateConversation(userId, customId: conversationId, companionId: req.CompanionName);
-                    }
-                    else if (string.IsNullOrEmpty(existing.CompanionId) && !string.IsNullOrEmpty(req.CompanionName))
-                    {
-                        await _db.SetConversationCompanion(conversationId, req.CompanionName);
-                    }
-                }
-                else
-                {
-                    conversationId = await _db.GetOrCreateCompanionConversation(userId, req.CompanionName);
-                }
+                var conversationId = await _db.GetOrCreateCompanionConversation(userId, req.CompanionName, customId: req.ConversationId);
                 
                 var cleanUserMsg = ExtractUserMessage(promptText, req.DisplayName);
                 await _db.AddMessage(conversationId, "user", cleanUserMsg);

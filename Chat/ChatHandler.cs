@@ -217,6 +217,12 @@ public class ChatHandler
                                 if (!_convCache.TryGetValue(conversationId, out List<ChatMessage>? _))
                                     await LoadConvToCache(conversationId);
                             }
+                            else
+                            {
+                                conversationId = await _db.GetOrCreateCompanionConversation(userId, payloadCompanionName, customId: reqId);
+                                if (!_convCache.TryGetValue(conversationId, out List<ChatMessage>? _))
+                                    await LoadConvToCache(conversationId);
+                            }
                         }
                     }
 

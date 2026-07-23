@@ -517,18 +517,21 @@ public class Database
         cmd.ExecuteNonQuery();
     });
 
-    public async Task<string> GetOrCreateCompanionConversation(int userId, string? companionId)
+    public async Task<string> GetOrCreateCompanionConversation(int userId, string? companionId, string? customId = null)
     {
         if (string.IsNullOrWhiteSpace(companionId))
         {
-            return await CreateConversation(userId, "New Conversation");
+            return await CreateConversation(userId, "New Conversation", customId: customId);
         }
 
         var cleanCompId = companionId.Trim();
+        var targetId = !string.IsNullOrWhiteSpace(customId) ? customId : $"conv_{cleanCompId.ToLowerInvariant().Replace(" ", "_")}";
+
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM conversations WHERE user_id = $u AND (LOWER(companion_id) = LOWER($c) OR LOWER(title) = LOWER($t)) ORDER BY updated_at DESC LIMIT 1";
+        cmd.CommandText = "SELECT id FROM conversations WHERE user_id = $u AND (id = $targetId OR LOWER(companion_id) = LOWER($c) OR LOWER(title) = LOWER($t)) ORDER BY updated_at DESC LIMIT 1";
         cmd.Parameters.AddWithValue("$u", userId);
+        cmd.Parameters.AddWithValue("$targetId", targetId);
         cmd.Parameters.AddWithValue("$c", cleanCompId);
         cmd.Parameters.AddWithValue("$t", $"{cleanCompId} Chat".ToLowerInvariant());
         var existingId = cmd.ExecuteScalar()?.ToString();
@@ -545,7 +548,7 @@ public class Database
         }
 
         var newTitle = $"{cleanCompId} Chat";
-        return await CreateConversation(userId, newTitle, companionId: cleanCompId);
+        return await CreateConversation(userId, newTitle, customId: targetId, companionId: cleanCompId);
     }
 
 
