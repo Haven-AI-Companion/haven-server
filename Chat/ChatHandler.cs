@@ -966,12 +966,19 @@ public class ChatHandler
                 var activeMood = convState?.Mood ?? comp.CurrentMood;
                 var activeClothing = convState?.ClothingState ?? comp.ClothingState;
 
+                var finalUser = string.IsNullOrWhiteSpace(activeName) ? "User" : activeName.Trim();
+                var finalChar = string.IsNullOrWhiteSpace(comp.Name) ? "Haven" : comp.Name.Trim();
+
+                Func<string, string> parseMacros = text => string.IsNullOrEmpty(text) ? "" : text
+                    .Replace("{{user}}", finalUser, StringComparison.OrdinalIgnoreCase)
+                    .Replace("{{char}}", finalChar, StringComparison.OrdinalIgnoreCase);
+
                 var sb = new System.Text.StringBuilder();
-                sb.AppendLine($"You are {comp.Name}.");
-                if (!string.IsNullOrEmpty(comp.Description)) sb.AppendLine(comp.Description);
-                if (!string.IsNullOrEmpty(comp.Personality)) sb.AppendLine($"Personality: {comp.Personality}");
-                if (!string.IsNullOrEmpty(comp.Scenario)) sb.AppendLine($"Scenario: {comp.Scenario}");
-                if (!string.IsNullOrEmpty(comp.SystemPrompt)) sb.AppendLine(comp.SystemPrompt);
+                sb.AppendLine($"You are {finalChar}.");
+                if (!string.IsNullOrEmpty(comp.Description)) sb.AppendLine(parseMacros(comp.Description));
+                if (!string.IsNullOrEmpty(comp.Personality)) sb.AppendLine($"Personality: {parseMacros(comp.Personality)}");
+                if (!string.IsNullOrEmpty(comp.Scenario)) sb.AppendLine($"Scenario: {parseMacros(comp.Scenario)}");
+                if (!string.IsNullOrEmpty(comp.SystemPrompt)) sb.AppendLine(parseMacros(comp.SystemPrompt));
 
                 if (!string.IsNullOrEmpty(activeLocation)) sb.AppendLine($"Current Location: {activeLocation}");
                 if (!string.IsNullOrEmpty(activeOutfit)) sb.AppendLine($"Current Outfit: {activeOutfit}");

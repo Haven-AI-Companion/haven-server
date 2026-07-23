@@ -54,9 +54,21 @@ public class ModelManagerController : ControllerBase
     }
 
     [HttpPost("activate")]
-    public async Task<IActionResult> ActivateModel([FromBody] ActivateModelRequest req)
+    public async Task<IActionResult> ActivateModel([FromBody] JsonElement body)
     {
-        var rawFilename = req?.GetFilename();
+        string? rawFilename = null;
+        if (body.ValueKind == JsonValueKind.Object)
+        {
+            if (body.TryGetProperty("modelFilename", out var p1)) rawFilename = p1.GetString();
+            else if (body.TryGetProperty("model_filename", out var p2)) rawFilename = p2.GetString();
+            else if (body.TryGetProperty("ModelFilename", out var p3)) rawFilename = p3.GetString();
+            else if (body.TryGetProperty("model", out var p4)) rawFilename = p4.GetString();
+        }
+        else if (body.ValueKind == JsonValueKind.String)
+        {
+            rawFilename = body.GetString();
+        }
+
         if (string.IsNullOrWhiteSpace(rawFilename))
             return BadRequest(new { error = "ModelFilename is required." });
 

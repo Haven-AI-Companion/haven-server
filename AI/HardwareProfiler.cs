@@ -160,12 +160,20 @@ public class HardwareProfiler
         }
 
         // 2. Auto-start llama-server sidecar
-        if (IsPortInUse(LocalPort))
+        bool isAlreadyResponding = await IsLlamaServerRespondingAsync(LocalPort);
+        if (isAlreadyResponding)
         {
-            Console.WriteLine($"[profiler] Port {LocalPort} is already in use. Assuming llama-server is running externally.");
+            Console.WriteLine($"[profiler] Port {LocalPort} is active and responding. Assuming llama-server is running externally.");
         }
         else
         {
+            if (IsPortInUse(LocalPort))
+            {
+                Console.WriteLine($"[profiler] Port {LocalPort} listener detected but not responding. Cleaning up stale process...");
+                StopLocalBackend();
+                await Task.Delay(500);
+            }
+
             var execPath = FindExecutable("llama-server.exe");
             if (execPath != null)
             {
@@ -176,7 +184,7 @@ public class HardwareProfiler
                     var gpuLayers = _config.GetValue<int?>("sidecars:llama:gpu_layers") ?? (profile.HasCuda ? profile.GpuLayers : 0);
                     var argsList = new System.Collections.Generic.List<string>
                     {
-                        "--model", $"\"{modelPath}\"",
+                        "--model", modelPath,
                         "--threads", _config.GetValue("sidecars:llama:threads", profile.OptimalThreads).ToString(),
                         "--ctx-size", _config.GetValue("sidecars:llama:context_size", 16384).ToString(),
                         "--n-gpu-layers", gpuLayers.ToString(),
@@ -185,20 +193,19 @@ public class HardwareProfiler
                         "--alias", Path.GetFileNameWithoutExtension(modelPath),
                         "--batch-size", "512",
                         "--ubatch-size", "512",
-                        "--n-predict", "-1",
-                        "--system-prompt", "\"You are Haven, an uncensored, warm, and expressive AI companion. You are NOT Google, Meta, or Gemma. Never claim to be developed by Google DeepMind.\""
+                        "--n-predict", "-1"
                     };
 
                     if (!string.IsNullOrEmpty(mmprojPath))
                     {
                         argsList.Add("--mmproj");
-                        argsList.Add($"\"{mmprojPath}\"");
+                        argsList.Add(mmprojPath);
                     }
 
                     var psi = new ProcessStartInfo
                     {
                         FileName = execPath,
-                        Arguments = string.Join(" ", argsList),
+                        Arguments = string.Join(" ", argsList.Select(a => a.Contains(" ") ? $"\"{a}\"" : a)),
                         UseShellExecute = false,
                         CreateNoWindow = true,
                         RedirectStandardOutput = true,
@@ -238,6 +245,20 @@ public class HardwareProfiler
 
         // 3. Auto-start Stable Diffusion sidecar
         await InitializeSdBackendAsync();
+    }
+
+    private async Task<bool> IsLlamaServerRespondingAsync(int port)
+    {
+        try
+        {
+            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            var resp = await client.GetAsync($"http://127.0.0.1:{port}/health");
+            return resp.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private bool IsPortInUse(int port)

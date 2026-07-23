@@ -3199,7 +3199,7 @@ async function activateModel() {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ modelFilename: select.value })
+      body: JSON.stringify({ modelFilename: select.value, model_filename: select.value, model: select.value })
     });
     if (!res.ok) {
       let errMsg = 'Activation failed';
