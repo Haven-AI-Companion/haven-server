@@ -11,7 +11,6 @@
     :root {
       --bg-dark: #0a0c10;
       --bg-card: rgba(18, 22, 31, 0.75);
-      --bg-card-hover: rgba(26, 32, 46, 0.85);
       --border-color: rgba(255, 255, 255, 0.08);
       --accent-pink: #ec4899;
       --accent-purple: #8b5cf6;
@@ -100,7 +99,7 @@
     .hero p {
       color: var(--text-muted);
       font-size: 1.1rem;
-      max-width: 700px;
+      max-width: 750px;
     }
 
     .layout {
@@ -163,12 +162,8 @@
       background: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 12px;
-      padding: 20px 24px;
-      transition: border-color 0.2s ease;
-    }
-
-    .card:hover {
-      border-color: rgba(255, 255, 255, 0.15);
+      padding: 24px;
+      margin-bottom: 20px;
     }
 
     .endpoint-header {
@@ -194,7 +189,7 @@
 
     .path {
       font-family: var(--font-mono);
-      font-size: 1rem;
+      font-size: 1.05rem;
       font-weight: 600;
       color: var(--text-main);
     }
@@ -205,21 +200,43 @@
       margin-bottom: 16px;
     }
 
+    .explanation {
+      background: rgba(255, 255, 255, 0.03);
+      border-left: 3px solid var(--accent-purple);
+      padding: 10px 14px;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.88rem;
+      color: #d1d5db;
+      margin-bottom: 16px;
+    }
+
+    .code-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .code-grid { grid-template-columns: 1fr; }
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+    }
+
     .code-block {
       background: #06080b;
       border: 1px solid rgba(255, 255, 255, 0.05);
       border-radius: 8px;
       padding: 14px 18px;
       font-family: var(--font-mono);
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: #e5e7eb;
       overflow-x: auto;
       white-space: pre-wrap;
     }
 
     .label {
-      font-size: 0.8rem;
-      font-weight: 600;
+      font-size: 0.75rem;
+      font-weight: 700;
       color: var(--text-muted);
       text-transform: uppercase;
       margin-bottom: 6px;
@@ -234,24 +251,24 @@
       <a href="/" class="brand">
         🌸 <span>Haven Server</span>
       </a>
-      <span class="badge">API Reference v2.1</span>
+      <span class="badge">Beginner-Friendly API Guide v2.1</span>
     </div>
   </header>
 
   <div class="hero">
     <h1>Haven Server REST & WebSocket API</h1>
-    <p>Complete developer documentation for building custom companion apps, Card Studio integrations, and custom clients targeting <code>haven-server</code>.</p>
+    <p>Every single endpoint in <code>haven-server</code> explained step-by-step with clear descriptions, request payloads, response structures, and copy-pasteable <code>curl</code> examples for developers building custom client apps.</p>
   </div>
 
   <div class="layout">
     <nav class="sidebar">
       <ul class="sidebar-menu">
-        <li><a href="#auth" class="sidebar-link active">Authentication</a></li>
-        <li><a href="#companions" class="sidebar-link">Companions</a></li>
-        <li><a href="#conversations" class="sidebar-link">Conversations & State</a></li>
-        <li><a href="#ai-wizard" class="sidebar-link">AI Card Studio Wizard</a></li>
-        <li><a href="#websocket" class="sidebar-link">WebSocket Real-Time Chat</a></li>
-        <li><a href="#admin" class="sidebar-link">Admin & System Health</a></li>
+        <li><a href="#auth" class="sidebar-link active">1. Authentication</a></li>
+        <li><a href="#companions" class="sidebar-link">2. Companions & Cards</a></li>
+        <li><a href="#conversations" class="sidebar-link">3. Conversations & State</a></li>
+        <li><a href="#ai-wizard" class="sidebar-link">4. AI Card Studio Wizard</a></li>
+        <li><a href="#websocket" class="sidebar-link">5. WebSocket Real-Time Chat</a></li>
+        <li><a href="#admin" class="sidebar-link">6. Admin & Health</a></li>
       </ul>
     </nav>
 
@@ -259,16 +276,38 @@
 
       <!-- AUTHENTICATION -->
       <section id="auth">
-        <div class="section-title">🔑 Authentication</div>
+        <div class="section-title">🔑 1. Authentication</div>
 
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method POST">POST</span>
             <span class="path">/api/auth/login</span>
           </div>
-          <div class="desc">Authenticates user and returns a Bearer JWT Token.</div>
-          <div class="label">Request Payload</div>
-          <div class="code-block">{ "username": "daniel", "password": "your_password" }</div>
+          <div class="desc">Log into your Haven Server account to get a JWT authentication token.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Send your username and password to log in. The server checks your credentials in SQLite and returns a <code>token</code> string. Include this token in the <code>Authorization: Bearer &lt;TOKEN&gt;</code> header for all subsequent API requests.
+          </div>
+          <div class="code-grid">
+            <div>
+              <div class="label">Request Payload (JSON)</div>
+              <div class="code-block">{
+  "username": "daniel",
+  "password": "your_password"
+}</div>
+            </div>
+            <div>
+              <div class="label">Server Response (JSON)</div>
+              <div class="code-block">{
+  "token": "eyJhbGciOiJIUzI1NiIsIn...",
+  "user": {
+    "id": 1,
+    "username": "daniel",
+    "displayName": "Daniel",
+    "gender": "female"
+  }
+}</div>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -276,48 +315,93 @@
             <span class="method GET">GET</span>
             <span class="path">/api/auth/me</span>
           </div>
-          <div class="desc">Retrieves the active authenticated user profile.</div>
-          <div class="label">Header</div>
-          <div class="code-block">Authorization: Bearer &lt;JWT_TOKEN&gt;</div>
+          <div class="desc">Get the currently logged-in user profile & gender preferences.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Verifies your JWT session token and returns your user profile data (e.g. <code>displayName</code>, <code>gender</code>, and avatar image path).
+          </div>
+          <div class="label">Curl Command Example</div>
+          <div class="code-block">curl -X GET http://localhost:18799/api/auth/me -H "Authorization: Bearer &lt;TOKEN&gt;"</div>
         </div>
       </section>
 
       <!-- COMPANIONS -->
       <section id="companions">
-        <div class="section-title">👥 Companions & Cards</div>
+        <div class="section-title">👥 2. Companions & Character Cards</div>
 
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method GET">GET</span>
             <span class="path">/api/companions</span>
           </div>
-          <div class="desc">Lists all available companions on the server.</div>
+          <div class="desc">List all available AI companions installed on the server.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Scans the server's companion card repository (e.g. Sabrina, Hasaji, Iris, etc.) and returns an array of companion configurations, including their avatars, personality descriptions, and current conversation IDs.
+          </div>
+          <div class="label">Server Response Example</div>
+          <div class="code-block">[
+  {
+    "name": "Sabrina",
+    "description": "Playful and attentive AI companion...",
+    "personality": "Witty, affectionate, genuine...",
+    "avatarPath": "/uploads/companion_sabrina.png",
+    "clothingState": "fully clothed"
+  }
+]</div>
         </div>
 
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method GET">GET</span>
             <span class="path">/api/companions/{name}</span>
           </div>
-          <div class="desc">Gets full configuration JSON for a specific companion.</div>
+          <div class="desc">Get full character card configuration JSON for a specific companion.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Replace <code>{name}</code> with the companion's name (e.g. <code>Sabrina</code>). Returns the companion's full JSON card data for editing inside Haven Card Studio.
+          </div>
+          <div class="label">Curl Command Example</div>
+          <div class="code-block">curl -X GET http://localhost:18799/api/companions/Sabrina -H "Authorization: Bearer &lt;TOKEN&gt;"</div>
         </div>
 
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method POST">POST</span>
             <span class="path">/api/companions</span>
           </div>
-          <div class="desc">Saves or updates companion configuration card JSON.</div>
-          <div class="label">Request Payload</div>
-          <div class="code-block">{ "name": "Sabrina", "description": "...", "personality": "...", "clothingState": "fully clothed" }</div>
+          <div class="desc">Create or update a companion character card on disk.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Takes a full companion configuration object (from Card Studio or your custom app) and writes the companion JSON card into the server's local personality directory.
+          </div>
+          <div class="code-grid">
+            <div>
+              <div class="label">Request Payload (JSON)</div>
+              <div class="code-block">{
+  "name": "Sabrina",
+  "description": "Charming and loyal companion.",
+  "personality": "Playful, witty, direct.",
+  "firstMessage": "Hey Daniel! What are we up to today?",
+  "systemPrompt": "You are Sabrina...",
+  "clothingState": "fully clothed"
+}</div>
+            </div>
+            <div>
+              <div class="label">Server Response (JSON)</div>
+              <div class="code-block">{
+  "ok": true,
+  "message": "Companion 'Sabrina' saved locally successfully."
+}</div>
+            </div>
+          </div>
         </div>
 
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method POST">POST</span>
             <span class="path">/api/companions/{name}/avatar</span>
           </div>
-          <div class="desc">Uploads a high-res avatar image for a companion (multipart/form-data).</div>
+          <div class="desc">Upload a custom high-resolution avatar image for a companion.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Accepts a multipart form file (PNG or JPG). The server saves the image file into <code>wwwroot/uploads/</code> and automatically links the new <code>avatarPath</code> inside the companion's JSON config!
+          </div>
         </div>
 
         <div class="card">
@@ -325,36 +409,45 @@
             <span class="method POST">POST</span>
             <span class="path">/api/companions/import-card</span>
           </div>
-          <div class="desc">Imports a Tavern V2 / V3 PNG Character Card with embedded <code>haven_metadata</code>.</div>
+          <div class="desc">Import a Tavern V2 / V3 PNG Character Card with embedded metadata.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Upload a Tavern character PNG card. The server extracts the embedded JSON metadata (character description, first message, memories, diaries, outfits) and installs the companion instantly.
+          </div>
         </div>
       </section>
 
       <!-- CONVERSATIONS & STATE -->
       <section id="conversations">
-        <div class="section-title">💬 Conversations & Real-Time State</div>
+        <div class="section-title">💬 3. Conversations & Real-Time State Sync</div>
 
-        <div class="card" style="margin-bottom: 16px;">
-          <div class="endpoint-header">
-            <span class="method GET">GET</span>
-            <span class="path">/api/conversations</span>
-          </div>
-          <div class="desc">Lists all conversation sessions for the authenticated user.</div>
-        </div>
-
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method GET">GET</span>
             <span class="path">/api/conversations/{id}/messages</span>
           </div>
-          <div class="desc">Gets history messages for a specific conversation.</div>
+          <div class="desc">Get full message chat history for a specific conversation session.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Returns an array of historical messages between you and your companion, ordered chronologically.
+          </div>
         </div>
 
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method GET">GET</span>
             <span class="path">/api/conversations/{id}/state</span>
           </div>
-          <div class="desc">Fetches active real-time companion state (location, outfit, mood, clothing state).</div>
+          <div class="desc">Get the companion's current real-time state parameters.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Reads the companion's active real-time state parameters from SQLite (location, outfit, mood, clothing state, body type).
+          </div>
+          <div class="label">Server Response Example</div>
+          <div class="code-block">{
+  "convId": "char_sabrina",
+  "location": "living room",
+  "outfit": "casual sweater",
+  "mood": "playful",
+  "clothingState": "fully clothed"
+}</div>
         </div>
 
         <div class="card">
@@ -362,24 +455,67 @@
             <span class="method POST">POST</span>
             <span class="path">/api/conversations/{id}/state</span>
           </div>
-          <div class="desc">Updates companion real-time state parameters from the app.</div>
-          <div class="label">Request Payload</div>
-          <div class="code-block">{ "location": "beach", "outfit": "swimsuit", "mood": "playful", "clothing_state": "naked" }</div>
+          <div class="desc">Update companion real-time state from your app.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Allows your app or front-end client to update companion state parameters on the server in real-time. These parameters instantly inform LLM text responses and Stable Diffusion selfie generation!
+          </div>
+          <div class="code-grid">
+            <div>
+              <div class="label">Request Payload (JSON)</div>
+              <div class="code-block">{
+  "location": "beach",
+  "outfit": "swimsuit",
+  "mood": "happy",
+  "clothing_state": "fully clothed"
+}</div>
+            </div>
+            <div>
+              <div class="label">Server Response (JSON)</div>
+              <div class="code-block">{
+  "ok": true,
+  "convId": "char_sabrina",
+  "location": "beach",
+  "clothingState": "fully clothed"
+}</div>
+            </div>
+          </div>
         </div>
       </section>
 
       <!-- AI CARD STUDIO WIZARD -->
       <section id="ai-wizard">
-        <div class="section-title">🧙‍♂️ AI Card Studio Wizard</div>
+        <div class="section-title">🧙‍♂️ 4. AI Card Studio Wizard</div>
 
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method POST">POST</span>
             <span class="path">/api/companions/generate-profile</span>
           </div>
-          <div class="desc">Drafts a structured character JSON card from a text prompt via LLM.</div>
-          <div class="label">Request Payload</div>
-          <div class="code-block">{ "prompt": "An elven paladin companion named Lyra" }</div>
+          <div class="desc">Draft a structured character JSON card from a text prompt using LLM.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Send a single text idea (e.g. <i>"An elven mage companion named Lyra"</i>). `llama.cpp` generates a complete, ready-to-edit JSON character profile card for Card Studio!
+          </div>
+          <div class="code-grid">
+            <div>
+              <div class="label">Request Payload (JSON)</div>
+              <div class="code-block">{
+  "prompt": "An elven paladin companion named Lyra"
+}</div>
+            </div>
+            <div>
+              <div class="label">Server Response (JSON)</div>
+              <div class="code-block">{
+  "ok": true,
+  "profile": {
+    "name": "Lyra",
+    "description": "Elven paladin with glowing silver armor...",
+    "personality": "Brave, noble, deeply caring...",
+    "firstMessage": "Greetings! I am Lyra. How may I aid you?",
+    "systemPrompt": "You are Lyra..."
+  }
+}</div>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -387,13 +523,16 @@
             <span class="method POST">POST</span>
             <span class="path">/api/companions/generate</span>
           </div>
-          <div class="desc">Generates a complete character card profile AND illustrates a custom Stable Diffusion avatar image.</div>
+          <div class="desc">Generate a full character profile AND illustrate a custom Stable Diffusion avatar.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Takes your character idea, drafts the full JSON profile via LLM, and triggers Stable Diffusion to paint a custom companion avatar image!
+          </div>
         </div>
       </section>
 
       <!-- WEBSOCKET REAL-TIME CHAT -->
       <section id="websocket">
-        <div class="section-title">⚡ WebSocket Real-Time Chat Engine</div>
+        <div class="section-title">⚡ 5. WebSocket Real-Time Chat Engine</div>
 
         <div class="card">
           <div class="endpoint-header">
@@ -401,33 +540,44 @@
             <span class="path">/ws/chat?conversation_id={id}&amp;companion_name={name}</span>
           </div>
           <div class="desc">Full-duplex WebSocket connection for token streaming, live keep-alives, and instant selfie markdown rendering.</div>
-          <div class="label">Outbound Message Payload</div>
-          <div class="code-block">{ "content": "Hey Sabrina, send me a selfie!", "model_id": "haven-chat-v3.0.3" }</div>
-          <div class="label" style="margin-top: 12px;">Inbound Token Stream</div>
-          <div class="code-block">{ "type": "token", "content": "Here is a selfie!" }
-{ "type": "token", "content": "\n\n![Selfie](/uploads/companion_sabrina_123.png)" }
-{ "type": "done" }</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Connect to this WebSocket endpoint to send and receive live streaming chat tokens. The server streams tokens character-by-character as `llama.cpp` generates them, and automatically appends Stable Diffusion selfie markdown when requested!
+          </div>
+          <div class="code-grid">
+            <div>
+              <div class="label">Client Message Payload</div>
+              <div class="code-block">{
+  "content": "Hey Sabrina, send me a selfie!",
+  "model_id": "haven-chat-v3.0.3"
+}</div>
+            </div>
+            <div>
+              <div class="label">Server Token Stream Events</div>
+              <div class="code-block">{"type":"token","content":"Here"}
+{"type":"token","content":" is"}
+{"type":"token","content":" a selfie!"}
+{"type":"token","content":"
+
+![Selfie](/uploads/companion_sabrina.png)"}
+{"type":"done"}</div>
+            </div>
+          </div>
         </div>
       </section>
 
       <!-- ADMIN & SYSTEM HEALTH -->
       <section id="admin">
-        <div class="section-title">🛡️ Admin & System Health</div>
+        <div class="section-title">🛡️ 6. Admin & System Health</div>
 
-        <div class="card" style="margin-bottom: 16px;">
+        <div class="card">
           <div class="endpoint-header">
             <span class="method GET">GET</span>
             <span class="path">/health</span>
           </div>
-          <div class="desc">Returns system health, database status, CPU/RAM profiling, and active sidecars.</div>
-        </div>
-
-        <div class="card">
-          <div class="endpoint-header">
-            <span class="method POST">POST</span>
-            <span class="path">/api/admin/backends/select-primary</span>
+          <div class="desc">Check server status, database health, hardware profile, and active sidecars.</div>
+          <div class="explanation">
+            <strong>What it does:</strong> Returns server uptime, SQLite database health, CPU thread profiling, and active sidecars (`llama-server`, `stable_diffusion`).
           </div>
-          <div class="desc">Hot-toggles primary AI backend between Ollama API and Native C++ sidecar.</div>
         </div>
       </section>
 
