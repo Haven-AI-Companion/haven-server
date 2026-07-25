@@ -113,7 +113,7 @@ public class ProactiveAgencyService : BackgroundService
                 var randomIntervalMs = Random.Shared.Next(30000, 90000);
                 await Task.Delay(randomIntervalMs, stoppingToken);
 
-                var disableProactive = _config.GetValue<bool>("ai:DisableProactive", false);
+                var disableProactive = _config.GetValue<bool>("ai:DisableProactive", true);
                 if (disableProactive)
                 {
                     _log.LogDebug("[proactive-agency] Proactive messages are disabled in settings. Skipping tick.");
