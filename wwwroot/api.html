@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Haven Server — REST API & WebSocket Documentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0c10;
+      --bg-card: rgba(18, 22, 31, 0.75);
+      --bg-card-hover: rgba(26, 32, 46, 0.85);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --accent-pink: #ec4899;
+      --accent-purple: #8b5cf6;
+      --accent-blue: #3b82f6;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(236, 72, 153, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.12) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      padding-bottom: 80px;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(10, 12, 16, 0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-main);
+      font-weight: 700;
+      font-size: 1.25rem;
+    }
+
+    .brand span {
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .badge {
+      background: rgba(236, 72, 153, 0.15);
+      color: var(--accent-pink);
+      border: 1px solid rgba(236, 72, 153, 0.3);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .hero {
+      max-width: 1200px;
+      margin: 40px auto 30px;
+      padding: 0 24px;
+    }
+
+    .hero h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      max-width: 700px;
+    }
+
+    .layout {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 32px;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 90px;
+      height: calc(100vh - 110px);
+      overflow-y: auto;
+    }
+
+    .sidebar-menu {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .sidebar-link {
+      display: block;
+      padding: 8px 14px;
+      border-radius: 8px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .sidebar-link:hover, .sidebar-link.active {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 10px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px 24px;
+      transition: border-color 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .method {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+
+    .method.GET { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); border: 1px solid rgba(59, 130, 246, 0.3); }
+    .method.POST { background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .method.PUT { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .method.DELETE { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .method.WS { background: rgba(139, 92, 246, 0.2); color: var(--accent-purple); border: 1px solid rgba(139, 92, 246, 0.3); }
+
+    .path {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 16px;
+    }
+
+    .code-block {
+      background: #06080b;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: #e5e7eb;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
+    .label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="nav-container">
+      <a href="/" class="brand">
+        🌸 <span>Haven Server</span>
+      </a>
+      <span class="badge">API Reference v2.1</span>
+    </div>
+  </header>
+
+  <div class="hero">
+    <h1>Haven Server REST & WebSocket API</h1>
+    <p>Complete developer documentation for building custom companion apps, Card Studio integrations, and custom clients targeting <code>haven-server</code>.</p>
+  </div>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <ul class="sidebar-menu">
+        <li><a href="#auth" class="sidebar-link active">Authentication</a></li>
+        <li><a href="#companions" class="sidebar-link">Companions</a></li>
+        <li><a href="#conversations" class="sidebar-link">Conversations & State</a></li>
+        <li><a href="#ai-wizard" class="sidebar-link">AI Card Studio Wizard</a></li>
+        <li><a href="#websocket" class="sidebar-link">WebSocket Real-Time Chat</a></li>
+        <li><a href="#admin" class="sidebar-link">Admin & System Health</a></li>
+      </ul>
+    </nav>
+
+    <main class="main-content">
+
+      <!-- AUTHENTICATION -->
+      <section id="auth">
+        <div class="section-title">🔑 Authentication</div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/auth/login</span>
+          </div>
+          <div class="desc">Authenticates user and returns a Bearer JWT Token.</div>
+          <div class="label">Request Payload</div>
+          <div class="code-block">{ "username": "daniel", "password": "your_password" }</div>
+        </div>
+
+        <div class="card">
+          <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/api/auth/me</span>
+          </div>
+          <div class="desc">Retrieves the active authenticated user profile.</div>
+          <div class="label">Header</div>
+          <div class="code-block">Authorization: Bearer &lt;JWT_TOKEN&gt;</div>
+        </div>
+      </section>
+
+      <!-- COMPANIONS -->
+      <section id="companions">
+        <div class="section-title">👥 Companions & Cards</div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/api/companions</span>
+          </div>
+          <div class="desc">Lists all available companions on the server.</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/api/companions/{name}</span>
+          </div>
+          <div class="desc">Gets full configuration JSON for a specific companion.</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/companions</span>
+          </div>
+          <div class="desc">Saves or updates companion configuration card JSON.</div>
+          <div class="label">Request Payload</div>
+          <div class="code-block">{ "name": "Sabrina", "description": "...", "personality": "...", "clothingState": "fully clothed" }</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/companions/{name}/avatar</span>
+          </div>
+          <div class="desc">Uploads a high-res avatar image for a companion (multipart/form-data).</div>
+        </div>
+
+        <div class="card">
+          <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/companions/import-card</span>
+          </div>
+          <div class="desc">Imports a Tavern V2 / V3 PNG Character Card with embedded <code>haven_metadata</code>.</div>
+        </div>
+      </section>
+
+      <!-- CONVERSATIONS & STATE -->
+      <section id="conversations">
+        <div class="section-title">💬 Conversations & Real-Time State</div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/api/conversations</span>
+          </div>
+          <div class="desc">Lists all conversation sessions for the authenticated user.</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/api/conversations/{id}/messages</span>
+          </div>
+          <div class="desc">Gets history messages for a specific conversation.</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/api/conversations/{id}/state</span>
+          </div>
+          <div class="desc">Fetches active real-time companion state (location, outfit, mood, clothing state).</div>
+        </div>
+
+        <div class="card">
+          <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/conversations/{id}/state</span>
+          </div>
+          <div class="desc">Updates companion real-time state parameters from the app.</div>
+          <div class="label">Request Payload</div>
+          <div class="code-block">{ "location": "beach", "outfit": "swimsuit", "mood": "playful", "clothing_state": "naked" }</div>
+        </div>
+      </section>
+
+      <!-- AI CARD STUDIO WIZARD -->
+      <section id="ai-wizard">
+        <div class="section-title">🧙‍♂️ AI Card Studio Wizard</div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/companions/generate-profile</span>
+          </div>
+          <div class="desc">Drafts a structured character JSON card from a text prompt via LLM.</div>
+          <div class="label">Request Payload</div>
+          <div class="code-block">{ "prompt": "An elven paladin companion named Lyra" }</div>
+        </div>
+
+        <div class="card">
+          <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/companions/generate</span>
+          </div>
+          <div class="desc">Generates a complete character card profile AND illustrates a custom Stable Diffusion avatar image.</div>
+        </div>
+      </section>
+
+      <!-- WEBSOCKET REAL-TIME CHAT -->
+      <section id="websocket">
+        <div class="section-title">⚡ WebSocket Real-Time Chat Engine</div>
+
+        <div class="card">
+          <div class="endpoint-header">
+            <span class="method WS">WS</span>
+            <span class="path">/ws/chat?conversation_id={id}&amp;companion_name={name}</span>
+          </div>
+          <div class="desc">Full-duplex WebSocket connection for token streaming, live keep-alives, and instant selfie markdown rendering.</div>
+          <div class="label">Outbound Message Payload</div>
+          <div class="code-block">{ "content": "Hey Sabrina, send me a selfie!", "model_id": "haven-chat-v3.0.3" }</div>
+          <div class="label" style="margin-top: 12px;">Inbound Token Stream</div>
+          <div class="code-block">{ "type": "token", "content": "Here is a selfie!" }
+{ "type": "token", "content": "\n\n![Selfie](/uploads/companion_sabrina_123.png)" }
+{ "type": "done" }</div>
+        </div>
+      </section>
+
+      <!-- ADMIN & SYSTEM HEALTH -->
+      <section id="admin">
+        <div class="section-title">🛡️ Admin & System Health</div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="endpoint-header">
+            <span class="method GET">GET</span>
+            <span class="path">/health</span>
+          </div>
+          <div class="desc">Returns system health, database status, CPU/RAM profiling, and active sidecars.</div>
+        </div>
+
+        <div class="card">
+          <div class="endpoint-header">
+            <span class="method POST">POST</span>
+            <span class="path">/api/admin/backends/select-primary</span>
+          </div>
+          <div class="desc">Hot-toggles primary AI backend between Ollama API and Native C++ sidecar.</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+</body>
+</html>
