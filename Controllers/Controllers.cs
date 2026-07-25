@@ -3796,6 +3796,82 @@ public class CompanionsController : ControllerBase
         return Ok(await _db.GetMemories(UserId, name));
     }
 
+    [HttpGet("{name}")]
+    public async Task<IActionResult> GetCompanionConfig(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(new { error = "Companion name is required." });
+
+        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+        var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+        var localDir = Path.Combine(baseDir, "local");
+
+        var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+        var filePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+        var baseFilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+        var checkPath = System.IO.File.Exists(filePath) ? filePath : (System.IO.File.Exists(baseFilePath) ? baseFilePath : null);
+
+        if (checkPath == null || !System.IO.File.Exists(checkPath))
+            return NotFound(new { error = $"Companion '{name}' not found." });
+
+        var json = await System.IO.File.ReadAllTextAsync(checkPath);
+        var config = JsonSerializer.Deserialize<CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        return Ok(config);
+    }
+
+    [HttpPost("{name}/avatar")]
+    public async Task<IActionResult> UploadCompanionAvatar(string name, IFormFile file)
+    {
+        if (string.IsNullOrWhiteSpace(name) || file == null || file.Length == 0)
+            return BadRequest(new { error = "Companion name and avatar file are required." });
+
+        var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+        var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+        var localDir = Path.Combine(baseDir, "local");
+        
+        var filePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+        var baseFilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+        var checkPath = System.IO.File.Exists(filePath) ? filePath : (System.IO.File.Exists(baseFilePath) ? baseFilePath : null);
+
+        var webRoot = _config["Uploads:Directory"] ?? _config["UploadsDir"] ?? "wwwroot";
+        var uploadsDir = Path.Combine(AppContext.BaseDirectory, webRoot, "uploads");
+        Directory.CreateDirectory(uploadsDir);
+
+        var ext = Path.GetExtension(file.FileName);
+        if (string.IsNullOrEmpty(ext)) ext = ".png";
+        var avatarFilename = $"companion_{cleanName.ToLowerInvariant()}_{DateTime.UtcNow.Ticks}{ext}";
+        var avatarPath = Path.Combine(uploadsDir, avatarFilename);
+
+        using (var stream = new FileStream(avatarPath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        var webAvatarPath = $"/uploads/{avatarFilename}";
+
+        if (checkPath != null && System.IO.File.Exists(checkPath))
+        {
+            try
+            {
+                var oldJson = await System.IO.File.ReadAllTextAsync(checkPath);
+                var config = JsonSerializer.Deserialize<CompanionConfig>(oldJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (config != null)
+                {
+                    config.AvatarPath = webAvatarPath;
+                    var newJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                    await System.IO.File.WriteAllTextAsync(checkPath, newJson);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[CompanionsController] Error updating avatar path: {ex.Message}");
+            }
+        }
+
+        return Ok(new { ok = true, avatarPath = webAvatarPath });
+    }
+
     [HttpGet("{name}/diaries")]
     public async Task<IActionResult> GetCompanionDiaries(string name)
     {
