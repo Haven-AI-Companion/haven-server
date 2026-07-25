@@ -254,6 +254,33 @@ public class ConversationsController : ControllerBase
         return Ok(new { ok = true });
     }
 
+    [HttpGet("{id}/state")]
+    public async Task<IActionResult> GetState(string id)
+    {
+        var conv = await _db.GetConversation(id, UserId);
+        if (conv == null) return NotFound();
+        var state = await _db.GetConversationState(id);
+        return Ok(state ?? new AshServer.Data.ConversationState { ConvId = id });
+    }
+
+    [HttpPost("{id}/state")]
+    [HttpPut("{id}/state")]
+    public async Task<IActionResult> UpdateState(string id, [FromBody] Dictionary<string, string> body)
+    {
+        var conv = await _db.GetConversation(id, UserId);
+        if (conv == null) return NotFound();
+
+        var location = body.GetValueOrDefault("location");
+        var outfit = body.GetValueOrDefault("outfit");
+        var mood = body.GetValueOrDefault("mood");
+        var clothingState = body.GetValueOrDefault("clothing_state") ?? body.GetValueOrDefault("clothingState");
+        var bodyType = body.GetValueOrDefault("body_type") ?? body.GetValueOrDefault("bodyType");
+        var bodyShape = body.GetValueOrDefault("body_shape") ?? body.GetValueOrDefault("bodyShape");
+
+        await _db.SaveConversationState(id, location, outfit, mood, clothingState, bodyType, bodyShape);
+        return Ok(new { ok = true, convId = id, location, outfit, mood, clothingState });
+    }
+
     [HttpPatch("{id}")]
     public async Task<IActionResult> Rename(string id, [FromBody] Dictionary<string, string> body)
     {
