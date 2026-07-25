@@ -463,12 +463,35 @@ public class ChatHandler
                                         var mood = comp?.CurrentMood ?? "";
                                         var clothing = comp?.ClothingState ?? "";
 
+                                        var clothMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[CLOTHING:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                        if (clothMatch.Success) clothing = clothMatch.Groups[1].Value.Trim();
+
+                                        var outfitMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[OUTFIT:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                        if (outfitMatch.Success) outfit = outfitMatch.Groups[1].Value.Trim();
+
+                                        var lowerResp = responseText.ToLowerInvariant();
+                                        var lowerUsr = userMessage?.ToLowerInvariant() ?? "";
+                                        var lowerCloth = clothing.ToLowerInvariant();
+
+                                        bool isNakedScene = lowerResp.Contains("naked") || lowerResp.Contains("undressed") || lowerResp.Contains("nude") || lowerResp.Contains("bare") || lowerResp.Contains("topless") ||
+                                                            lowerUsr.Contains("naked") || lowerUsr.Contains("undressed") || lowerUsr.Contains("nude") || lowerUsr.Contains("in bed") ||
+                                                            lowerCloth.Contains("naked") || lowerCloth.Contains("nude") || lowerCloth.Contains("undressed") || lowerCloth.Contains("topless") || lowerCloth.Contains("bare");
+
                                         var sdPrompt = $"digital art portrait of {compName}, highly detailed";
                                         if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
                                         if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
-                                        if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
+
+                                        if (isNakedScene)
+                                        {
+                                            sdPrompt += ", naked, undressed, intimate, in bed";
+                                        }
+                                        else
+                                        {
+                                            if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
+                                            if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
+                                        }
+
                                         if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
-                                        if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
 
                                         var sdArgObj = new { description = sdPrompt };
                                         var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
