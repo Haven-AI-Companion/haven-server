@@ -88,9 +88,12 @@ public class CompanionLoungeService : BackgroundService
                              $"{compA.Name} turns to you and says: 'Hey {compB.Name}, I was just thinking about Daniel! What should we do together later?'\n" +
                              $"Respond naturally, warmly, and in-character as {compB.Name}. Keep your response concise, friendly, and engaging.";
 
+                var descClean = (compB.Description ?? "").Replace("{{user}}", "Daniel");
+                var persClean = (compB.Personality ?? "").Replace("{{user}}", "Daniel");
+
                 var messages = new List<ChatMessage>
                 {
-                    new ChatMessage("system", $"You are {compB.Name}. {compB.Description}\nPersonality: {compB.Personality}"),
+                    new ChatMessage("system", $"You are {compB.Name}. {descClean}\nPersonality: {persClean}"),
                     new ChatMessage("user", prompt)
                 };
 
@@ -109,7 +112,7 @@ public class CompanionLoungeService : BackgroundService
                         @"^\s*\*?<?\s*thought\s*>?.*?</?\s*thought\s*>\s*", 
                         "", 
                         System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                    ).Trim();
+                    ).Trim().Replace("{{user}}", "Daniel");
 
                     _log.LogInformation("[companion-lounge] {CompB} replied: {Reply}", compB.Name, cleanReply);
 
