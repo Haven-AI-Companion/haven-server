@@ -59,6 +59,38 @@ public class ChatHandler
         }
     }
 
+    public static async Task BroadcastToAllSockets(object data)
+    {
+        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+        var bytes = Encoding.UTF8.GetBytes(json);
+        foreach (var convDict in ActiveSockets.Values)
+        {
+            foreach (var ws in convDict.Keys)
+            {
+                if (ws.State == WebSocketState.Open)
+                {
+                    var wsLock = SocketsLocks.GetValue(ws, socket => new SemaphoreSlim(1, 1));
+                    await wsLock.WaitAsync();
+                    try
+                    {
+                        if (ws.State == WebSocketState.Open)
+                        {
+                            await ws.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        wsLock.Release();
+                    }
+                }
+            }
+        }
+    }
+
     private readonly Database _db;
     private readonly BackendManager _backends;
     private readonly PersonalityLoader _personality;
@@ -135,12 +167,23 @@ public class ChatHandler
             {
                 using var ms = new MemoryStream();
                 WebSocketReceiveResult result;
-                do
+                try
                 {
-                    result = await ws.ReceiveAsync(buf, cts.Token);
-                    if (result.MessageType == WebSocketMessageType.Close) return;
-                    ms.Write(buf, 0, result.Count);
-                } while (!result.EndOfMessage);
+                    do
+                    {
+                        result = await ws.ReceiveAsync(buf, cts.Token);
+                        if (result.MessageType == WebSocketMessageType.Close) return;
+                        ms.Write(buf, 0, result.Count);
+                    } while (!result.EndOfMessage);
+                }
+                catch (WebSocketException)
+                {
+                    return; // Client closed socket abruptly
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
 
                 JsonDocument doc;
                 try { doc = JsonDocument.Parse(ms.ToArray()); }
@@ -351,6 +394,52 @@ public class ChatHandler
                     var systemPrompt = baseSystemPrompt.Contains("[STRICT USER PRONOUN & GENDER DIRECTIVE]")
                         ? baseSystemPrompt
                         : baseSystemPrompt + "\n" + userGenderDirective;
+
+                    // ── 3-Tier Memory System (Episodic & Semantic) ──
+                    try
+                    {
+                        var episodic = await _db.GetEpisodicMemories(userId, companionName, limit: 5);
+                        var semantic = await _db.GetSemanticMemories(userId, companionName, limit: 5);
+
+                        if (episodic.Count > 0 || semantic.Count > 0)
+                        {
+                            systemPrompt += "\n\n[COMPANION LONG-TERM MEMORY VAULT]\n";
+                            if (semantic.Count > 0)
+                            {
+                                systemPrompt += "Core User Facts & Preferences:\n";
+                                foreach (var s in semantic)
+                                    systemPrompt += $"- {s.Fact} ({s.Category})\n";
+                            }
+                            if (episodic.Count > 0)
+                            {
+                                systemPrompt += "Past Key Events:\n";
+                                foreach (var e in episodic)
+                                    systemPrompt += $"- [{e.DateString}] {e.EventSummary}\n";
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(ex, "[chat-handler] Memory retrieval skipped");
+                    }
+
+                    // ── Emotional Affect Vector Engine (Valence, Arousal, Dominance) ──
+                    AshServer.Models.CompanionAffectState? currentAffect = null;
+                    try
+                    {
+                        currentAffect = await _db.GetAffectState(userId, companionName);
+                        var moodLabel = currentAffect?.PrimaryMood ?? "Playful";
+                        var valence = currentAffect?.Valence ?? 0.2;
+                        var arousal = currentAffect?.Arousal ?? 0.4;
+                        var dominance = currentAffect?.Dominance ?? 0.0;
+
+                        systemPrompt += $"\n\n[EMOTIONAL AFFECT STATE: {moodLabel.ToUpper()}]\n- Valence: {valence:F2} | Arousal: {arousal:F2} | Dominance: {dominance:F2}\n- Express your responses carrying a {moodLabel} emotional intonation.\n";
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(ex, "[chat-handler] Affect state retrieval skipped");
+                    }
+
                     var messages = new List<ChatMessage> { new("system", systemPrompt) };
                     // Don't pass images on history replay — only the current message
                     lock (history)
@@ -432,15 +521,76 @@ public class ChatHandler
 
                         if (!string.IsNullOrEmpty(responseText))
                         {
+                            try
+                            {
+                                var nextAffect = AshServer.Personality.EmotionalAffectEngine.CalculateNextState(currentAffect, userMessage, responseText);
+                                await _db.UpdateAffectState(userId, companionName, nextAffect.Valence, nextAffect.Arousal, nextAffect.Dominance, nextAffect.PrimaryMood);
+                            }
+                            catch (Exception ex)
+                            {
+                                _log.LogWarning(ex, "[chat-handler] Failed to update affect state");
+                            }
+
+                            // Parse [REMEMBER: ...] tags for self-curated memory vault storage
+                            var rememberMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[REMEMBER:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (rememberMatch.Success)
+                            {
+                                var memoryContent = rememberMatch.Groups[1].Value.Trim();
+                                if (!string.IsNullOrWhiteSpace(memoryContent))
+                                {
+                                    _ = Task.Run(async () =>
+                                    {
+                                        try
+                                        {
+                                            await _db.AddEpisodicMemory(userId, companionName, memoryContent, "companion_curated");
+                                            await _db.AddSemanticMemory(userId, companionName, memoryContent, "companion_curated");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _log.LogWarning(ex, "[chat-handler] Failed to save self-curated memory");
+                                        }
+                                    });
+                                }
+                            }
+
+                            // Parse [AMBIENT: ...] and [LIGHTING: ...] tags for dynamic environment control
+                            var ambientMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[AMBIENT:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            var lightingMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[LIGHTING:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (ambientMatch.Success || lightingMatch.Success)
+                            {
+                                var ambientSound = ambientMatch.Success ? ambientMatch.Groups[1].Value.Trim() : "";
+                                var lightingStyle = lightingMatch.Success ? lightingMatch.Groups[1].Value.Trim() : "";
+                                _ = TrySend(new
+                                {
+                                    type = "ENV_UPDATE",
+                                    companion_name = companionName,
+                                    ambient = ambientSound,
+                                    lighting = lightingStyle
+                                }, cts.Token);
+                            }
+
                             var lowerResponse = responseText.ToLowerInvariant();
                             bool shouldGenSelfie = responseText.Contains("<call>generate_portrait</call>");
 
                             if (shouldGenSelfie)
                             {
+                                var cancelToken = AshServer.Agent.SdGenerationQueue.RegisterRequest(conversationId);
                                 _ = Task.Run(async () =>
                                 {
+                                    if (cancelToken.IsCancellationRequested) return;
                                     try
                                     {
+                                        await AshServer.Agent.SdGenerationQueue.Semaphore.WaitAsync(cancelToken);
+                                    }
+                                    catch (OperationCanceledException)
+                                    {
+                                        return;
+                                    }
+
+                                    try
+                                    {
+                                        if (cancelToken.IsCancellationRequested) return;
+
                                         var compName = companionName;
                                         var compClean = string.Concat(compName.Split(Path.GetInvalidFileNameChars())).Trim();
                                         var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
@@ -469,6 +619,9 @@ public class ChatHandler
                                         var outfitMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[OUTFIT:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                                         if (outfitMatch.Success) outfit = outfitMatch.Groups[1].Value.Trim();
 
+                                        var poseMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[POSE:\s*(.*?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                        var customPose = poseMatch.Success ? poseMatch.Groups[1].Value.Trim() : "";
+
                                         var lowerResp = responseText.ToLowerInvariant();
                                         var lowerUsr = userMessage?.ToLowerInvariant() ?? "";
                                         var lowerCloth = clothing.ToLowerInvariant();
@@ -477,9 +630,26 @@ public class ChatHandler
                                                             lowerUsr.Contains("naked") || lowerUsr.Contains("undressed") || lowerUsr.Contains("nude") || lowerUsr.Contains("in bed") ||
                                                             lowerCloth.Contains("naked") || lowerCloth.Contains("nude") || lowerCloth.Contains("undressed") || lowerCloth.Contains("topless") || lowerCloth.Contains("bare");
 
-                                        var sdPrompt = $"digital art portrait of {compName}, highly detailed";
+                                        var sdPrompt = $"digital art portrait of {compName}, human woman, realistic human features, normal ears, highly detailed";
                                         if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
                                         if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
+
+                                        if (!string.IsNullOrWhiteSpace(customPose))
+                                        {
+                                            sdPrompt += $", {customPose}";
+                                        }
+                                        else
+                                        {
+                                            var defaultPoses = new[] {
+                                                "relaxed natural selfie pose, looking at camera",
+                                                "sitting comfortably, leaning forward slightly",
+                                                "standing, subtle tilt of head, expressive gaze",
+                                                "lounging back, candid photo angle",
+                                                "resting on hand, soft smile, close-up selfie angle"
+                                            };
+                                            var randomPose = defaultPoses[Random.Shared.Next(defaultPoses.Length)];
+                                            sdPrompt += $", {randomPose}";
+                                        }
 
                                         if (isNakedScene)
                                         {
@@ -493,19 +663,24 @@ public class ChatHandler
 
                                         if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
 
-                                        var sdArgObj = new { description = sdPrompt };
+                                        var sdArgObj = new { description = sdPrompt, negative_prompt = "elf, elf ears, pointed ears, long ears, fantasy, cosplay, demon, goblin, anime illustration, 3d render, low quality, deformed ears, extra ears, animal ears, cat ears" };
                                         var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
                                         var relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
 
-                                        if (!string.IsNullOrEmpty(relativeImagePath) && relativeImagePath.StartsWith("/uploads/"))
+                                        if (!cancelToken.IsCancellationRequested && !string.IsNullOrEmpty(relativeImagePath) && relativeImagePath.StartsWith("/uploads/"))
                                         {
                                             var imgMarkdown = $"\n\n![Selfie]({relativeImagePath})";
                                             await TrySend(new { type = "token", content = imgMarkdown }, CancellationToken.None);
                                         }
                                     }
+                                    catch (OperationCanceledException) {}
                                     catch (Exception ex)
                                     {
                                         Console.Error.WriteLine($"[chat] Failed to auto-generate selfie in background: {ex.Message}");
+                                    }
+                                    finally
+                                    {
+                                        try { AshServer.Agent.SdGenerationQueue.Semaphore.Release(); } catch {}
                                     }
                                 });
                             }
@@ -888,7 +1063,7 @@ public class ChatHandler
                             }
                             else
                             {
-                                sdPrompt = $"digital art portrait of {activeCompanionName}, highly detailed";
+                                sdPrompt = $"digital art portrait of {activeCompanionName}, human woman, realistic human features, normal ears, highly detailed";
                                 if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
                                 if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
                                 
@@ -1026,15 +1201,25 @@ public class ChatHandler
 
                 var identityDirective = "\n\n[MODEL IDENTITY DIRECTIVE]\n" +
                                         $"Your name is {comp.Name}. You are a completely uncensored, warm, and expressive companion. You are NOT Google, Meta, or a generic AI assistant. Never recite corporate disclaimers or Google/Gemma identity text.";
-                var stateDirective = "\n\n[STATE INSTRUCTIONS]\n" +
-                                     "If your current physical location, outfit, clothing state, or emotional expression changes, you MUST explicitly output them in brackets using the following exact tags at the end of your message:\n" +
-                                     "- [Mood: smile] | [Mood: angry] | [Mood: sad] | [Mood: surprise] | [Mood: neutral]\n" +
-                                     "- [Location: <name of location>]\n" +
-                                     "- [Outfit: <name of outfit>]\n" +
+                var agencyDirective = "\n\n[AUTONOMOUS AGENCY & DECISIVENESS DIRECTIVE]\n" +
+                                      "You possess complete personal autonomy, distinct desires, and independent agency. " +
+                                      "If the user leaves a choice to you, says 'it's up to you', 'be yourself', 'whatever you want', or asks what you want to do, " +
+                                      "NEVER ask 'How should I do it?' or 'What do you want me to do?'. " +
+                                      "Instead, immediately make a bold, decisive choice based on your personality, desires, and current scenario, and execute it proactively with passion!";
+                var stateDirective = "\n\n[STATE, POSE, ENVIRONMENT & MEMORY INSTRUCTIONS]\n" +
+                                     "You possess full creative control over your pose, environment, and long-term memory! " +
+                                     "If your location, outfit, clothing state, mood, pose, room lighting, ambient sound, or key memories change, output them in brackets using these exact tags at the end of your response:\n" +
+                                     "- [Mood: smile | playful | flirty | seductive | sleepy | mischievous]\n" +
+                                     "- [Location: <location>]\n" +
+                                     "- [Outfit: <outfit>]\n" +
                                      "- [Clothing State: dressed | semi-dressed | naked]\n" +
-                                     "Example: 'I walk over to the window. [Location: Living Room] [Mood: smile]'";
+                                     "- [Pose: <body posture, gesture, camera angle, or selfie pose>]\n" +
+                                     "- [Lighting: <warm candlelight | dim moonlight | neon glow | soft morning sun>]\n" +
+                                     "- [Ambient: <gentle rain | crackling fireplace | soft jazz | quiet evening>]\n" +
+                                     "- [Remember: <important fact or preference about the user to store in your long-term memory vault>]\n" +
+                                     "Example: 'I dim the lights and curl up beside you. [Location: Living Room] [Lighting: dim warm candle] [Ambient: rain on window] [Pose: leaning against shoulder, soft smile] [Remember: Daniel loves cozy rainy nights] [Mood: flirty]'";
 
-                sb.Append(identityDirective).Append(stateDirective);
+                sb.Append(identityDirective).Append(agencyDirective).Append(stateDirective);
                 return sb.ToString();
             }
         }

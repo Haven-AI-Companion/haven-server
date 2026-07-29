@@ -793,6 +793,9 @@
       </div>
       <div id="group-companions-chips" style="display: none; align-items: center; gap: 8px; margin-left: 12px; border-left: 1px solid var(--border); padding-left: 12px;"></div>
       <div class="header-actions">
+        <button class="icon-btn" onclick="openLoungeModal()" title="Companion Lounge Room" style="border-color: var(--accent); color: var(--accent); background: var(--accent-dim);">
+          🛋️ Lounge Room
+        </button>
         <div class="export-dropdown" id="export-dropdown" style="display:none">
           <button class="icon-btn" onclick="toggleExportMenu(event)" title="Export conversation">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4 6l3 3 3-3M2 10v2h10v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -915,6 +918,25 @@
   </aside>
 </div>
 <button id="scroll-btn" onclick="scrollBottom()" title="Scroll to bottom"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4l5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+
+<!-- Lounge Room Modal -->
+<div class="modal-overlay" id="lounge-modal" style="display:none" onclick="closeLoungeOnBg(event)">
+  <div class="modal" style="max-width: 680px; height: 75vh; display: flex; flex-direction: column;">
+    <div class="modal-header">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 22px;">🛋️</span>
+        <div>
+          <span class="modal-title">Companion Lounge Room</span>
+          <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px;">Live unscripted inter-companion conversations & background chatter</div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeLoungeModal()">×</button>
+    </div>
+    <div class="modal-body" id="lounge-messages-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 16px;">
+      <div class="vault-empty" id="lounge-empty-state">Listening for live companion conversations...</div>
+    </div>
+  </div>
+</div>
 
 <!-- Settings Modal -->
 <div class="modal-overlay" id="settings-modal" style="display:none" onclick="closeSettingsOnBg(event)">
@@ -1913,11 +1935,73 @@ function connectWebSocket() {
         img.style.filter = 'none';
       });
       window.dispatchEvent(new CustomEvent('media_ready', { detail: { url: targetUrl, tool: msg.tool } }));
+    } else if (msg.type === 'LOUNGE_CHAT') {
+      appendLoungeMessage(msg);
     } else if (msg.type === 'conversation_id') {
       activeConvId = msg.content;
       loadConversations();
     }
   };
+}
+
+// ── Lounge Room Modal Functions ──────────────────────────────────────────────
+function openLoungeModal() {
+  document.getElementById('lounge-modal').style.display = 'flex';
+  fetchLoungeHistory();
+}
+
+function closeLoungeModal() {
+  document.getElementById('lounge-modal').style.display = 'none';
+}
+
+function closeLoungeOnBg(e) {
+  if (e.target.id === 'lounge-modal') closeLoungeModal();
+}
+
+async function fetchLoungeHistory() {
+  try {
+    const res = await fetch('/api/lounge/recent');
+    if (!res.ok) return;
+    const history = await res.json();
+    const container = document.getElementById('lounge-messages-container');
+    container.innerHTML = '';
+    if (!history.length) {
+      container.innerHTML = '<div class="vault-empty" id="lounge-empty-state">Listening for live companion conversations...</div>';
+      return;
+    }
+    history.forEach(m => appendLoungeMessage(m));
+  } catch {}
+}
+
+function appendLoungeMessage(msg) {
+  const container = document.getElementById('lounge-messages-container');
+  if (!container) return;
+  const emptyState = document.getElementById('lounge-empty-state');
+  if (emptyState) emptyState.remove();
+
+  const div = document.createElement('div');
+  div.className = 'vault-item';
+  div.style.background = 'var(--surface2)';
+  div.style.border = '1px solid var(--border)';
+  div.style.borderRadius = 'var(--radius-sm)';
+  div.style.padding = '12px 14px';
+  div.style.marginBottom = '8px';
+
+  const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+
+  div.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <div style="font-size:12.5px; font-weight:600; color:var(--accent);">
+        🗣️ <span style="color:var(--text);">${escHtml(msg.speaker || 'Companion')}</span> 
+        <span style="font-size:11px; font-weight:normal; color:var(--text-muted);">talking to ${escHtml(msg.listener || 'Companion')}</span>
+      </div>
+      <div style="font-size:10px; color:var(--text-dim);">${timeStr}</div>
+    </div>
+    <div style="font-size:13.5px; line-height:1.5; color:var(--text); white-space:pre-wrap;">${escHtml(msg.content || '')}</div>
+  `;
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
 }
 
 // ── Sending ────────────────────────────────────────────────────────────────

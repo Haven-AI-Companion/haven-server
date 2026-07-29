@@ -324,3 +324,34 @@ public class CompanionRegistryItem
     public string DownloadUrl { get; set; } = string.Empty;
     public string? AvatarUrl { get; set; }
 }
+
+// ── 3-Tier Memory & Emotional Vector DTOs (2026 Engine) ────────────────────
+
+public record EpisodicMemory(
+    int Id,
+    int UserId,
+    string CompanionId,
+    string EventSummary,
+    string DateString,
+    string CreatedAt
+);
+
+public record SemanticMemory(
+    int Id,
+    int UserId,
+    string CompanionId,
+    string Fact,
+    string Category, // "user_preference", "user_trait", "shared_joke", "core_truth"
+    int Importance,   // 1-5 scale
+    string CreatedAt
+);
+
+public record CompanionAffectState(
+    string CompanionId,
+    int UserId,
+    double Valence,   // -1.0 (Sad/Angry) to +1.0 (Happy/Ecstatic)
+    double Arousal,   // -1.0 (Sleepy/Calm) to +1.0 (Excited/Hyper)
+    double Dominance, // -1.0 (Gentle/Yielding) to +1.0 (Assertive/Playful)
+    string PrimaryMood, // "Playful", "Sleepy", "Caring", "Flirty", "Mischievous", "Calm"
+    string UpdatedAt
+);

@@ -840,8 +840,16 @@ public class ModelsController : ControllerBase
                         var clothing = convState?.ClothingState ?? comp?.ClothingState ?? "";
                         var bodyType = convState?.BodyType ?? comp?.BodyType ?? "";
                         var bodyShape = convState?.BodyShape ?? comp?.BodyShape ?? "";
+                        
+                        var cardText = (comp?.Description ?? "") + " " + (comp?.Personality ?? "") + " " + (comp?.Scenario ?? "");
+                        bool isAnimeOrCartoon = cardText.Contains("anime", StringComparison.OrdinalIgnoreCase) ||
+                                               cardText.Contains("cartoon", StringComparison.OrdinalIgnoreCase) ||
+                                               compClean.Equals("mika", StringComparison.OrdinalIgnoreCase) ||
+                                               compClean.Equals("wanda", StringComparison.OrdinalIgnoreCase);
 
-                        var sdPrompt = $"digital art portrait of {companionName}, highly detailed";
+                        string stylePrefix = isAnimeOrCartoon ? "2d anime style illustration of" : "digital art portrait of";
+
+                        var sdPrompt = $"{stylePrefix} {companionName}, highly detailed";
                         if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
                         if (!string.IsNullOrWhiteSpace(bodyType)) sdPrompt += $", body type: {bodyType}";
                         if (!string.IsNullOrWhiteSpace(bodyShape)) sdPrompt += $", body shape: {bodyShape}";
@@ -849,6 +857,11 @@ public class ModelsController : ControllerBase
                         if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
                         if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
                         if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
+
+                        if (isAnimeOrCartoon)
+                        {
+                            sdPrompt += ", 2d anime aesthetic, vibrant colors, anime art style, cel shaded masterwork";
+                        }
 
                         var sdArgObj = new { description = sdPrompt };
                         var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
@@ -879,6 +892,12 @@ public class ModelsController : ControllerBase
                     var cleanUserMsg = ExtractUserMessage(promptText, req.DisplayName);
                     await _db.AddMessage(conversationId, "user", cleanUserMsg);
                     await _db.AddMessage(conversationId, "assistant", responseStr);
+                    
+                    _ = Task.Run(async () =>
+                    {
+                        await AshServer.Service.SyncHub.BroadcastMessage(conversationId, req.CompanionName ?? companionName, "user", cleanUserMsg);
+                        await AshServer.Service.SyncHub.BroadcastMessage(conversationId, req.CompanionName ?? companionName, "character", responseStr);
+                    });
                     
                     _ = Task.Run(() => TopicSummarizer.SummarizeConversation(conversationId, _db, _backends));
                 }
@@ -4569,6 +4588,29 @@ public class CompanionsController : ControllerBase
             return BadRequest(new { error = "Invalid AssetType. Must be outfit, location, or mood." });
         }
 
+        if (!string.IsNullOrWhiteSpace(config.SdLora))
+        {
+            if (config.SdLora.Contains(":"))
+            {
+                var lParts = config.SdLora.Split(':');
+                sdPromptToUse += $" <lora:{lParts[0]}:{lParts[1]}>";
+            }
+            else
+            {
+                sdPromptToUse += $" <lora:{config.SdLora}:0.8>";
+            }
+        }
+        if (config.Loras != null)
+        {
+            foreach (var lora in config.Loras)
+            {
+                if (lora.Type == "image" && !string.IsNullOrWhiteSpace(lora.Name))
+                {
+                    sdPromptToUse += $" <lora:{lora.Name}:{lora.Weight.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}>";
+                }
+            }
+        }
+
         var relativeImagePath = "";
         try
         {
@@ -4790,6 +4832,16 @@ public class CompanionConfig
     public int MessageCount { get; set; }
     public string? VrmModelPath { get; set; }
     public System.Collections.Generic.Dictionary<string, string>? Outfits { get; set; }
+    public System.Collections.Generic.List<CompanionLoraConfig>? Loras { get; set; }
+    public string? SdLora { get; set; }
+    public string? TextLora { get; set; }
+}
+
+public class CompanionLoraConfig
+{
+    public string Name { get; set; } = string.Empty;
+    public double Weight { get; set; } = 1.0;
+    public string Type { get; set; } = "image"; // "image" or "text"
 }
 
 public static class TopicSummarizer

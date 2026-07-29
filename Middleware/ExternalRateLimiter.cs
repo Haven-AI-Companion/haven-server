@@ -57,6 +57,28 @@ public sealed class ExternalRateLimiter
     }
 
     /// <summary>
+    /// Evicts expired keys from memory to keep memory footprint minimal during long runs.
+    /// </summary>
+    public void CleanExpiredWindows()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cutoff = now - _window;
+        foreach (var kvp in _windows.ToArray())
+        {
+            lock (kvp.Value)
+            {
+                while (kvp.Value.Count > 0 && kvp.Value.Peek() < cutoff)
+                    kvp.Value.Dequeue();
+
+                if (kvp.Value.Count == 0)
+                {
+                    _windows.TryRemove(kvp.Key, out _);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Returns how many seconds until the oldest request in the window expires.
     /// Returns 0 if not currently rate-limited.
     /// </summary>

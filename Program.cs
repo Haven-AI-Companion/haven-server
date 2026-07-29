@@ -187,6 +187,11 @@ public class Program
             }
         });
 
+        builder.Services.Configure<HostOptions>(options =>
+        {
+            options.ShutdownTimeout = TimeSpan.FromSeconds(2);
+        });
+
         // Auto-generate a secure JWT secret on first run and persist it to config.json
         // so it survives restarts without requiring manual configuration.
         const string defaultSecretPlaceholder = "CHANGE_THIS_TO_A_RANDOM_SECRET_AT_LEAST_32_CHARS_LONG";
@@ -289,6 +294,7 @@ public class Program
         builder.Services.AddSingleton<GridManager>();
         builder.Services.AddHostedService<GridWorkerService>();
         builder.Services.AddHostedService<AshServer.AI.ProactiveAgencyService>();
+        builder.Services.AddHostedService<AshServer.AI.CompanionLoungeService>();
         builder.Services.AddSingleton<AshServer.AI.CompanionRegistrySyncService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<AshServer.AI.CompanionRegistrySyncService>());
         builder.Services.AddSingleton<AshServer.Chat.IdentityResolver>();
@@ -392,79 +398,112 @@ public class Program
         {
             if (!ctx.WebSockets.IsWebSocketRequest) { ctx.Response.StatusCode = 400; return; }
 
-            var requireAuth = builder.Configuration.GetValue("RequireAuth", true);
-            int userId = -1;
-            string username = "local";
-
-            var ws = await ctx.WebSockets.AcceptWebSocketAsync();
-
-            if (requireAuth)
+            try
             {
-                // Read first message — it must be {"token":"..."}
-                var buf = new byte[4096];
-                WebSocketReceiveResult result;
-                using var ms = new MemoryStream();
-                do
-                {
-                    result = await ws.ReceiveAsync(buf, CancellationToken.None);
-                    if (result.MessageType == WebSocketMessageType.Close) return;
-                    ms.Write(buf, 0, result.Count);
-                } while (!result.EndOfMessage);
+                var requireAuth = builder.Configuration.GetValue("RequireAuth", true);
+                int userId = -1;
+                string username = "local";
 
-                string? jwtToken = null;
-                try
-                {
-                    var doc = JsonDocument.Parse(ms.ToArray());
-                    doc.RootElement.TryGetProperty("token", out var t);
-                    jwtToken = t.GetString();
-                }
-                catch { }
+                var ws = await ctx.WebSockets.AcceptWebSocketAsync();
 
-                if (string.IsNullOrEmpty(jwtToken))
+                if (requireAuth)
                 {
-                    await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "unauthorized", CancellationToken.None);
-                    return;
-                }
-
-                try
-                {
-                    var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-                    var principal = tokenHandler.ValidateToken(jwtToken, new TokenValidationParameters
+                    // Read first message — it must be {"token":"..."}
+                    var buf = new byte[4096];
+                    WebSocketReceiveResult result;
+                    using var ms = new MemoryStream();
+                    try
                     {
-                        ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-                        ValidateIssuer = false,
-                        ValidateAudience = false,
-                    }, out _);
-                    userId = int.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                    username = principal.FindFirstValue(ClaimTypes.Name)!;
+                        do
+                        {
+                            result = await ws.ReceiveAsync(buf, ctx.RequestAborted);
+                            if (result.MessageType == WebSocketMessageType.Close) return;
+                            ms.Write(buf, 0, result.Count);
+                        } while (!result.EndOfMessage);
+                    }
+                    catch (WebSocketException)
+                    {
+                        return; // Client disconnected before authentication
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                    catch (Exception)
+                    {
+                        return;
+                    }
+
+                    string? jwtToken = null;
+                    try
+                    {
+                        var doc = JsonDocument.Parse(ms.ToArray());
+                        doc.RootElement.TryGetProperty("token", out var t);
+                        jwtToken = t.GetString();
+                    }
+                    catch { }
+
+                    if (string.IsNullOrEmpty(jwtToken))
+                    {
+                        try { if (ws.State == WebSocketState.Open) await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "unauthorized", CancellationToken.None); } catch {}
+                        return;
+                    }
+
+                    try
+                    {
+                        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+                        var principal = tokenHandler.ValidateToken(jwtToken, new TokenValidationParameters
+                        {
+                            ValidateIssuerSigningKey = true,
+                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+                            ValidateIssuer = false,
+                            ValidateAudience = false,
+                        }, out _);
+                        userId = int.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                        username = principal.FindFirstValue(ClaimTypes.Name)!;
+                    }
+                    catch
+                    {
+                        try { if (ws.State == WebSocketState.Open) await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "unauthorized", CancellationToken.None); } catch {}
+                        return;
+                    }
                 }
-                catch
+
+                // Load user permissions for this session
+                bool isAdmin = false;
+                HashSet<string>? permissions = null;
+                if (!requireAuth)
                 {
-                    await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "unauthorized", CancellationToken.None);
-                    return;
+                    // No-auth mode: treat the local connection as having full access
+                    isAdmin = true;
+                    permissions = [.. AshServer.Auth.Permissions.All];
+                }
+                else if (userId > 0)
+                {
+                    var user = await dbSvc.GetUserById(userId);
+                    isAdmin = user?.IsAdmin ?? false;
+                    permissions = isAdmin
+                        ? [.. AshServer.Auth.Permissions.All]
+                        : await dbSvc.GetUserPermissions(userId);
+                }
+
+                await chat.Handle(ctx, ws, userId, username, isAdmin, permissions);
+            }
+            catch (WebSocketException)
+            {
+                // Client socket disconnected abruptly — swallowed cleanly without Kestrel error
+            }
+            catch (OperationCanceledException)
+            {
+                // Request aborted or connection aborted during server shutdown
+            }
+            catch (Exception ex)
+            {
+                if (!ctx.RequestAborted.IsCancellationRequested)
+                {
+                    Console.Error.WriteLine($"[ws] Unexpected WebSocket error: {ex.Message}");
                 }
             }
-
-            // Load user permissions for this session
-            bool isAdmin = false;
-            HashSet<string>? permissions = null;
-            if (!requireAuth)
-            {
-                // No-auth mode: treat the local connection as having full access
-                isAdmin = true;
-                permissions = [.. AshServer.Auth.Permissions.All];
-            }
-            else if (userId > 0)
-            {
-                var user = await dbSvc.GetUserById(userId);
-                isAdmin = user?.IsAdmin ?? false;
-                permissions = isAdmin
-                    ? [.. AshServer.Auth.Permissions.All]
-                    : await dbSvc.GetUserPermissions(userId);
-            }
-
-            await chat.Handle(ctx, ws, userId, username, isAdmin, permissions);
         });
 
         // ── Grid Worker WebSocket endpoint ──────────────────────────────────
@@ -475,33 +514,86 @@ public class Program
                 ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
                 return;
             }
-            using var webSocket = await ctx.WebSockets.AcceptWebSocketAsync();
-            await grid.HandleWorkerConnectionAsync(webSocket, ctx);
+            try
+            {
+                using var webSocket = await ctx.WebSockets.AcceptWebSocketAsync();
+                await grid.HandleWorkerConnectionAsync(webSocket, ctx);
+            }
+            catch (WebSocketException) { }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[grid-ws] Connection error: {ex.Message}");
+            }
         });
 
+        // ── Real-Time Cross-Device Sync WebSocket Endpoint ─────────────
+        app.Map("/ws/sync", async (HttpContext ctx) =>
+        {
+            if (!ctx.WebSockets.IsWebSocketRequest)
+            {
+                ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+            try
+            {
+                using var webSocket = await ctx.WebSockets.AcceptWebSocketAsync();
+                await AshServer.Service.SyncHub.HandleConnection(ctx, webSocket);
+            }
+            catch (WebSocketException) { }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[sync-ws] Sync error: {ex.Message}");
+            }
+        });
+
+        // ── Multi-Companion Group Voice Call WebSocket Endpoint ─────────────
+        app.Map("/ws/group-voice/{groupId}", async (HttpContext ctx, string groupId, BackendManager backends, IConfiguration config) =>
+        {
+            try
+            {
+                await AshServer.Service.GroupVoiceCallHandler.Handle(ctx, groupId, backends, config);
+            }
+            catch (WebSocketException) { }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[group-voice-ws] Group voice error: {ex.Message}");
+            }
+        });
+
+        // ── Recent Companion Lounge Chat Endpoint ───────────────────────────
+        app.MapGet("/api/lounge/recent", () => Results.Ok(AshServer.AI.CompanionLoungeService.RecentLoungeMessages));
+
         // ── Voice Call WebSocket endpoint ────────────────────────────────────
-        // Protocol: 1) Client sends configuration handshake {"token":"...", "systemPrompt":"...", "voiceId":"..."}
-        //           2) Client sends binary WAV audio chunks
-        //           3) Server responds with transcription {"type":"transcription","text":"..."}
-        //              then companion text reply {"type":"speech_text","text":"..."}
-        //              then binary WAV audio bytes for TTS
         app.Map("/ws/voice/{characterId}", async (HttpContext ctx, string characterId, BackendManager backends, IConfiguration config) =>
         {
             if (!ctx.WebSockets.IsWebSocketRequest) { ctx.Response.StatusCode = 400; return; }
 
-            var requireAuth = builder.Configuration.GetValue("RequireAuth", true);
-            var ws = await ctx.WebSockets.AcceptWebSocketAsync();
-
-            // ── Handshake (First message) ──
-            var firstMsgBuf = new byte[8192];
-            using var firstMsgMs = new MemoryStream();
-            WebSocketReceiveResult firstMsgResult;
-            do
+            try
             {
-                firstMsgResult = await ws.ReceiveAsync(firstMsgBuf, CancellationToken.None);
-                if (firstMsgResult.MessageType == WebSocketMessageType.Close) return;
-                firstMsgMs.Write(firstMsgBuf, 0, firstMsgResult.Count);
-            } while (!firstMsgResult.EndOfMessage);
+                var requireAuth = builder.Configuration.GetValue("RequireAuth", true);
+                var ws = await ctx.WebSockets.AcceptWebSocketAsync();
+
+                // ── Handshake (First message) ──
+                var firstMsgBuf = new byte[8192];
+                using var firstMsgMs = new MemoryStream();
+                WebSocketReceiveResult firstMsgResult;
+                try
+                {
+                    do
+                    {
+                        firstMsgResult = await ws.ReceiveAsync(firstMsgBuf, CancellationToken.None);
+                        if (firstMsgResult.MessageType == WebSocketMessageType.Close) return;
+                        firstMsgMs.Write(firstMsgBuf, 0, firstMsgResult.Count);
+                    } while (!firstMsgResult.EndOfMessage);
+                }
+                catch (WebSocketException)
+                {
+                    return; // Client disconnected during voice handshake
+                }
+                catch (Exception)
+                {
+                    return;
+                }
 
             string? jwtToken = null;
             string systemPrompt = "You are a helpful assistant.";
@@ -710,6 +802,15 @@ public class Program
                 {
                     if (File.Exists(tmpWav)) File.Delete(tmpWav);
                 }
+            }
+            }
+            catch (WebSocketException)
+            {
+                // Voice WebSocket disconnected abruptly — swallowed cleanly
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[voice-ws] Voice session error: {ex.Message}");
             }
         });
 

@@ -16,6 +16,9 @@ public class Database
         _connectionString = $"Data Source={dbPath}";
     }
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<EpisodicMemory>> _episodicCache = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<SemanticMemory>> _semanticCache = new();
+
     public SqliteConnection Open()
     {
         var conn = new SqliteConnection(_connectionString);
@@ -248,6 +251,35 @@ public class Database
                 character_name TEXT,
                 content        TEXT NOT NULL,
                 created_at     TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS episodic_memories (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                companion_id  TEXT    NOT NULL,
+                event_summary TEXT    NOT NULL,
+                date_string   TEXT    NOT NULL,
+                created_at    TEXT    DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS semantic_memories (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                companion_id TEXT    NOT NULL,
+                fact         TEXT    NOT NULL,
+                category     TEXT    NOT NULL DEFAULT 'user_preference',
+                importance   INTEGER DEFAULT 1,
+                created_at   TEXT    DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS companion_affect_states (
+                companion_id TEXT    PRIMARY KEY,
+                user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                valence      REAL    NOT NULL DEFAULT 0.2,
+                arousal      REAL    NOT NULL DEFAULT 0.5,
+                dominance    REAL    NOT NULL DEFAULT 0.0,
+                primary_mood TEXT    NOT NULL DEFAULT 'Playful',
+                updated_at   TEXT    DEFAULT (datetime('now'))
             );
 
             CREATE INDEX IF NOT EXISTS idx_comp_memories ON companion_memories(user_id, companion_name);
@@ -1748,6 +1780,172 @@ public class Database
         cmd.CommandText = "DELETE FROM companion_memories WHERE id = $id AND user_id = $uid;";
         cmd.Parameters.AddWithValue("$id", id);
         cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.ExecuteNonQuery();
+    });
+
+    // ── 3-Tier Memory System (Episodic & Semantic) ───────────────────────────
+
+    public Task AddEpisodicMemory(int userId, string companionId, string eventSummary, string dateString) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO episodic_memories (user_id, companion_id, event_summary, date_string)
+            VALUES ($uid, $cid, $event, $dt);
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cid", companionId);
+        cmd.Parameters.AddWithValue("$event", eventSummary);
+        cmd.Parameters.AddWithValue("$dt", dateString);
+        cmd.ExecuteNonQuery();
+        _episodicCache.TryRemove($"{userId}_{companionId.ToLowerInvariant()}", out _);
+    });
+
+    public Task<List<EpisodicMemory>> GetEpisodicMemories(int userId, string companionId, int limit = 10) => Task.Run(() =>
+    {
+        var cacheKey = $"{userId}_{companionId.ToLowerInvariant()}";
+        if (_episodicCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached.Take(limit).ToList();
+        }
+
+        var result = new List<EpisodicMemory>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, user_id, companion_id, event_summary, date_string, created_at
+            FROM episodic_memories
+            WHERE user_id = $uid AND LOWER(companion_id) = LOWER($cid)
+            ORDER BY id DESC
+            LIMIT $lim;
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cid", companionId);
+        cmd.Parameters.AddWithValue("$lim", limit);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            result.Add(new EpisodicMemory(
+                reader.GetInt32(0),
+                reader.GetInt32(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.IsDBNull(5) ? "" : reader.GetString(5)
+            ));
+        }
+        _episodicCache[cacheKey] = result;
+        return result;
+    });
+
+    public Task AddSemanticMemory(int userId, string companionId, string fact, string category = "user_preference", int importance = 1) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO semantic_memories (user_id, companion_id, fact, category, importance)
+            VALUES ($uid, $cid, $fact, $cat, $imp);
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cid", companionId);
+        cmd.Parameters.AddWithValue("$fact", fact);
+        cmd.Parameters.AddWithValue("$cat", category);
+        cmd.Parameters.AddWithValue("$imp", importance);
+        cmd.ExecuteNonQuery();
+        _semanticCache.TryRemove($"{userId}_{companionId.ToLowerInvariant()}", out _);
+    });
+
+    public Task<List<SemanticMemory>> GetSemanticMemories(int userId, string companionId, int limit = 10) => Task.Run(() =>
+    {
+        var cacheKey = $"{userId}_{companionId.ToLowerInvariant()}";
+        if (_semanticCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached.Take(limit).ToList();
+        }
+
+        var result = new List<SemanticMemory>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, user_id, companion_id, fact, category, importance, created_at
+            FROM semantic_memories
+            WHERE user_id = $uid AND LOWER(companion_id) = LOWER($cid)
+            ORDER BY importance DESC, id DESC
+            LIMIT $lim;
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cid", companionId);
+        cmd.Parameters.AddWithValue("$lim", limit);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            result.Add(new SemanticMemory(
+                reader.GetInt32(0),
+                reader.GetInt32(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetInt32(5),
+                reader.IsDBNull(6) ? "" : reader.GetString(6)
+            ));
+        }
+        _semanticCache[cacheKey] = result;
+        return result;
+    });
+
+    // ── Emotional Affect Vector Engine (Valence, Arousal, Dominance) ────────
+
+    public Task<CompanionAffectState?> GetAffectState(int userId, string companionId) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT companion_id, user_id, valence, arousal, dominance, primary_mood, updated_at
+            FROM companion_affect_states
+            WHERE user_id = $uid AND LOWER(companion_id) = LOWER($cid);
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$cid", companionId);
+
+        using var reader = cmd.ExecuteReader();
+        if (reader.Read())
+        {
+            return new CompanionAffectState(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.GetDouble(2),
+                reader.GetDouble(3),
+                reader.GetDouble(4),
+                reader.GetString(5),
+                reader.IsDBNull(6) ? "" : reader.GetString(6)
+            );
+        }
+        return null;
+    });
+
+    public Task UpdateAffectState(int userId, string companionId, double valence, double arousal, double dominance, string primaryMood) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO companion_affect_states (companion_id, user_id, valence, arousal, dominance, primary_mood, updated_at)
+            VALUES ($cid, $uid, $v, $a, $d, $mood, datetime('now'))
+            ON CONFLICT(companion_id) DO UPDATE SET
+                user_id = excluded.user_id,
+                valence = excluded.valence,
+                arousal = excluded.arousal,
+                dominance = excluded.dominance,
+                primary_mood = excluded.primary_mood,
+                updated_at = datetime('now');
+            """;
+        cmd.Parameters.AddWithValue("$cid", companionId);
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$v", valence);
+        cmd.Parameters.AddWithValue("$a", arousal);
+        cmd.Parameters.AddWithValue("$d", dominance);
+        cmd.Parameters.AddWithValue("$mood", primaryMood);
         cmd.ExecuteNonQuery();
     });
 }

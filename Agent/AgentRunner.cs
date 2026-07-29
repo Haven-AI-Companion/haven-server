@@ -190,21 +190,33 @@ public class AgentRunner
 
             var updatedArgs = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(argsDict));
 
-            // Fire and forget task to generate media in background
+            var cancelToken = SdGenerationQueue.RegisterRequest(_conversationId ?? "global");
+
+            // Fire and forget task to generate media in background (supersedes stale tasks!)
             _ = Task.Run(async () =>
             {
-                await SdGenerationQueue.Semaphore.WaitAsync();
+                if (cancelToken.IsCancellationRequested) return;
                 try
                 {
+                    await SdGenerationQueue.Semaphore.WaitAsync(cancelToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                try
+                {
+                    if (cancelToken.IsCancellationRequested) return;
                     string result;
                     if (_plugins != null && _plugins.IsPluginTool(name))
                         result = await _plugins.ExecuteTool(name, updatedArgs);
                     else
                         result = await AgentTools.Execute(name, updatedArgs);
 
-                    if (!string.IsNullOrEmpty(result) && result.StartsWith("/uploads/"))
+                    if (!cancelToken.IsCancellationRequested && !string.IsNullOrEmpty(result) && result.StartsWith("/uploads/"))
                     {
-                        await AshServer.Chat.ChatHandler.BroadcastToConversation(_conversationId, new
+                        await AshServer.Chat.ChatHandler.BroadcastToConversation(_conversationId ?? "", new
                         {
                             type = "media_ready",
                             url = result,
@@ -212,13 +224,14 @@ public class AgentRunner
                         });
                     }
                 }
+                catch (OperationCanceledException) {}
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[async-tool] Error in background execution of {name}: {ex.Message}");
                 }
                 finally
                 {
-                    SdGenerationQueue.Semaphore.Release();
+                    try { SdGenerationQueue.Semaphore.Release(); } catch {}
                 }
             });
 
@@ -352,5 +365,24 @@ public class AgentRunner
 public static class SdGenerationQueue
 {
     public static readonly System.Threading.SemaphoreSlim Semaphore = new(1, 1);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> ActiveTokens = new();
+
+    public static CancellationToken RegisterRequest(string conversationId)
+    {
+        var key = string.IsNullOrEmpty(conversationId) ? "global" : conversationId;
+        if (ActiveTokens.TryRemove(key, out var oldCts))
+        {
+            try
+            {
+                oldCts.Cancel();
+                oldCts.Dispose();
+            }
+            catch {}
+        }
+
+        var newCts = new CancellationTokenSource();
+        ActiveTokens[key] = newCts;
+        return newCts.Token;
+    }
 }
 
