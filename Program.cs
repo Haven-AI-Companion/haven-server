@@ -560,9 +560,6 @@ public class Program
             }
         });
 
-        // ── Recent Companion Lounge Chat Endpoint ───────────────────────────
-        app.MapGet("/api/lounge/recent", () => Results.Ok(AshServer.AI.CompanionLoungeService.RecentLoungeMessages));
-
         // ── Voice Call WebSocket endpoint ────────────────────────────────────
         app.Map("/ws/voice/{characterId}", async (HttpContext ctx, string characterId, BackendManager backends, IConfiguration config) =>
         {

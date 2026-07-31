@@ -24,7 +24,7 @@ public class CompanionLoungeService : BackgroundService
     private readonly ILogger<CompanionLoungeService> _log;
 
     public static readonly List<object> RecentLoungeMessages = new();
-    private static readonly object _loungeLock = new();
+    public static readonly object LoungeLock = new();
 
     public CompanionLoungeService(
         Database db,
@@ -125,10 +125,19 @@ public class CompanionLoungeService : BackgroundService
                         timestamp = DateTime.UtcNow.ToString("o")
                     };
 
-                    lock (_loungeLock)
+                    lock (LoungeLock)
                     {
                         RecentLoungeMessages.Add(loungeObj);
                         if (RecentLoungeMessages.Count > 50) RecentLoungeMessages.RemoveAt(0);
+                    }
+
+                    try
+                    {
+                        await _db.AddLoungeChat(compB.Name, compA.Name, cleanReply);
+                    }
+                    catch (Exception dbEx)
+                    {
+                        _log.LogWarning(dbEx, "[companion-lounge] Could not persist lounge chat to DB");
                     }
 
                     // Broadcast to active WebSocket connections so user can see companion interactions in real time

@@ -758,19 +758,92 @@ public class ModelsController : ControllerBase
         var convId = string.IsNullOrWhiteSpace(req.ConversationId) ? $"char_{compClean}" : req.ConversationId;
 
         var convState = await _db.GetConversationState(convId);
-        if (convState != null)
+        if (convState != null || !string.IsNullOrWhiteSpace(companionName))
         {
             var stateParts = new List<string>();
-            if (!string.IsNullOrWhiteSpace(convState.Location)) stateParts.Add($"Location = {convState.Location}");
-            if (!string.IsNullOrWhiteSpace(convState.Outfit)) stateParts.Add($"Outfit = {convState.Outfit}");
-            if (!string.IsNullOrWhiteSpace(convState.Mood)) stateParts.Add($"Mood = {convState.Mood}");
-            if (!string.IsNullOrWhiteSpace(convState.ClothingState)) stateParts.Add($"ClothingState = {convState.ClothingState}");
+
+            if (convState != null)
+            {
+                bool isNudeState = !string.IsNullOrWhiteSpace(convState.ClothingState) && (
+                    convState.ClothingState.Contains("naked", StringComparison.OrdinalIgnoreCase) ||
+                    convState.ClothingState.Contains("nude", StringComparison.OrdinalIgnoreCase) ||
+                    convState.ClothingState.Contains("undressed", StringComparison.OrdinalIgnoreCase) ||
+                    convState.ClothingState.Contains("topless", StringComparison.OrdinalIgnoreCase) ||
+                    convState.ClothingState.Contains("bare", StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(convState.Location)) stateParts.Add($"Location = {convState.Location}");
+                if (isNudeState)
+                {
+                    stateParts.Add("Outfit = none (naked/undressed)");
+                    stateParts.Add($"ClothingState = {convState.ClothingState} (fully undressed, naked, no clothes)");
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(convState.Outfit)) stateParts.Add($"Outfit = {convState.Outfit}");
+                    if (!string.IsNullOrWhiteSpace(convState.ClothingState)) stateParts.Add($"ClothingState = {convState.ClothingState}");
+                }
+                if (!string.IsNullOrWhiteSpace(convState.Mood)) stateParts.Add($"Mood = {convState.Mood}");
+                if (!string.IsNullOrWhiteSpace(convState.BodyType)) stateParts.Add($"BodyType = {convState.BodyType}");
+                if (!string.IsNullOrWhiteSpace(convState.BodyShape)) stateParts.Add($"BodyShape = {convState.BodyShape}");
+            }
+
+            // 1. Inject Relationship Level & XP
+            try
+            {
+                var relPath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+                var compJsonPath = Path.Combine(AppContext.BaseDirectory, relPath, "companions", $"{compClean.ToLowerInvariant()}.json");
+                if (!System.IO.File.Exists(compJsonPath))
+                {
+                    compJsonPath = Path.Combine(AppContext.BaseDirectory, relPath, "companions", "local", $"{compClean.ToLowerInvariant()}.json");
+                }
+
+                if (System.IO.File.Exists(compJsonPath))
+                {
+                    var cJson = await System.IO.File.ReadAllTextAsync(compJsonPath);
+                    var cCfg = JsonSerializer.Deserialize<CompanionConfig>(cJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (cCfg != null && cCfg.RelationshipXp > 0)
+                    {
+                        int relLevel = (cCfg.RelationshipXp / 100) + 1;
+                        stateParts.Add($"Relationship = Level {relLevel} ({cCfg.RelationshipXp} XP)");
+                    }
+                }
+            }
+            catch {}
+
+            // 2. Inject Active Topic Focus
+            if (TopicSummarizer.ActiveTopics.TryGetValue(convId, out var currentTopicText) && !string.IsNullOrWhiteSpace(currentTopicText))
+            {
+                stateParts.Add($"ActiveTopic = \"{currentTopicText}\"");
+            }
+
+            // 3. Inject Top Companion Memories
+            try
+            {
+                var memories = await _db.GetCompanionMemories(UserId, companionName, 10);
+                if (memories != null && memories.Count > 0)
+                {
+                    var topFacts = memories.OrderByDescending(m => m.Importance).Take(3).Select(m => $"\"{m.Fact}\"");
+                    stateParts.Add($"KeyMemories = [{string.Join(", ", topFacts)}]");
+                }
+            }
+            catch {}
+
+            // 4. Inject VAD Emotional Affect State
+            try
+            {
+                var affect = await _db.GetAffectState(UserId, compClean.ToLowerInvariant());
+                if (affect != null && !string.IsNullOrWhiteSpace(affect.PrimaryMood))
+                {
+                    stateParts.Add($"EmotionalState = {affect.PrimaryMood} (Valence: {affect.Valence:F1}, Energy: {affect.Arousal:F1})");
+                }
+            }
+            catch {}
 
             if (stateParts.Count > 0)
             {
                 var stateContext = $"[Companion State: {string.Join(", ", stateParts)}]";
                 systemPrompt = stateContext + "\n" + systemPrompt;
-                Console.WriteLine($"[chat] Injected active companion state: {stateContext}");
+                Console.WriteLine($"[chat] Injected enriched companion state: {stateContext}");
             }
         }
 
@@ -833,7 +906,6 @@ public class ModelsController : ControllerBase
                             comp = JsonSerializer.Deserialize<CompanionConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                         }
 
-                        var details = comp?.Description ?? comp?.Personality ?? "";
                         var location = convState?.Location ?? comp?.CurrentLocation ?? "";
                         var outfit = convState?.Outfit ?? comp?.CurrentOutfit ?? "";
                         var mood = convState?.Mood ?? comp?.CurrentMood ?? "";
@@ -847,23 +919,60 @@ public class ModelsController : ControllerBase
                                                compClean.Equals("mika", StringComparison.OrdinalIgnoreCase) ||
                                                compClean.Equals("wanda", StringComparison.OrdinalIgnoreCase);
 
-                        string stylePrefix = isAnimeOrCartoon ? "2d anime style illustration of" : "digital art portrait of";
+                        var cameraShots = new[] { "close-up portrait selfie", "upper body portrait", "medium shot portrait", "selfie angle photo" };
+                        var cameraShot = cameraShots[Random.Shared.Next(cameraShots.Length)];
 
-                        var sdPrompt = $"{stylePrefix} {companionName}, highly detailed";
-                        if (!string.IsNullOrWhiteSpace(details)) sdPrompt += $", {details}";
-                        if (!string.IsNullOrWhiteSpace(bodyType)) sdPrompt += $", body type: {bodyType}";
-                        if (!string.IsNullOrWhiteSpace(bodyShape)) sdPrompt += $", body shape: {bodyShape}";
+                        string stylePrefix = isAnimeOrCartoon ? $"2d anime style {cameraShot} of" : $"photorealistic digital art {cameraShot} of";
+
+                        bool isNudeOrNaked = (!string.IsNullOrWhiteSpace(clothing) && (
+                            clothing.Contains("naked", StringComparison.OrdinalIgnoreCase) ||
+                            clothing.Contains("nude", StringComparison.OrdinalIgnoreCase) ||
+                            clothing.Contains("undressed", StringComparison.OrdinalIgnoreCase) ||
+                            clothing.Contains("topless", StringComparison.OrdinalIgnoreCase) ||
+                            clothing.Contains("bare", StringComparison.OrdinalIgnoreCase))) ||
+                            (!string.IsNullOrWhiteSpace(outfit) && (
+                            outfit.Contains("naked", StringComparison.OrdinalIgnoreCase) ||
+                            outfit.Contains("nude", StringComparison.OrdinalIgnoreCase) ||
+                            outfit.Contains("undressed", StringComparison.OrdinalIgnoreCase)));
+
+                        var sdPrompt = $"{stylePrefix} {companionName}, highly detailed, masterwork";
+
+                        // Extract concise appearance features instead of dumping full 2000-character description
+                        if (!string.IsNullOrWhiteSpace(comp?.Description))
+                        {
+                            var descLower = comp.Description.ToLowerInvariant();
+                            var hairIndex = descLower.IndexOf("hair");
+                            if (hairIndex > 0)
+                            {
+                                var start = Math.Max(0, hairIndex - 20);
+                                var length = Math.Min(40, comp.Description.Length - start);
+                                var hairSnippet = comp.Description.Substring(start, length).Trim();
+                                sdPrompt += $", {hairSnippet}";
+                            }
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(bodyType)) sdPrompt += $", ({bodyType} build:1.3)";
+                        if (!string.IsNullOrWhiteSpace(bodyShape)) sdPrompt += $", ({bodyShape} figure:1.3)";
                         if (!string.IsNullOrWhiteSpace(location)) sdPrompt += $", at/in {location}";
-                        if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
+
+                        if (isNudeOrNaked)
+                        {
+                            sdPrompt += ", fully naked, nude, uncensored, bare skin, completely undressed, no clothes";
+                        }
+                        else
+                        {
+                            if (!string.IsNullOrWhiteSpace(outfit)) sdPrompt += $", wearing {outfit}";
+                            if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
+                        }
                         if (!string.IsNullOrWhiteSpace(mood)) sdPrompt += $", {mood} expression";
-                        if (!string.IsNullOrWhiteSpace(clothing)) sdPrompt += $", {clothing}";
 
                         if (isAnimeOrCartoon)
                         {
                             sdPrompt += ", 2d anime aesthetic, vibrant colors, anime art style, cel shaded masterwork";
                         }
 
-                        var sdArgObj = new { description = sdPrompt };
+                        var randomSeed = Random.Shared.Next(100000, 99999999);
+                        var sdArgObj = new { description = sdPrompt, prompt = sdPrompt, seed = randomSeed };
                         var sdArgElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(sdArgObj));
                         var relativeImagePath = await _plugins.ExecuteTool("generate_portrait", sdArgElement);
 
@@ -3699,6 +3808,94 @@ public class CompanionsController : ControllerBase
         return Ok(new { ok = true });
     }
 
+    [HttpGet("{name}/inventory")]
+    public async Task<IActionResult> GetInventory(string name)
+    {
+        var items = await _db.GetCompanionInventory(UserId, name);
+        return Ok(items);
+    }
+
+    [HttpPost("{name}/gifts")]
+    public async Task<IActionResult> GiveGift(string name, [FromBody] GiveGiftRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(req.ItemName))
+            return BadRequest(new { error = "Item name is required." });
+
+        var xpBoost = req.XpBoost > 0 ? req.XpBoost : 15;
+        var itemId = await _db.SaveCompanionInventoryItem(UserId, name, req.ItemName, req.Category ?? "gift", req.EffectDesc ?? "Gift from user", xpBoost);
+
+        // Record a memory for the companion
+        await _db.SaveCompanionMemory(UserId, name, "gift_received", $"User gave me {req.ItemName}. {req.EffectDesc}".Trim(), 2);
+
+        // Update affect state valence (+0.1 for gift)
+        var affect = await _db.GetAffectState(UserId, name);
+        var newValence = Math.Min(1.0, (affect?.Valence ?? 0.5) + 0.1);
+        var newArousal = Math.Min(1.0, (affect?.Arousal ?? 0.5) + 0.05);
+        await _db.UpdateAffectState(UserId, name, newValence, newArousal, affect?.Dominance ?? 0.0, "Delighted (Received Gift)");
+
+        // Sync active conversation state
+        var conv = await _db.GetConversationByCompanion(UserId, name);
+        if (conv != null)
+        {
+            var curState = await _db.GetConversationState(conv.Id);
+            await _db.SaveConversationState(conv.Id, curState?.Location, curState?.Outfit, "Delighted (Received Gift)", curState?.ClothingState, curState?.BodyType, curState?.BodyShape);
+        }
+
+        return Ok(new { id = itemId, ok = true, xpBoost, newMood = "Delighted (Received Gift)" });
+    }
+
+    [HttpPost("{name}/outfit")]
+    public async Task<IActionResult> SwitchOutfit(string name, [FromBody] SwitchOutfitRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(req.OutfitName))
+            return BadRequest(new { error = "Outfit name is required." });
+
+        var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
+        var baseDir = Path.Combine(AppContext.BaseDirectory, relativePath, "companions");
+        var localDir = Path.Combine(baseDir, "local");
+        var cleanName = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim();
+        var filePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+        var baseFilePath = Path.Combine(baseDir, $"{cleanName.ToLowerInvariant()}.json");
+        var targetPath = System.IO.File.Exists(filePath) ? filePath : (System.IO.File.Exists(baseFilePath) ? baseFilePath : filePath);
+
+        CompanionConfig? cfg = null;
+        if (System.IO.File.Exists(targetPath))
+        {
+            var content = System.IO.File.ReadAllText(targetPath);
+            cfg = JsonSerializer.Deserialize<CompanionConfig>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+
+        if (cfg == null)
+            cfg = new CompanionConfig { Name = name };
+
+        cfg.CurrentOutfit = req.OutfitName;
+        if (!string.IsNullOrWhiteSpace(req.ClothingState))
+            cfg.ClothingState = req.ClothingState;
+
+        if (cfg.Outfits == null)
+            cfg.Outfits = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(req.SdPrompt))
+            cfg.Outfits[req.OutfitName] = req.SdPrompt;
+
+        if (!Directory.Exists(localDir))
+            Directory.CreateDirectory(localDir);
+
+        var savePath = Path.Combine(localDir, $"{cleanName.ToLowerInvariant()}.json");
+        var jsonOptions = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        System.IO.File.WriteAllText(savePath, JsonSerializer.Serialize(cfg, jsonOptions));
+
+        // Sync with active conversation state
+        var conv = await _db.GetConversationByCompanion(UserId, name);
+        if (conv != null)
+        {
+            var curState = await _db.GetConversationState(conv.Id);
+            await _db.SaveConversationState(conv.Id, curState?.Location, req.OutfitName, curState?.Mood, cfg.ClothingState ?? curState?.ClothingState, curState?.BodyType, curState?.BodyShape);
+        }
+
+        return Ok(new { ok = true, currentOutfit = cfg.CurrentOutfit, clothingState = cfg.ClothingState });
+    }
+
     [HttpPost]
     public async Task<IActionResult> SaveCompanion([FromBody] CompanionConfig req)
     {
@@ -3756,9 +3953,22 @@ public class CompanionsController : ControllerBase
             });
             System.IO.File.WriteAllText(filePath, json);
 
-            if (!string.IsNullOrEmpty(req.ConversationId))
+            var conv = !string.IsNullOrEmpty(req.ConversationId) 
+                ? await _db.GetConversation(req.ConversationId, UserId) 
+                : await _db.GetConversationByCompanion(UserId, req.Name);
+
+            if (conv != null)
             {
-                await _db.SetConversationCompanion(req.ConversationId, req.Name);
+                await _db.SetConversationCompanion(conv.Id, req.Name);
+                await _db.SaveConversationState(
+                    conv.Id,
+                    req.CurrentLocation ?? "",
+                    req.CurrentOutfit ?? "",
+                    req.CurrentMood ?? "",
+                    req.ClothingState ?? "",
+                    req.BodyType ?? "",
+                    req.BodyShape ?? ""
+                );
             }
 
             return Ok(new { ok = true, message = $"Companion '{req.Name}' saved locally successfully.", config = req });
@@ -4810,6 +5020,8 @@ public record GenerateProfileRequest(string Prompt);
 public record ImportUrlRequest(string Url);
 public record GenerateAssetRequest(string AssetType, string Value, string? SdPromptOverride);
 public record SelectAssetRequest(string AssetType, string Value);
+public record GiveGiftRequest(string ItemName, string? Category, string? EffectDesc, int XpBoost = 15);
+public record SwitchOutfitRequest(string OutfitName, string? ClothingState, string? SdPrompt);
 
 public class CompanionConfig
 {
@@ -4984,5 +5196,31 @@ public class GroupsController : ControllerBase
     {
         var messages = await _db.GetGroupMessages(id);
         return Ok(messages);
+    }
+}
+
+[ApiController]
+[Route("api/lounge")]
+public class LoungeController : ControllerBase
+{
+    private readonly Database _db;
+
+    public LoungeController(Database db)
+    {
+        _db = db;
+    }
+
+    [HttpGet("recent")]
+    public async Task<IActionResult> GetRecent([FromQuery] int limit = 50)
+    {
+        var dbMessages = await _db.GetRecentLoungeChats(limit);
+        if (dbMessages.Count > 0)
+        {
+            return Ok(dbMessages);
+        }
+        lock (CompanionLoungeService.LoungeLock)
+        {
+            return Ok(CompanionLoungeService.RecentLoungeMessages);
+        }
     }
 }

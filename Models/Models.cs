@@ -25,6 +25,13 @@ public record CompanionMemoryReq(
     int Importance = 1
 );
 
+public record LoungeChatEntry(
+    string speaker,
+    string listener,
+    string content,
+    string timestamp
+);
+
 public record Role(
     int Id,
     string Name,

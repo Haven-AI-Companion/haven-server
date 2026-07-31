@@ -282,10 +282,31 @@ public class Database
                 updated_at   TEXT    DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS lounge_chats (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                speaker     TEXT NOT NULL,
+                listener    TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                created_at  TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS companion_inventory (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                companion_name TEXT NOT NULL,
+                item_name      TEXT NOT NULL,
+                item_category  TEXT NOT NULL DEFAULT 'gift',
+                effect_desc    TEXT DEFAULT '',
+                xp_boost       INTEGER DEFAULT 10,
+                created_at     TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_comp_memories ON companion_memories(user_id, companion_name);
             CREATE INDEX IF NOT EXISTS idx_comp_diaries ON companion_diaries(user_id, companion_name);
+            CREATE INDEX IF NOT EXISTS idx_comp_inventory ON companion_inventory(user_id, companion_name);
             CREATE INDEX IF NOT EXISTS idx_group_chats ON group_chats(user_id);
             CREATE INDEX IF NOT EXISTS idx_group_messages ON group_messages(group_id);
+            CREATE INDEX IF NOT EXISTS idx_lounge_created ON lounge_chats(created_at);
 
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
                 content,
@@ -1925,6 +1946,38 @@ public class Database
         return null;
     });
 
+public Task AddLoungeChat(string speaker, string listener, string content) => Task.Run(() =>
+{
+    using var conn = Open();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "INSERT INTO lounge_chats (speaker, listener, content) VALUES ($sp, $ls, $ct)";
+    cmd.Parameters.AddWithValue("$sp", speaker);
+    cmd.Parameters.AddWithValue("$ls", listener);
+    cmd.Parameters.AddWithValue("$ct", content);
+    cmd.ExecuteNonQuery();
+});
+
+public Task<List<LoungeChatEntry>> GetRecentLoungeChats(int limit = 50) => Task.Run(() =>
+{
+    var list = new List<LoungeChatEntry>();
+    using var conn = Open();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT speaker, listener, content, created_at FROM lounge_chats ORDER BY id DESC LIMIT $limit";
+    cmd.Parameters.AddWithValue("$limit", limit);
+    using var r = cmd.ExecuteReader();
+    while (r.Read())
+    {
+        list.Add(new LoungeChatEntry(
+            r.GetString(0),
+            r.GetString(1),
+            r.GetString(2),
+            r.GetString(3)
+        ));
+    }
+    list.Reverse();
+    return list;
+});
+
     public Task UpdateAffectState(int userId, string companionId, double valence, double arousal, double dominance, string primaryMood) => Task.Run(() =>
     {
         using var conn = Open();
@@ -1948,6 +2001,57 @@ public class Database
         cmd.Parameters.AddWithValue("$mood", primaryMood);
         cmd.ExecuteNonQuery();
     });
+
+    public Task<int> SaveCompanionInventoryItem(int userId, string companionName, string itemName, string itemCategory, string effectDesc, int xpBoost) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO companion_inventory (user_id, companion_name, item_name, item_category, effect_desc, xp_boost)
+            VALUES ($uid, $name, $item, $cat, $eff, $xp);
+            SELECT last_insert_rowid();
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$name", companionName);
+        cmd.Parameters.AddWithValue("$item", itemName);
+        cmd.Parameters.AddWithValue("$cat", itemCategory);
+        cmd.Parameters.AddWithValue("$eff", effectDesc);
+        cmd.Parameters.AddWithValue("$xp", xpBoost);
+        var id = Convert.ToInt32(cmd.ExecuteScalar());
+        return id;
+    });
+
+    public Task<List<CompanionInventoryItem>> GetCompanionInventory(int userId, string companionName) => Task.Run(() =>
+    {
+        var list = new List<CompanionInventoryItem>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, user_id, companion_name, item_name, item_category, effect_desc, xp_boost, created_at
+            FROM companion_inventory
+            WHERE user_id = $uid AND LOWER(companion_name) = LOWER($name)
+            ORDER BY id DESC;
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$name", companionName);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            list.Add(new CompanionInventoryItem
+            {
+                Id = reader.GetInt32(0),
+                UserId = reader.GetInt32(1),
+                CompanionName = reader.GetString(2),
+                ItemName = reader.GetString(3),
+                ItemCategory = reader.GetString(4),
+                EffectDesc = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                XpBoost = reader.GetInt32(6),
+                CreatedAt = reader.IsDBNull(7) ? "" : reader.GetString(7)
+            });
+        }
+        return list;
+    });
 }
 
 public class ConversationState
@@ -1969,5 +2073,17 @@ public class CompanionMemory
     public string Category { get; set; } = "personal_fact";
     public string Fact { get; set; } = "";
     public int Importance { get; set; } = 1;
+    public string CreatedAt { get; set; } = "";
+}
+
+public class CompanionInventoryItem
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string CompanionName { get; set; } = "";
+    public string ItemName { get; set; } = "";
+    public string ItemCategory { get; set; } = "gift";
+    public string EffectDesc { get; set; } = "";
+    public int XpBoost { get; set; } = 10;
     public string CreatedAt { get; set; } = "";
 }
