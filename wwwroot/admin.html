@@ -1480,6 +1480,19 @@ select.form-input{cursor:pointer}
                 <div class="form-group"><label class="form-label">Temperature</label><input type="number" id="cfg-fallback-temp" class="form-input" placeholder="0.7" min="0" max="2" step="0.1"><span class="form-hint">0 = deterministic · 2 = very creative</span></div>
               </div>
             </div>
+            <div class="config-block" style="margin-top:16px;">
+              <div class="config-block-title">Autonomous Companion Lounge</div>
+              <div class="form-row" style="align-items:center;">
+                <div class="form-group" style="flex:1;">
+                  <label class="form-label">Autonomous Lounge Service</label>
+                  <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; margin-top:4px;">
+                    <input type="checkbox" id="cfg-lounge-enabled-tab" style="width:18px; height:18px; cursor:pointer;" onchange="toggleLoungeSetting(this.checked)" checked>
+                    Enable companions to chat with each other in background lounge
+                  </label>
+                  <span class="form-hint">Automatically pauses whenever you are actively chatting with a companion.</span>
+                </div>
+              </div>
+            </div>
             <div class="config-block">
               <div class="config-block-title">Storage</div>
               <div class="form-row cols-3">
@@ -4094,14 +4107,21 @@ async function loadLoungeStatus() {
     const res = await fetch('/api/lounge/status');
     if (res.ok) {
       const data = await res.json();
-      const checkbox = document.getElementById('cfg-lounge-enabled');
-      if (checkbox) checkbox.checked = !!data.enabled;
+      const cb1 = document.getElementById('cfg-lounge-enabled');
+      const cb2 = document.getElementById('cfg-lounge-enabled-tab');
+      if (cb1) cb1.checked = !!data.enabled;
+      if (cb2) cb2.checked = !!data.enabled;
     }
   } catch (err) { console.error('loadLoungeStatus:', err); }
 }
 
 async function toggleLoungeSetting(enabled) {
   try {
+    const cb1 = document.getElementById('cfg-lounge-enabled');
+    const cb2 = document.getElementById('cfg-lounge-enabled-tab');
+    if (cb1) cb1.checked = enabled;
+    if (cb2) cb2.checked = enabled;
+
     const res = await fetch('/api/lounge/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
