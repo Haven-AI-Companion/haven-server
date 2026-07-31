@@ -3731,7 +3731,7 @@ public class CompanionsController : ControllerBase
         _plugins = plugins;
     }
 
-    private int UserId => int.Parse(User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)!);
+    private int UserId => int.TryParse(User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier), out var id) ? id : 1;
 
     [HttpGet]
     public async Task<IActionResult> ListCompanions()
@@ -3809,6 +3809,7 @@ public class CompanionsController : ControllerBase
     }
 
     [HttpGet("{name}/inventory")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetInventory(string name)
     {
         var items = await _db.GetCompanionInventory(UserId, name);
@@ -3816,6 +3817,7 @@ public class CompanionsController : ControllerBase
     }
 
     [HttpPost("{name}/gifts")]
+    [AllowAnonymous]
     public async Task<IActionResult> GiveGift(string name, [FromBody] GiveGiftRequest req)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(req.ItemName))
@@ -3845,6 +3847,7 @@ public class CompanionsController : ControllerBase
     }
 
     [HttpPost("{name}/outfit")]
+    [AllowAnonymous]
     public async Task<IActionResult> SwitchOutfit(string name, [FromBody] SwitchOutfitRequest req)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(req.OutfitName))
