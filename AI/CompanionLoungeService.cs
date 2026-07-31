@@ -26,6 +26,9 @@ public class CompanionLoungeService : BackgroundService
     public static readonly List<object> RecentLoungeMessages = new();
     public static readonly object LoungeLock = new();
 
+    public static bool IsLoungeEnabled { get; set; } = true;
+    public static bool IsUserChatActive { get; set; } = false;
+
     public CompanionLoungeService(
         Database db,
         BackendManager backends,
@@ -56,7 +59,13 @@ public class CompanionLoungeService : BackgroundService
                 await Task.Delay(delayMs, stoppingToken);
 
                 var disableLounge = _config.GetValue<bool>("ai:DisableLounge", false);
-                if (disableLounge) continue;
+                if (!IsLoungeEnabled || disableLounge) continue;
+
+                if (IsUserChatActive)
+                {
+                    _log.LogInformation("[companion-lounge] User chat is active. Pausing lounge cycle to prioritize user response.");
+                    continue;
+                }
 
                 // Load all companions
                 var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";

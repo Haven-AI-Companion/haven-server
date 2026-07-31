@@ -5199,6 +5199,8 @@ public class GroupsController : ControllerBase
     }
 }
 
+public record LoungeToggleRequest(bool Enabled);
+
 [ApiController]
 [Route("api/lounge")]
 public class LoungeController : ControllerBase
@@ -5208,6 +5210,19 @@ public class LoungeController : ControllerBase
     public LoungeController(Database db)
     {
         _db = db;
+    }
+
+    [HttpGet("status")]
+    public IActionResult GetStatus()
+    {
+        return Ok(new { enabled = CompanionLoungeService.IsLoungeEnabled });
+    }
+
+    [HttpPost("toggle")]
+    public IActionResult ToggleLounge([FromBody] LoungeToggleRequest req)
+    {
+        CompanionLoungeService.IsLoungeEnabled = req.Enabled;
+        return Ok(new { enabled = CompanionLoungeService.IsLoungeEnabled, ok = true });
     }
 
     [HttpGet("recent")]
