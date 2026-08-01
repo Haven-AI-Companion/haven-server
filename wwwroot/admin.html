@@ -474,6 +474,11 @@ select.form-input{cursor:pointer}
                   <span style="font-size:12px;">Enable Autonomous Lounge:</span>
                   <input type="checkbox" id="cfg-lounge-enabled" style="width:18px; height:18px; cursor:pointer;" onchange="toggleLoungeSetting(this.checked)" checked>
                 </div>
+                <div style="font-size:11px; font-weight:600; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:4px; margin-top:8px; color:var(--text-muted); letter-spacing:0.05em;">PROACTIVE AGENCY CONFIG</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                  <span style="font-size:12px;">Enable Proactive Agency:</span>
+                  <input type="checkbox" id="cfg-proactive-enabled" style="width:18px; height:18px; cursor:pointer;" onchange="toggleProactiveSetting(this.checked)" checked>
+                </div>
 
                 <button class="btn btn-sm" style="margin-top:12px; width:100%; font-weight:600; border-color:var(--accent); color:var(--accent);" onclick="saveSidecarSettings()">Save & Apply Settings</button>
               </div>
@@ -1490,6 +1495,19 @@ select.form-input{cursor:pointer}
                     Enable companions to chat with each other in background lounge
                   </label>
                   <span class="form-hint">Automatically pauses whenever you are actively chatting with a companion.</span>
+                </div>
+              </div>
+            </div>
+            <div class="config-block" style="margin-top:16px;">
+              <div class="config-block-title">Proactive Companion Agency</div>
+              <div class="form-row" style="align-items:center;">
+                <div class="form-group" style="flex:1;">
+                  <label class="form-label">Proactive Outreach &amp; Self-Portraits</label>
+                  <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; margin-top:4px;">
+                    <input type="checkbox" id="cfg-proactive-enabled-tab" style="width:18px; height:18px; cursor:pointer;" onchange="toggleProactiveSetting(this.checked)" checked>
+                    Enable companions to proactively send supportive messages and self-portraits
+                  </label>
+                  <span class="form-hint">Reads desktop context and activity to reach out when you're busy or resting.</span>
                 </div>
               </div>
             </div>
@@ -4135,6 +4153,39 @@ async function toggleLoungeSetting(enabled) {
   }
 }
 
+async function loadProactiveStatus() {
+  try {
+    const res = await fetch('/api/proactive/status');
+    if (res.ok) {
+      const data = await res.json();
+      const cb1 = document.getElementById('cfg-proactive-enabled');
+      const cb2 = document.getElementById('cfg-proactive-enabled-tab');
+      if (cb1) cb1.checked = !!data.enabled;
+      if (cb2) cb2.checked = !!data.enabled;
+    }
+  } catch (err) { console.error('loadProactiveStatus:', err); }
+}
+
+async function toggleProactiveSetting(enabled) {
+  try {
+    const cb1 = document.getElementById('cfg-proactive-enabled');
+    const cb2 = document.getElementById('cfg-proactive-enabled-tab');
+    if (cb1) cb1.checked = enabled;
+    if (cb2) cb2.checked = enabled;
+
+    const res = await fetch('/api/proactive/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enabled })
+    });
+    if (res.ok) {
+      toast(enabled ? 'Proactive Agency enabled' : 'Proactive Agency paused/disabled');
+    }
+  } catch (err) {
+    toast('Failed to toggle Proactive Agency', 'error');
+  }
+}
+
 async function saveSidecarSettings() {
   try {
     const threads = parseInt(document.getElementById('cfg-llama-threads').value);
@@ -5117,7 +5168,7 @@ async function revokeDevice(id) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => { setGridUIRole('master'); loadLoungeStatus(); }, 100);
+  setTimeout(() => { setGridUIRole('master'); loadLoungeStatus(); loadProactiveStatus(); }, 100);
 });
 </script>
 </body>

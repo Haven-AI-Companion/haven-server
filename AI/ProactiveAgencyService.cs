@@ -47,6 +47,8 @@ public class ProactiveAgencyService : BackgroundService
     private string _lastActiveWindow = "";
     private readonly Dictionary<string, DateTime> _nextAllowedMessageTime = new();
 
+    public static bool IsProactiveAgencyEnabled { get; set; } = true;
+
     public ProactiveAgencyService(
         Database db,
         BackendManager backends,
@@ -113,10 +115,9 @@ public class ProactiveAgencyService : BackgroundService
                 var randomIntervalMs = Random.Shared.Next(30000, 90000);
                 await Task.Delay(randomIntervalMs, stoppingToken);
 
-                var disableProactive = _config.GetValue<bool>("ai:DisableProactive", true);
-                if (disableProactive)
+                var disableProactive = _config.GetValue<bool>("ai:DisableProactive", false);
+                if (!IsProactiveAgencyEnabled || disableProactive || CompanionLoungeService.IsUserChatActive)
                 {
-                    _log.LogDebug("[proactive-agency] Proactive messages are disabled in settings. Skipping tick.");
                     continue;
                 }
 

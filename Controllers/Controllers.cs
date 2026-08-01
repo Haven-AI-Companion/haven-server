@@ -5242,3 +5242,23 @@ public class LoungeController : ControllerBase
         }
     }
 }
+
+public record ProactiveToggleRequest(bool Enabled);
+
+[ApiController]
+[Route("api/proactive")]
+public class ProactiveController : ControllerBase
+{
+    [HttpGet("status")]
+    public IActionResult GetStatus()
+    {
+        return Ok(new { enabled = ProactiveAgencyService.IsProactiveAgencyEnabled });
+    }
+
+    [HttpPost("toggle")]
+    public IActionResult ToggleProactive([FromBody] ProactiveToggleRequest req)
+    {
+        ProactiveAgencyService.IsProactiveAgencyEnabled = req.Enabled;
+        return Ok(new { enabled = ProactiveAgencyService.IsProactiveAgencyEnabled, ok = true });
+    }
+}
