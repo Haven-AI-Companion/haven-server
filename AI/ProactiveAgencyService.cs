@@ -308,7 +308,12 @@ public class ProactiveAgencyService : BackgroundService
                     }
                     catch (OperationCanceledException)
                     {
-                        _log.LogInformation("[proactive-agency] Proactive generation was cancelled because the user started an active chat.");
+                        _log.LogInformation("[proactive-agency] Proactive generation was cancelled.");
+                        continue;
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning("[proactive-agency] Sidecar backend disconnected or restarted during proactive generation: {Message}", ex.Message);
                         continue;
                     }
 
