@@ -57,6 +57,27 @@ namespace AshServer.Service
             }
         }
 
+        public static async Task BroadcastRawJson(string jsonPayload)
+        {
+            var bytes = Encoding.UTF8.GetBytes(jsonPayload);
+            var segment = new ArraySegment<byte>(bytes);
+
+            foreach (var (connId, socket) in _clients)
+            {
+                if (socket.State == WebSocketState.Open)
+                {
+                    try
+                    {
+                        await socket.SendAsync(segment, WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SyncHub] Error broadcasting to {connId}: {ex.Message}");
+                    }
+                }
+            }
+        }
+
         public static async Task HandleConnection(HttpContext ctx, WebSocket ws)
         {
             var connId = Guid.NewGuid().ToString();

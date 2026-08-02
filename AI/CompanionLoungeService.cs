@@ -156,6 +156,7 @@ public class CompanionLoungeService : BackgroundService
 
                     // Broadcast to active WebSocket connections so user can see companion interactions in real time
                     await ChatHandler.BroadcastToAllSockets(loungeObj);
+                    await AshServer.Service.SyncHub.BroadcastRawJson(JsonSerializer.Serialize(loungeObj));
                 }
             }
             catch (OperationCanceledException) { break; }
