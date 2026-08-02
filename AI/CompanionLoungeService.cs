@@ -117,12 +117,16 @@ public class CompanionLoungeService : BackgroundService
 
                 if (!string.IsNullOrWhiteSpace(responseText))
                 {
+                    var loungeUsers = await _db.GetAllUsers();
+                    var activeUser = loungeUsers.FirstOrDefault();
+                    var activeUsername = activeUser?.Username ?? "Daniel";
+
                     var cleanReply = System.Text.RegularExpressions.Regex.Replace(
                         responseText, 
                         @"^\s*\*?<?\s*thought\s*>?.*?</?\s*thought\s*>\s*", 
                         "", 
                         System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                    ).Trim().Replace("{{user}}", "Daniel");
+                    ).Trim().Replace("{{user}}", activeUsername);
 
                     _log.LogInformation("[companion-lounge] {CompB} replied: {Reply}", compB.Name, cleanReply);
 
