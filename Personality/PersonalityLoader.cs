@@ -59,9 +59,10 @@ public class PersonalityLoader
         }
 
         // Per-user context
-        if (username != null)
+        if (!string.IsNullOrWhiteSpace(username))
         {
-            var userFile = Path.Combine(_personalityDir, "users", $"{username}.md");
+            var cleanUsername = Path.GetFileName(username.Trim());
+            var userFile = Path.Combine(_personalityDir, "users", $"{cleanUsername}.md");
             if (File.Exists(userFile))
             {
                 var userContext = File.ReadAllText(userFile).Trim();

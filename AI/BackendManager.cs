@@ -45,7 +45,7 @@ public class OllamaBackend : IAiBackend
     {
         var resp = await Http.GetAsync($"{_baseUrl}/api/tags");
         resp.EnsureSuccessStatusCode();
-        var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
+        using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
         return doc.RootElement.GetProperty("models")
             .EnumerateArray()
             .Select(m => m.GetProperty("name").GetString()!)
@@ -182,7 +182,7 @@ public class OpenAiCompatBackend : IAiBackend
         if (_apiKey != "none") req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         var resp = await Http.SendAsync(req);
         resp.EnsureSuccessStatusCode();
-        var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
+        using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
         return doc.RootElement.GetProperty("data")
             .EnumerateArray()
             .Select(m => m.GetProperty("id").GetString()!)

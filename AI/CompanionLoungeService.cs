@@ -107,12 +107,13 @@ public class CompanionLoungeService : BackgroundService
                 };
 
                 var defaultModel = _config["DefaultModel"] ?? "";
-                var responseText = "";
+                var sbResponse = new System.Text.StringBuilder();
 
                 await foreach (var token in _backends.StreamChat(defaultModel, messages).WithCancellation(stoppingToken))
                 {
-                    responseText += token;
+                    sbResponse.Append(token);
                 }
+                var responseText = sbResponse.ToString();
 
                 if (!string.IsNullOrWhiteSpace(responseText))
                 {

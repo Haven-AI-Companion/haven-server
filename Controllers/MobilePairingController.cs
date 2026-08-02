@@ -31,8 +31,17 @@ public class MobilePairingController : ControllerBase
         _log = log;
     }
 
-    private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private int UserId => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 1;
     private string Username => User.FindFirstValue(ClaimTypes.Name) ?? "User";
+
+    private string GeneratePairingCode()
+    {
+        // Alphanumeric subset excluding confusing characters (I, O, 1, 0)
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var bytes = new byte[6];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
+        return new string(bytes.Select(b => chars[b % chars.Length]).ToArray());
+    }
 
     [HttpPost("api/auth/mobile/pair/initiate")]
     [Authorize]
@@ -144,14 +153,7 @@ public class MobilePairingController : ControllerBase
         });
     }
 
-    private string GeneratePairingCode()
-    {
-        // Alphanumeric subset excluding confusing characters (I, O, 1, 0)
-        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        var random = new Random();
-        return new string(Enumerable.Repeat(chars, 6)
-            .Select(s => s[random.Next(s.Length)]).ToArray());
-    }
+
 
     private string GenerateLongLivedToken(User user)
     {

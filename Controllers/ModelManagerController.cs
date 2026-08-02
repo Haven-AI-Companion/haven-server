@@ -78,11 +78,15 @@ public class ModelManagerController : ControllerBase
             modelFilename += ".gguf";
         }
 
-        var modelPath = Path.Combine(GgufDir, modelFilename);
+        var modelPath = Path.Combine(GgufDir, Path.GetFileName(modelFilename));
         if (!System.IO.File.Exists(modelPath) && System.IO.File.Exists(rawFilename))
         {
-            modelPath = rawFilename;
-            modelFilename = Path.GetFileName(rawFilename);
+            var targetFull = Path.GetFullPath(rawFilename);
+            if (targetFull.StartsWith(Path.GetFullPath(GgufDir), StringComparison.OrdinalIgnoreCase))
+            {
+                modelPath = targetFull;
+                modelFilename = Path.GetFileName(rawFilename);
+            }
         }
 
         if (!System.IO.File.Exists(modelPath))
@@ -479,10 +483,10 @@ public class ModelManagerController : ControllerBase
             var psi = new ProcessStartInfo
             {
                 FileName = pythonPath,
-                Arguments = $"-c \"import sys; " +
+                Arguments = "-c \"import sys, os; " +
                             "try: " +
                             "  from huggingface_hub import login; " +
-                            $"  login(token='{req.Token.Trim()}'); " +
+                            "  login(token=os.environ.get('HF_TOKEN')); " +
                             "  print('SUCCESS'); " +
                             "except Exception as e: " +
                             "  print('ERROR:', str(e));\"",
@@ -491,6 +495,7 @@ public class ModelManagerController : ControllerBase
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            psi.EnvironmentVariables["HF_TOKEN"] = req.Token.Trim();
 
             using var process = Process.Start(psi);
             if (process == null)

@@ -94,6 +94,10 @@ public class Database
             CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);
             CREATE INDEX IF NOT EXISTS idx_messages_conv      ON messages(conversation_id);
             CREATE INDEX IF NOT EXISTS idx_user_roles_user    ON user_roles(user_id);
+            CREATE INDEX IF NOT EXISTS idx_conversations_user_comp ON conversations(user_id, companion_id);
+            CREATE INDEX IF NOT EXISTS idx_episodic_user_comp   ON episodic_memories(user_id, companion_id);
+            CREATE INDEX IF NOT EXISTS idx_semantic_user_comp   ON semantic_memories(user_id, companion_id);
+            CREATE INDEX IF NOT EXISTS idx_paired_devices_token ON paired_devices(token, user_id);
 
             CREATE TABLE IF NOT EXISTS mcp_servers (
                 id         TEXT    PRIMARY KEY,
@@ -273,13 +277,14 @@ public class Database
             );
 
             CREATE TABLE IF NOT EXISTS companion_affect_states (
-                companion_id TEXT    PRIMARY KEY,
                 user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                companion_id TEXT    NOT NULL,
                 valence      REAL    NOT NULL DEFAULT 0.2,
                 arousal      REAL    NOT NULL DEFAULT 0.5,
                 dominance    REAL    NOT NULL DEFAULT 0.0,
                 primary_mood TEXT    NOT NULL DEFAULT 'Playful',
-                updated_at   TEXT    DEFAULT (datetime('now'))
+                updated_at   TEXT    DEFAULT (datetime('now')),
+                PRIMARY KEY (user_id, companion_id)
             );
 
             CREATE TABLE IF NOT EXISTS lounge_chats (
@@ -1983,10 +1988,9 @@ public Task<List<LoungeChatEntry>> GetRecentLoungeChats(int limit = 50) => Task.
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO companion_affect_states (companion_id, user_id, valence, arousal, dominance, primary_mood, updated_at)
-            VALUES ($cid, $uid, $v, $a, $d, $mood, datetime('now'))
-            ON CONFLICT(companion_id) DO UPDATE SET
-                user_id = excluded.user_id,
+            INSERT INTO companion_affect_states (user_id, companion_id, valence, arousal, dominance, primary_mood, updated_at)
+            VALUES ($uid, $cid, $v, $a, $d, $mood, datetime('now'))
+            ON CONFLICT(user_id, companion_id) DO UPDATE SET
                 valence = excluded.valence,
                 arousal = excluded.arousal,
                 dominance = excluded.dominance,

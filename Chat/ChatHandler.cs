@@ -389,7 +389,7 @@ public class ChatHandler
                     var userGenderDirective = AshServer.Personality.PersonalityLoader.BuildUserGenderDirective(activeUser?.DisplayName ?? username, activeUser?.Gender);
                     var baseSystemPrompt = !string.IsNullOrEmpty(customSystemPrompt)
                         ? customSystemPrompt
-                        : GetCompanionSystemPrompt(companionName, username, activeUser?.DisplayName, activeUser?.Gender, conversationId);
+                        : await GetCompanionSystemPrompt(companionName, username, activeUser?.DisplayName, activeUser?.Gender, conversationId);
 
                     var systemPrompt = baseSystemPrompt.Contains("[STRICT USER PRONOUN & GENDER DIRECTIVE]")
                         ? baseSystemPrompt
@@ -748,7 +748,22 @@ public class ChatHandler
                 }
             }
             if (ws.State == WebSocketState.Open)
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
+            {
+                var wsLock = SocketsLocks.GetValue(ws, socket => new SemaphoreSlim(1, 1));
+                await wsLock.WaitAsync(CancellationToken.None);
+                try
+                {
+                    if (ws.State == WebSocketState.Open)
+                    {
+                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
+                    }
+                }
+                catch { }
+                finally
+                {
+                    wsLock.Release();
+                }
+            }
         }
     }
 
@@ -1138,7 +1153,7 @@ public class ChatHandler
         }
     }
 
-    private string GetCompanionSystemPrompt(string companionName, string? username, string? displayName, string? gender, string? convId = null)
+    private async Task<string> GetCompanionSystemPrompt(string companionName, string? username, string? displayName, string? gender, string? convId = null)
     {
         var activeName = displayName ?? username;
         var relativePath = _config["PersonalityDir"] ?? _config["personality:path"] ?? "personality";
@@ -1167,7 +1182,7 @@ public class ChatHandler
                 AshServer.Data.ConversationState? convState = null;
                 if (!string.IsNullOrEmpty(convId))
                 {
-                    convState = _db.GetConversationState(convId).GetAwaiter().GetResult();
+                    convState = await _db.GetConversationState(convId);
                 }
 
                 var activeLocation = convState?.Location ?? comp.CurrentLocation;

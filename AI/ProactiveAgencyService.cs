@@ -67,6 +67,7 @@ public class ProactiveAgencyService : BackgroundService
 
     private string GetActiveWindowTitle()
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return "Unknown Application";
         try
         {
             IntPtr hwnd = GetForegroundWindow();
@@ -86,6 +87,7 @@ public class ProactiveAgencyService : BackgroundService
 
     private double GetIdleTimeSeconds()
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return 0;
         try
         {
             var info = new LASTINPUTINFO();
