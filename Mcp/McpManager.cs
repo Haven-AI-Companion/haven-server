@@ -33,17 +33,26 @@ public class McpManager : IAsyncDisposable
     private async Task ConnectInternalAsync(McpServerConfig server, CancellationToken ct)
     {
         var client = new McpClient(server);
-        _clients.Add(client);
         try
         {
             await client.ConnectAsync(ct);
             if (client.Connected)
+            {
+                lock (_clients)
+                {
+                    _clients.Add(client);
+                }
                 _logger.LogInformation("[mcp] '{Id}' connected ({Count} tools)", server.Id, client.Tools.Count);
+            }
             else
+            {
+                await client.DisposeAsync();
                 _logger.LogWarning("[mcp] '{Id}' failed to connect: {Error}", server.Id, client.LastError);
+            }
         }
         catch (Exception ex)
         {
+            await client.DisposeAsync();
             _logger.LogWarning("[mcp] '{Id}' exception during connect: {Ex}", server.Id, ex.Message);
         }
     }
@@ -56,7 +65,10 @@ public class McpManager : IAsyncDisposable
         await _db.CreateMcpServer(config);
         if (!config.Enabled) return false;
         await ConnectInternalAsync(config, ct);
-        return _clients.FirstOrDefault(c => c.Config.Id == config.Id)?.Connected ?? false;
+        lock (_clients)
+        {
+            return _clients.FirstOrDefault(c => c.Config.Id == config.Id)?.Connected ?? false;
+        }
     }
 
     /// <summary>Persists updated config, reconnects if enabled.</summary>
@@ -66,7 +78,10 @@ public class McpManager : IAsyncDisposable
         await DisconnectAsync(config.Id);
         if (!config.Enabled) return false;
         await ConnectInternalAsync(config, ct);
-        return _clients.FirstOrDefault(c => c.Config.Id == config.Id)?.Connected ?? false;
+        lock (_clients)
+        {
+            return _clients.FirstOrDefault(c => c.Config.Id == config.Id)?.Connected ?? false;
+        }
     }
 
     /// <summary>Removes from DB and disconnects.</summary>
@@ -85,7 +100,10 @@ public class McpManager : IAsyncDisposable
         var config = await _db.GetMcpServer(id);
         if (config is null) return false;
         await ConnectInternalAsync(config, ct);
-        return _clients.FirstOrDefault(c => c.Config.Id == id)?.Connected ?? false;
+        lock (_clients)
+        {
+            return _clients.FirstOrDefault(c => c.Config.Id == id)?.Connected ?? false;
+        }
     }
 
     /// <summary>Reloads config from DB and reconnects.</summary>
@@ -95,15 +113,24 @@ public class McpManager : IAsyncDisposable
         var config = await _db.GetMcpServer(id);
         if (config is null || !config.Enabled) return false;
         await ConnectInternalAsync(config, ct);
-        return _clients.FirstOrDefault(c => c.Config.Id == id)?.Connected ?? false;
+        lock (_clients)
+        {
+            return _clients.FirstOrDefault(c => c.Config.Id == id)?.Connected ?? false;
+        }
     }
 
     private async Task DisconnectAsync(string id)
     {
-        var existing = _clients.FirstOrDefault(c => c.Config.Id == id);
-        if (existing is null) return;
-        _clients.Remove(existing);
-        await existing.DisposeAsync();
+        McpClient? existing;
+        lock (_clients)
+        {
+            existing = _clients.FirstOrDefault(c => c.Config.Id == id);
+            if (existing is not null) _clients.Remove(existing);
+        }
+        if (existing is not null)
+        {
+            await existing.DisposeAsync();
+        }
     }
 
     // ── Agent integration ─────────────────────────────────────────────────
@@ -111,7 +138,9 @@ public class McpManager : IAsyncDisposable
     /// <summary>Returns all MCP tool definitions merged into OpenAI function-calling format.</summary>
     public JsonElement GetToolDefinitions()
     {
-        var tools = _clients
+        List<McpClient> snap;
+        lock (_clients) { snap = _clients.ToList(); }
+        var tools = snap
             .Where(c => c.Connected)
             .SelectMany(c => c.Tools)
             .Select(t => (object)new
@@ -128,12 +157,18 @@ public class McpManager : IAsyncDisposable
         return JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(tools));
     }
 
-    public bool IsMcpTool(string toolName) =>
-        _clients.Any(c => c.Connected && c.Tools.Any(t => t.Name == toolName));
+    public bool IsMcpTool(string toolName)
+    {
+        List<McpClient> snap;
+        lock (_clients) { snap = _clients.ToList(); }
+        return snap.Any(c => c.Connected && c.Tools.Any(t => t.Name == toolName));
+    }
 
     public async Task<string> ExecuteToolAsync(string toolName, JsonElement args, CancellationToken ct = default)
     {
-        var match = _clients
+        List<McpClient> snap;
+        lock (_clients) { snap = _clients.ToList(); }
+        var match = snap
             .Where(c => c.Connected)
             .Select(c => (Client: c, Tool: c.Tools.FirstOrDefault(t => t.Name == toolName)))
             .FirstOrDefault(x => x.Tool is not null);
@@ -142,8 +177,11 @@ public class McpManager : IAsyncDisposable
         return await match.Client.CallToolAsync(toolName, args, ct);
     }
 
-    public IReadOnlyList<McpServerInfo> GetServerInfos() =>
-        _clients.Select(c => new McpServerInfo(
+    public IReadOnlyList<McpServerInfo> GetServerInfos()
+    {
+        List<McpClient> snap;
+        lock (_clients) { snap = _clients.ToList(); }
+        return snap.Select(c => new McpServerInfo(
             c.Config.Id,
             c.Config.Name,
             c.Config.Type,
@@ -152,10 +190,17 @@ public class McpManager : IAsyncDisposable
             c.Tools.Select(t => t.Name).ToList(),
             c.LastError
         )).ToList();
+    }
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var client in _clients)
+        List<McpClient> snap;
+        lock (_clients)
+        {
+            snap = _clients.ToList();
+            _clients.Clear();
+        }
+        foreach (var client in snap)
             await client.DisposeAsync();
     }
 }
