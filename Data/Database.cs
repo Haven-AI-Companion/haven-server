@@ -93,11 +93,13 @@ public class Database
 
             CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);
             CREATE INDEX IF NOT EXISTS idx_messages_conv      ON messages(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_user_roles_user    ON user_roles(user_id);
             CREATE INDEX IF NOT EXISTS idx_conversations_user_comp ON conversations(user_id, companion_id);
             CREATE INDEX IF NOT EXISTS idx_episodic_user_comp   ON episodic_memories(user_id, companion_id);
             CREATE INDEX IF NOT EXISTS idx_semantic_user_comp   ON semantic_memories(user_id, companion_id);
             CREATE INDEX IF NOT EXISTS idx_paired_devices_token ON paired_devices(token, user_id);
+            CREATE INDEX IF NOT EXISTS idx_diaries_lookup       ON companion_diaries(user_id, companion_name, date_string);
 
             CREATE TABLE IF NOT EXISTS mcp_servers (
                 id         TEXT    PRIMARY KEY,

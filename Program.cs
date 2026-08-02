@@ -369,7 +369,6 @@ public class Program
         app.UseAuthorization();
         app.UseRateLimiter();
         app.MapControllers();
-        app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
         // Initialize MCP servers (non-fatal — server starts even if MCP servers fail)
         var mcpManager = app.Services.GetRequiredService<McpManager>();

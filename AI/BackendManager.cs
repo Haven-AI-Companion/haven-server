@@ -766,7 +766,7 @@ public class BackendManager
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var (backend, modelName) = await Resolve(modelId);
-        await foreach (var token in backend.StreamChat(modelName, messages).WithCancellation(ct))
+        await foreach (var token in backend.StreamChat(modelName, messages, ct).WithCancellation(ct))
             yield return token;
     }
 
