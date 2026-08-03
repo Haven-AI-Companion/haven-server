@@ -113,8 +113,10 @@ public class ProactiveAgencyService : BackgroundService
         {
             try
             {
-                // Unpredictable loop heartbeats: sleep for a random time between 30 to 90 seconds
-                var randomIntervalMs = Random.Shared.Next(30000, 90000);
+                // Read dynamic interval & toggle settings on every heartbeat for live hot-reloading
+                var minMs = Math.Max(5000, _config.GetValue<int>("ai:ProactiveMinIntervalSeconds", 30) * 1000);
+                var maxMs = Math.Max(minMs, _config.GetValue<int>("ai:ProactiveMaxIntervalSeconds", 90) * 1000);
+                var randomIntervalMs = Random.Shared.Next(minMs, maxMs + 1);
                 await Task.Delay(randomIntervalMs, stoppingToken);
 
                 var disableProactive = _config.GetValue<bool>("ai:DisableProactive", false);

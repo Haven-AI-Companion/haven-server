@@ -2311,7 +2311,24 @@ public class AdminController : ControllerBase
 
         await System.IO.File.WriteAllTextAsync(path,
             cfgRoot.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-        return Ok(new { ok = true, note = "Saved to config.json — some changes require restart." });
+
+        // Trigger dynamic live hot-reload of in-memory configuration
+        if (_config is IConfigurationRoot configRoot)
+        {
+            configRoot.Reload();
+        }
+
+        // Live state toggles for Proactive Agency & Lounge Services
+        if (body.ContainsKey("proactive_enabled"))
+        {
+            try { AshServer.AI.ProactiveAgencyService.IsProactiveAgencyEnabled = body["proactive_enabled"]!.GetValue<bool>(); } catch {}
+        }
+        else if (body.ContainsKey("ai:DisableProactive"))
+        {
+            try { AshServer.AI.ProactiveAgencyService.IsProactiveAgencyEnabled = !body["ai:DisableProactive"]!.GetValue<bool>(); } catch {}
+        }
+
+        return Ok(new { ok = true, note = "Configuration updated live in real-time — no server restart required!" });
     }
 
     [HttpGet("backends/detect")]

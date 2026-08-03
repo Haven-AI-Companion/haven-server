@@ -54,8 +54,10 @@ public class CompanionLoungeService : BackgroundService
         {
             try
             {
-                // Wait between 3 to 10 minutes between inter-companion conversations
-                var delayMs = Random.Shared.Next(180000, 600000);
+                // Read dynamic interval & toggle settings on every heartbeat for live hot-reloading
+                var minMs = Math.Max(10000, _config.GetValue<int>("ai:LoungeMinIntervalSeconds", 180) * 1000);
+                var maxMs = Math.Max(minMs, _config.GetValue<int>("ai:LoungeMaxIntervalSeconds", 600) * 1000);
+                var delayMs = Random.Shared.Next(minMs, maxMs + 1);
                 await Task.Delay(delayMs, stoppingToken);
 
                 var disableLounge = _config.GetValue<bool>("ai:DisableLounge", false);
