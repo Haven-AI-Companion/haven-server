@@ -4237,6 +4237,26 @@ public class CompanionsController : ControllerBase
             string firstMsg = data.TryGetProperty("first_mes", out var fm) ? fm.GetString() ?? "" : "";
             string systemPrompt = data.TryGetProperty("system_prompt", out var sp) ? sp.GetString() ?? "" : "";
 
+            // Deep metadata inspection for Multi-Companion cards (tags, is_group, description flags)
+            bool isGroupMeta = false;
+            if (data.TryGetProperty("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var tag in tagsEl.EnumerateArray())
+                {
+                    var t = tag.GetString()?.ToLowerInvariant() ?? "";
+                    if (t == "group" || t == "multi-character" || t == "couple" || t == "duo" || t == "trio" || t == "wives" || t == "roommates")
+                    {
+                        isGroupMeta = true;
+                        break;
+                    }
+                }
+            }
+
+            if (data.TryGetProperty("is_group", out var ig) && (ig.ValueKind == JsonValueKind.True || (ig.ValueKind == JsonValueKind.String && ig.GetString() == "true")))
+            {
+                isGroupMeta = true;
+            }
+
             int relationshipXp = 0;
             int messageCount = 0;
             string? currentOutfit = null;
@@ -4326,7 +4346,15 @@ public class CompanionsController : ControllerBase
             });
             await System.IO.File.WriteAllTextAsync(profilePath, profileJson);
 
-            return Ok(new { ok = true, character = config });
+            // If multi-companion card metadata was detected (tags, is_group, couple, wives)
+            if (isGroupMeta)
+            {
+                var groupId = $"group_{cleanName.ToLowerInvariant()}";
+                await _db.SaveGroup(UserId, groupId, name, name, desc, systemPrompt);
+                AshServer.AI.CompanionLoungeService.IsLoungeEnabled = true;
+            }
+
+            return Ok(new { ok = true, isMultiCompanion = isGroupMeta, character = config });
         }
         catch (Exception ex)
         {
