@@ -707,6 +707,81 @@ public class ModelManagerController : ControllerBase
             }
         }
     }
+
+    [HttpGet("store")]
+    public IActionResult GetModelCatalog()
+    {
+        var catalog = new[]
+        {
+            new
+            {
+                id = "gemma-4-2b-it-q4",
+                name = "Gemma 4 Nano (2B Q4_K_M)",
+                description = "Ultra-fast, lightweight companion model. Perfect for laptops, mobile devices, and low VRAM GPUs.",
+                size_mb = 1450,
+                recommended_ram_gb = 4,
+                recommended_vram_gb = 2,
+                filename = "gemma-4-2b-it-q4_k_m.gguf",
+                url = "https://huggingface.co/google/gemma-2b-it-GGUF/resolve/main/gemma-2b-it.gguf"
+            },
+            new
+            {
+                id = "gemma-4-9b-turbo",
+                name = "Gemma 4 Turbo (9B IQ4_XS)",
+                description = "High speed, creative roleplay & natural dialogue companion model.",
+                size_mb = 4200,
+                recommended_ram_gb = 8,
+                recommended_vram_gb = 6,
+                filename = "gemma4-e4b-iq4xs-turbo.gguf",
+                url = "https://huggingface.co/Haven-AI-Companion/haven-models/resolve/main/gemma4-e4b-iq4xs-turbo.gguf"
+            },
+            new
+            {
+                id = "haven-chat-v3",
+                name = "Haven Companion v3.0 (Q4_K_M)",
+                description = "Custom fine-tuned companion model optimized for deep empathy, memory recall, and warm banter.",
+                size_mb = 4600,
+                recommended_ram_gb = 8,
+                recommended_vram_gb = 6,
+                filename = "haven-chat-v3.0.gguf",
+                url = "https://huggingface.co/Haven-AI-Companion/haven-models/resolve/main/haven-chat-v3.0.gguf"
+            },
+            new
+            {
+                id = "llama-3.2-3b-it",
+                name = "Llama 3.2 Instruct (3B Q4_K_M)",
+                description = "Meta's highly capable 3B instruct model. Intelligent, responsive, and versatile.",
+                size_mb = 2020,
+                recommended_ram_gb = 6,
+                recommended_vram_gb = 4,
+                filename = "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+                url = "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+            },
+            new
+            {
+                id = "mistral-7b-instruct-v0.3",
+                name = "Mistral 7B Instruct (Q4_K_M)",
+                description = "High reasoning and roleplay capacity. Exceptional storytelling and intelligence.",
+                size_mb = 4370,
+                recommended_ram_gb = 10,
+                recommended_vram_gb = 8,
+                filename = "mistral-7b-instruct-v0.3.Q4_K_M.gguf",
+                url = "https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"
+            }
+        };
+
+        var profile = _profiler.ProfileSystem();
+        return Ok(new
+        {
+            catalog,
+            system_hardware = new
+            {
+                ram_gb = Math.Round(profile.TotalRamGb, 1),
+                has_cuda = profile.HasCuda,
+                recommended_model = profile.RecommendedModelSize
+            }
+        });
+    }
 }
 
 public class ActivateModelRequest
