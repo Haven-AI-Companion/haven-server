@@ -136,7 +136,7 @@ public class CompanionLoungeService : BackgroundService
                 {
                     var cleanReply = System.Text.RegularExpressions.Regex.Replace(
                         responseText, 
-                        @"^\s*\*?<?\s*thought\s*>?.*?</?\s*thought\s*>\s*", 
+                        @"<thought>[\s\S]*?</thought>|<\|channel\|?>thought[\s\S]*?(?=<\|channel\|?>|</thought>|\n\n[A-Z]|\Z)|</?thought[^>]*>|<\|channel\|?>[a-z_]*", 
                         "", 
                         System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
                     ).Trim().Replace("{{user}}", activeUsername);
@@ -216,7 +216,7 @@ public class CompanionLoungeService : BackgroundService
 
             var diaryContent = System.Text.RegularExpressions.Regex.Replace(
                 sb.ToString(),
-                @"^\s*\*?<?\s*thought\s*>?.*?</?\s*thought\s*>\s*",
+                @"<thought>[\s\S]*?</thought>|<\|channel\|?>thought[\s\S]*?(?=<\|channel\|?>|</thought>|\n\n[A-Z]|\Z)|</?thought[^>]*>|<\|channel\|?>[a-z_]*",
                 "",
                 System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
             ).Trim();
