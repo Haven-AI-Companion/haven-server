@@ -3979,16 +3979,29 @@ public class CompanionsController : ControllerBase
             // Auto-Detect Multi-Companion Cards (e.g. Malaika & Elizabeth) & Auto-Adjust Settings
             bool isMultiCompanion = false;
             var subNames = new List<string>();
-            var nameDelimiters = new[] { " & ", " and ", " / ", " + ", "&", "/" };
-            var nameParts = req.Name.Split(nameDelimiters, StringSplitOptions.RemoveEmptyEntries);
+            var nameDelimiters = new[] { " & ", " and ", " / ", " + ", "&", "/", "-" };
             
-            if (nameParts.Length >= 2)
+            // Clean title keyword checks (e.g. "Malaika and Elizabeth - lesbian couple" -> "Malaika and Elizabeth")
+            var titleBase = req.Name.Split(new[] { " - ", " – " }, StringSplitOptions.RemoveEmptyEntries)[0];
+            var nameParts = titleBase.Split(nameDelimiters, StringSplitOptions.RemoveEmptyEntries);
+            
+            var lowerName = req.Name.ToLowerInvariant();
+            var lowerDesc = (req.Description ?? "").ToLowerInvariant();
+            
+            bool keywordTrigger = lowerName.Contains("wives") || lowerName.Contains("couple") || 
+                                 lowerName.Contains("sisters") || lowerName.Contains("duo") || 
+                                 lowerName.Contains("pair") || lowerDesc.Contains("two separate characters") || 
+                                 lowerDesc.Contains("multiple characters");
+
+            if (nameParts.Length >= 2 || keywordTrigger)
             {
                 isMultiCompanion = true;
                 foreach (var p in nameParts)
                 {
                     var cleanSub = p.Trim();
-                    if (!string.IsNullOrWhiteSpace(cleanSub) && cleanSub.Length > 1 && !subNames.Contains(cleanSub, StringComparer.OrdinalIgnoreCase))
+                    if (!string.IsNullOrWhiteSpace(cleanSub) && cleanSub.Length > 1 && 
+                        !cleanSub.Equals("lesbian couple", StringComparison.OrdinalIgnoreCase) && 
+                        !subNames.Contains(cleanSub, StringComparer.OrdinalIgnoreCase))
                     {
                         subNames.Add(cleanSub);
                         var subPath = Path.Combine(localDir, $"{cleanSub.ToLowerInvariant()}.json");
