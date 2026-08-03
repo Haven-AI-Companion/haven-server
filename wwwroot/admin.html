@@ -1050,7 +1050,7 @@ select.form-input{cursor:pointer}
       <!-- Analytics -->
       <div class="tab-content" id="chat-providers">
         <p class="txt-muted" style="font-size:12px;margin-bottom:16px">
-          Connection credentials for external chat integrations. Saved directly to <code class="mono">appsettings.json</code> — a server restart is needed to apply connection changes. Tokens are masked after saving.
+          Connection credentials for external chat integrations. Saved directly and updated live in real time. Tokens are masked after saving.
         </p>
 
         <!-- Bot Link Secret -->
@@ -1446,7 +1446,7 @@ select.form-input{cursor:pointer}
         </div>
         <div class="card">
           <div class="card-title">Server Configuration <button class="btn btn-sm" onclick="toggleConfigMode()" id="config-mode-toggle">Advanced JSON</button></div>
-          <p class="txt-muted" style="font-size:12px;margin-bottom:16px;">Changes require a server restart to take effect.</p>
+          <p class="txt-muted" style="font-size:12px;margin-bottom:16px;">✨ Settings update live in real-time — zero server restart required!</p>
           <div id="config-menu">
             <div class="config-block">
               <div class="config-block-title">Server</div>
@@ -2668,7 +2668,7 @@ async function saveConfigFromMenu(event) {
     const resp = await fetch('/api/admin/config', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(config) });
     const result = await resp.json();
     if (!resp.ok) throw new Error(result.detail || 'Save failed');
-    toast(result.message || 'Configuration saved — restart server to apply');
+    toast(result.message || 'Configuration updated live in real time!');
     btn.textContent = 'Saved!';
     setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
     loadStats();
@@ -4219,7 +4219,7 @@ async function saveSidecarSettings() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to save configurations');
-    toast('Configurations saved successfully! Restart sidecars to apply.');
+    toast('Configurations saved and applied live in real time!');
     loadStats();
   } catch (err) {
     toast(`Error: ${err.message}`, 'error');
