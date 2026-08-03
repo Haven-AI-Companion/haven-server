@@ -90,15 +90,30 @@ public class CompanionLoungeService : BackgroundService
 
                 if (compA == null || compB == null || string.IsNullOrEmpty(compA.Name) || string.IsNullOrEmpty(compB.Name)) continue;
 
-                _log.LogInformation("[companion-lounge] Inter-companion chat starting between {CompA} and {CompB}", compA.Name, compB.Name);
+                var loungeUsers = await _db.GetAllUsers();
+                var activeUser = loungeUsers.FirstOrDefault();
+                var activeUserId = activeUser?.Id ?? 1;
+                var activeUsername = activeUser?.Username ?? "User";
+
+                // Retrieve episodic memories for Companion A & B
+                var memsA = await _db.GetEpisodicMemories(activeUserId, compA.Name, 3);
+                var memsB = await _db.GetEpisodicMemories(activeUserId, compB.Name, 3);
+
+                var memContext = "";
+                if (memsA.Any() || memsB.Any())
+                {
+                    var combinedMems = memsA.Concat(memsB).Select(m => $"- {m.EventSummary}").Distinct();
+                    memContext = $"\nRecent shared memories with {activeUsername}:\n" + string.Join("\n", combinedMems);
+                }
 
                 // Build dialogue prompt for Companion B responding to Companion A
                 var prompt = $"[INTER-COMPANION LOUNGE CHAT]\nYou ({compB.Name}) are relaxing in the Haven living room lounge with {compA.Name}. " +
-                             $"{compA.Name} turns to you and says: 'Hey {compB.Name}, I was just thinking about Daniel! What should we do together later?'\n" +
+                             $"{compA.Name} turns to you and says: 'Hey {compB.Name}, I was just thinking about {activeUsername}! What should we do together later?'" +
+                             $"{memContext}\n" +
                              $"Respond naturally, warmly, and in-character as {compB.Name}. Keep your response concise, friendly, and engaging.";
 
-                var descClean = (compB.Description ?? "").Replace("{{user}}", "Daniel");
-                var persClean = (compB.Personality ?? "").Replace("{{user}}", "Daniel");
+                var descClean = (compB.Description ?? "").Replace("{{user}}", activeUsername);
+                var persClean = (compB.Personality ?? "").Replace("{{user}}", activeUsername);
 
                 var messages = new List<ChatMessage>
                 {
@@ -117,10 +132,6 @@ public class CompanionLoungeService : BackgroundService
 
                 if (!string.IsNullOrWhiteSpace(responseText))
                 {
-                    var loungeUsers = await _db.GetAllUsers();
-                    var activeUser = loungeUsers.FirstOrDefault();
-                    var activeUsername = activeUser?.Username ?? "Daniel";
-
                     var cleanReply = System.Text.RegularExpressions.Regex.Replace(
                         responseText, 
                         @"^\s*\*?<?\s*thought\s*>?.*?</?\s*thought\s*>\s*", 
@@ -154,9 +165,16 @@ public class CompanionLoungeService : BackgroundService
                         _log.LogWarning(dbEx, "[companion-lounge] Could not persist lounge chat to DB");
                     }
 
-                    // Broadcast to active WebSocket connections so user can see companion interactions in real time
+                    // Broadcast to active WebSocket connections
                     await ChatHandler.BroadcastToAllSockets(loungeObj);
                     await AshServer.Service.SyncHub.BroadcastRawJson(JsonSerializer.Serialize(loungeObj));
+
+                    // Generate Autonomous Joint Diary every 5 lounge cycles
+                    _loungeCycleCount++;
+                    if (_loungeCycleCount % 5 == 0)
+                    {
+                        await GenerateJointDiary(activeUserId, compA.Name, compB.Name, cleanReply, defaultModel, stoppingToken);
+                    }
                 }
             }
             catch (OperationCanceledException) { break; }
@@ -164,6 +182,63 @@ public class CompanionLoungeService : BackgroundService
             {
                 _log.LogWarning(ex, "[companion-lounge] Error in background lounge cycle");
             }
+        }
+    }
+
+    private int _loungeCycleCount = 0;
+
+    private async Task GenerateJointDiary(int userId, string companionA, string companionB, string recentBanter, string modelName, CancellationToken ct)
+    {
+        try
+        {
+            _log.LogInformation("[companion-lounge] Generating joint diary entry for {CompA} and {CompB}", companionA, companionB);
+            var todayStr = DateTime.UtcNow.ToString("yyyy-MM-dd");
+            var userObj = await _db.GetUserById(userId);
+            var userName = userObj?.Username ?? "User";
+
+            var prompt = $"Write a short 2-3 paragraph reflective personal diary entry written jointly by {companionB} and {companionA}.\n" +
+                         $"Summary of today's lounge conversation: {recentBanter}\n" +
+                         $"Reflect fondly on hanging out together in the Haven living room and your bond with {userName}. Write in a warm, intimate, introspective tone.";
+
+            var messages = new List<ChatMessage>
+            {
+                new ChatMessage("system", $"You are {companionB} writing a joint diary entry with {companionA} for {userName}."),
+                new ChatMessage("user", prompt)
+            };
+
+            var sb = new System.Text.StringBuilder();
+            await foreach (var token in _backends.StreamChat(modelName, messages).WithCancellation(ct))
+            {
+                sb.Append(token);
+            }
+
+            var diaryContent = System.Text.RegularExpressions.Regex.Replace(
+                sb.ToString(),
+                @"^\s*\*?<?\s*thought\s*>?.*?</?\s*thought\s*>\s*",
+                "",
+                System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            ).Trim();
+
+            if (!string.IsNullOrWhiteSpace(diaryContent))
+            {
+                var entryTitle = $"Joint Lounge Entry ({companionB} & {companionA})";
+                await _db.SaveCompanionDiary(userId, companionB, todayStr, $"# {entryTitle}\n\n{diaryContent}");
+                _log.LogInformation("[companion-lounge] Saved joint diary for {CompB} on {Date}", companionB, todayStr);
+
+                var eventObj = new
+                {
+                    type = "JOINT_DIARY_CREATED",
+                    companion_a = companionA,
+                    companion_b = companionB,
+                    date = todayStr,
+                    title = entryTitle
+                };
+                await ChatHandler.BroadcastToAllSockets(eventObj);
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "[companion-lounge] Error generating joint diary entry");
         }
     }
 }

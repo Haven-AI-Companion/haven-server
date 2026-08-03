@@ -1078,7 +1078,8 @@ public class ModelsController : ControllerBase
         list.AddRange(kokoroVoices);
 
         // 2. Scan Piper ONNX models directory
-        var modelsDir = @"C:\Users\admin\piper\piper\models";
+        var baseToolsDir = Path.Combine(AppContext.BaseDirectory, "tools");
+        var modelsDir = _config["PiperModelDir"] ?? Path.Combine(baseToolsDir, "piper", "models");
         if (System.IO.Directory.Exists(modelsDir))
         {
             try
@@ -1119,6 +1120,7 @@ public class ModelsController : ControllerBase
 
         try
         {
+            var baseToolsDir = Path.Combine(AppContext.BaseDirectory, "tools");
             var filename = $"tts_{Guid.NewGuid().ToString("N")[..12]}.wav";
             var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
             
@@ -1156,8 +1158,8 @@ public class ModelsController : ControllerBase
 
             if (isKokoro)
             {
-                var pythonExe = @"C:\Users\admin\AppData\Local\Python\pythoncore-3.14-64\python.exe";
-                var kokoroScript = @"C:\Users\admin\piper\piper\kokoro_tts.py";
+                var pythonExe = _config["PythonPath"] ?? "python";
+                var kokoroScript = _config["KokoroScriptPath"] ?? Path.Combine(baseToolsDir, "piper", "kokoro_tts.py");
                 
                 if (!System.IO.File.Exists(pythonExe))
                     return StatusCode(500, new { error = "python.exe was not found on the server." });
@@ -1201,10 +1203,11 @@ public class ModelsController : ControllerBase
 
                 var modelPath = Path.Combine(baseDir, $"{voiceName}.onnx");
                 var configPath = Path.Combine(baseDir, $"{voiceName}.onnx.json");
-                var piperExe = @"C:\Users\admin\piper\piper\piper.exe";
-
+                var piperExe = _config["PiperPath"] ?? _config["piper:path"] ?? Path.Combine(baseToolsDir, "piper", "piper.exe");
                 if (!System.IO.File.Exists(piperExe))
-                    return StatusCode(500, new { error = "piper.exe was not found on the server." });
+                {
+                    piperExe = "piper"; // fallback to system PATH
+                }
 
                 var processStartInfo = new System.Diagnostics.ProcessStartInfo
                 {
@@ -3125,7 +3128,7 @@ public class McpController : ControllerBase
         }
         catch
         {
-            var fallbackPath = @"C:\Users\admin\.gemini\antigravity\scratch\mcp-registry\registry.json";
+            var fallbackPath = Path.Combine(AppContext.BaseDirectory, "mcp-registry", "registry.json");
             if (System.IO.File.Exists(fallbackPath))
             {
                 json = await System.IO.File.ReadAllTextAsync(fallbackPath);

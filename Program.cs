@@ -634,16 +634,18 @@ public class Program
             }
 
             // ── Setup paths ──
-            var whisperExe = @"C:\Users\admin\whisper-cpp\Release\whisper-cli.exe";
-            var whisperModel = @"C:\Users\admin\whisper-cpp\models\ggml-base.en.bin";
-            var piperExe = @"C:\Users\admin\piper\piper\piper.exe";
-            var piperModel = $@"C:\Users\admin\piper\piper\models\{voiceId}.onnx";
-            var piperConfig = $@"C:\Users\admin\piper\piper\models\{voiceId}.onnx.json";
+            var baseToolsDir = Path.Combine(AppContext.BaseDirectory, "tools");
+            var whisperExe = config["WhisperPath"] ?? Path.Combine(baseToolsDir, "whisper-cpp", "whisper-cli.exe");
+            var whisperModel = config["WhisperModel"] ?? Path.Combine(baseToolsDir, "whisper-cpp", "models", "ggml-base.en.bin");
+            var piperExe = config["PiperPath"] ?? Path.Combine(baseToolsDir, "piper", "piper.exe");
+            var piperModelDir = config["PiperModelDir"] ?? Path.Combine(baseToolsDir, "piper", "models");
+            var piperModel = Path.Combine(piperModelDir, $"{voiceId}.onnx");
+            var piperConfig = Path.Combine(piperModelDir, $"{voiceId}.onnx.json");
 
             if (!File.Exists(piperModel))
             {
-                piperModel = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx";
-                piperConfig = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx.json";
+                piperModel = Path.Combine(piperModelDir, "en_US-amy-medium.onnx");
+                piperConfig = Path.Combine(piperModelDir, "en_US-amy-medium.onnx.json");
             }
 
             var modelId = config["DefaultModel"] ?? "default";

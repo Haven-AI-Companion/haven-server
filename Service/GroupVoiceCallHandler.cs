@@ -81,7 +81,9 @@ namespace AshServer.Service
             Console.WriteLine($"[GroupVoice] Started multi-companion group call '{groupName}' with {characters.Count} companions ({string.Join(", ", characters.Select(c => c.Name))})");
 
             var modelId = config["DefaultModel"] ?? "default";
-            var piperExe = @"C:\Users\admin\piper\piper\piper.exe";
+            var baseToolsDir = Path.Combine(AppContext.BaseDirectory, "tools");
+            var piperExe = config["PiperPath"] ?? Path.Combine(baseToolsDir, "piper", "piper.exe");
+            var piperModelDir = config["PiperModelDir"] ?? Path.Combine(baseToolsDir, "piper", "models");
 
             int speakerIndex = 0;
 
@@ -142,8 +144,8 @@ namespace AshServer.Service
                 await ws.SendAsync(new ArraySegment<byte>(metaBytes), WebSocketMessageType.Text, true, CancellationToken.None);
 
                 // Synthesize TTS audio if Piper model exists
-                var piperModel = $@"C:\Users\admin\piper\piper\models\{currentComp.VoiceId}.onnx";
-                if (!File.Exists(piperModel)) piperModel = @"C:\Users\admin\piper\piper\models\en_US-amy-medium.onnx";
+                var piperModel = Path.Combine(piperModelDir, $"{currentComp.VoiceId}.onnx");
+                if (!File.Exists(piperModel)) piperModel = Path.Combine(piperModelDir, "en_US-amy-medium.onnx");
 
                 if (File.Exists(piperExe) && File.Exists(piperModel))
                 {

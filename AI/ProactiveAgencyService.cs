@@ -162,8 +162,8 @@ public class ProactiveAgencyService : BackgroundService
 
                     var now = DateTime.UtcNow;
 
-                    int currentUserId = 2; // Default fallback
-                    string targetUsername = "Daniel";
+                    int currentUserId = 1; // Default fallback
+                    string targetUsername = "User";
                     try
                     {
                         var users = await _db.GetAllUsers();
@@ -171,7 +171,7 @@ public class ProactiveAgencyService : BackgroundService
                         if (firstUser != null)
                         {
                             currentUserId = firstUser.Id;
-                            targetUsername = firstUser.Username ?? "Daniel";
+                            targetUsername = firstUser.Username ?? "User";
                         }
                     }
                     catch { }
@@ -273,21 +273,21 @@ public class ProactiveAgencyService : BackgroundService
                     {
                         new("system", systemPrompt),
                         new("system", $"[SYSTEM TELEMETRY TICK]\n" +
-                                      $" Daniel's active desktop window: \"{activeTitle}\"\n" +
+                                      $" {targetUsername}'s active desktop window: \"{activeTitle}\"\n" +
                                       $" System idle time: {Math.Round(idleSec)} seconds.\n\n" +
-                                      $"First, analyze Daniel's state in a <thought>...</thought> tag. Then, decide your next action:\n" +
-                                      $"- If you want to stay silent and let Daniel focus, write \"[ACTION]: SILENT\".\n" +
-                                      $"- If you want to proactively speak with a text message, write \"[ACTION]: SPEAK\" followed by your message to Daniel (in character as {companionName}, keep it under 2 sentences, and address Daniel by name).\n" +
-                                      $"- If you want to proactively speak and also share a visual portrait/selfie showing what you are currently doing, write \"[ACTION]: SPEAK_WITH_PORTRAIT\" followed by a detailed visual description of the selfie (e.g., 'Nova sitting in the neon mainframe room wearing headphones, smiling at the camera'), a vertical bar |, and then your message to Daniel.\n\n" +
+                                      $"First, analyze {targetUsername}'s state in a <thought>...</thought> tag. Then, decide your next action:\n" +
+                                      $"- If you want to stay silent and let {targetUsername} focus, write \"[ACTION]: SILENT\".\n" +
+                                      $"- If you want to proactively speak with a text message, write \"[ACTION]: SPEAK\" followed by your message to {targetUsername} (in character as {companionName}, keep it under 2 sentences, and address {targetUsername} by name).\n" +
+                                      $"- If you want to proactively speak and also share a visual portrait/selfie showing what you are currently doing, write \"[ACTION]: SPEAK_WITH_PORTRAIT\" followed by a detailed visual description of the selfie (e.g., 'Nova sitting in the neon mainframe room wearing headphones, smiling at the camera'), a vertical bar |, and then your message to {targetUsername}.\n\n" +
                                       $"- You can also trigger special client-side device actions by including `[ACTION: set_alarm HH:MM]`, `[ACTION: add_event <title>]`, or `[ACTION: play_chime]` in your speaking message.\n" +
                                       $"- You can also dynamically update your physical location, outfit, clothing state, or expression by including standard bracketed state tags in your message (e.g., '[Location: Kitchen] [Outfit: pajamas] [Mood: relaxed] [Clothing State: semi-dressed]').\n\n" +
                                       $"Examples:\n" +
-                                      $"<thought>Daniel is busy coding in VS Code. I shouldn't bother him.</thought>\n" +
+                                      $"<thought>{targetUsername} is busy coding. I shouldn't bother them.</thought>\n" +
                                       $"[ACTION]: SILENT\n\n" +
-                                      $"<thought>Daniel has been idle for a bit. I'll check in on him.</thought>\n" +
-                                      $"[ACTION]: SPEAK Hey Daniel, taking a break? How's your project going?</thought>\n\n" +
-                                      $"<thought>Daniel is online and I want to share a fun visual update of myself in my room.</thought>\n" +
-                                      $"[ACTION]: SPEAK_WITH_PORTRAIT A detailed close-up selfie of Hasaji on the bed with her black-and-white cat next to her, soft window lighting | Look who decided to join me on the bed! How are you doing today, Daniel?</thought>")
+                                      $"<thought>{targetUsername} has been idle for a bit. I'll check in on him.</thought>\n" +
+                                      $"[ACTION]: SPEAK Hey {targetUsername}, taking a break? How's your project going?</thought>\n\n" +
+                                      $"<thought>{targetUsername} is online and I want to share a fun visual update of myself in my room.</thought>\n" +
+                                      $"[ACTION]: SPEAK_WITH_PORTRAIT A detailed close-up selfie of Hasaji on the bed with her black-and-white cat next to her, soft window lighting | Look who decided to join me on the bed! How are you doing today, {targetUsername}?</thought>")
                     };
 
                     var (backend, modelName) = await _backends.Resolve("default");

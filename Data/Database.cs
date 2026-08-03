@@ -1811,6 +1811,22 @@ public class Database
         cmd.ExecuteNonQuery();
     });
 
+    public Task SaveCompanionDiary(int userId, string companionName, string dateString, string content) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO companion_diaries (user_id, companion_name, date_string, content)
+            VALUES ($uid, $comp, $dt, $cnt)
+            ON CONFLICT(user_id, companion_name, date_string) DO UPDATE SET content = $cnt, created_at = (datetime('now'));
+            """;
+        cmd.Parameters.AddWithValue("$uid", userId);
+        cmd.Parameters.AddWithValue("$comp", companionName);
+        cmd.Parameters.AddWithValue("$dt", dateString);
+        cmd.Parameters.AddWithValue("$cnt", content);
+        cmd.ExecuteNonQuery();
+    });
+
     // ── 3-Tier Memory System (Episodic & Semantic) ───────────────────────────
 
     public Task AddEpisodicMemory(int userId, string companionId, string eventSummary, string dateString) => Task.Run(() =>
