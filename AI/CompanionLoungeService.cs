@@ -29,6 +29,14 @@ public class CompanionLoungeService : BackgroundService
     public static bool IsLoungeEnabled { get; set; } = true;
     public static bool IsUserChatActive { get; set; } = false;
 
+    public static void ClearLoungeMessages()
+    {
+        lock (LoungeLock)
+        {
+            RecentLoungeMessages.Clear();
+        }
+    }
+
     public CompanionLoungeService(
         Database db,
         BackendManager backends,

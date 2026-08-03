@@ -2001,6 +2001,14 @@ public Task<List<LoungeChatEntry>> GetRecentLoungeChats(int limit = 50) => Task.
     return list;
 });
 
+public Task ClearLoungeChats() => Task.Run(() =>
+{
+    using var conn = Open();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "DELETE FROM lounge_chats";
+    cmd.ExecuteNonQuery();
+});
+
     public Task UpdateAffectState(int userId, string companionId, double valence, double arousal, double dominance, string primaryMood) => Task.Run(() =>
     {
         using var conn = Open();
