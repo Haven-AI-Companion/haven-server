@@ -687,7 +687,7 @@ public class ChatHandler
 
                             var cleanResponseText = System.Text.RegularExpressions.Regex.Replace(
                                 responseText, 
-                                @"^\s*\*?<?\s*thought\s*>?.*?</?\s*thought\s*>\s*", 
+                                @"<thought>[\s\S]*?</thought>|<\|?channel\|?>thought[\s\S]*?(?=<\|?channel\|?>|</thought>|\n\n[A-Z]|\Z)|</?thought[^>]*>|<\|?channel\|?>[a-z_]*|<channel\|?>|<\|channel", 
                                 "", 
                                 System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
                             ).Replace("<call>generate_portrait</call>", "").Trim();

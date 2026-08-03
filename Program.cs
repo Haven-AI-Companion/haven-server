@@ -754,7 +754,7 @@ public class Program
                     }
 
                     var replyText = replyBuilder.ToString().Trim();
-                    replyText = System.Text.RegularExpressions.Regex.Replace(replyText, @"<thought>[\s\S]*?</thought>|<\|channel\|?>thought[\s\S]*?(?=<\|channel\|?>|</thought>|\n\n[A-Z]|\Z)|</?thought[^>]*>|<\|channel\|?>[a-z_]*", "").Trim();
+                    replyText = System.Text.RegularExpressions.Regex.Replace(replyText, @"<thought>[\s\S]*?</thought>|<\|?channel\|?>thought[\s\S]*?(?=<\|?channel\|?>|</thought>|\n\n[A-Z]|\Z)|</?thought[^>]*>|<\|?channel\|?>[a-z_]*|<channel\|?>|<\|channel", "").Trim();
 
                     history.Add(new ChatMessage("assistant", replyText));
 

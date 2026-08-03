@@ -136,7 +136,7 @@ public class CompanionLoungeService : BackgroundService
                 {
                     var cleanReply = System.Text.RegularExpressions.Regex.Replace(
                         responseText, 
-                        @"<thought>[\s\S]*?</thought>|<\|channel\|?>thought[\s\S]*?(?=<\|channel\|?>|</thought>|\n\n[A-Z]|\Z)|</?thought[^>]*>|<\|channel\|?>[a-z_]*", 
+                        @"<thought>[\s\S]*?</thought>|<\|?channel\|?>thought[\s\S]*?(?=<\|?channel\|?>|</thought>|\n\n[A-Z]|\Z)|</?thought[^>]*>|<\|?channel\|?>[a-z_]*|<channel\|?>|<\|channel", 
                         "", 
                         System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
                     ).Trim().Replace("{{user}}", activeUsername);
