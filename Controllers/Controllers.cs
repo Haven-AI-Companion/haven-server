@@ -4257,6 +4257,33 @@ public class CompanionsController : ControllerBase
                 isGroupMeta = true;
             }
 
+            // Inspect V3 extensions object (data.extensions.group / data.extensions.members / data.extensions.chara_group)
+            var extensionMembers = new List<string>();
+            if (data.TryGetProperty("extensions", out var extObj) && extObj.ValueKind == JsonValueKind.Object)
+            {
+                if (extObj.TryGetProperty("group", out var groupExt))
+                {
+                    isGroupMeta = true;
+                    if (groupExt.TryGetProperty("members", out var memEl) && memEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var m in memEl.EnumerateArray())
+                        {
+                            var mStr = m.GetString()?.Trim();
+                            if (!string.IsNullOrWhiteSpace(mStr)) extensionMembers.Add(mStr);
+                        }
+                    }
+                }
+                if (extObj.TryGetProperty("members", out var directMembers) && directMembers.ValueKind == JsonValueKind.Array)
+                {
+                    isGroupMeta = true;
+                    foreach (var m in directMembers.EnumerateArray())
+                    {
+                        var mStr = m.GetString()?.Trim();
+                        if (!string.IsNullOrWhiteSpace(mStr) && !extensionMembers.Contains(mStr)) extensionMembers.Add(mStr);
+                    }
+                }
+            }
+
             int relationshipXp = 0;
             int messageCount = 0;
             string? currentOutfit = null;
