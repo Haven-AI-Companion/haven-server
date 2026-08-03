@@ -3976,6 +3976,51 @@ public class CompanionsController : ControllerBase
             });
             System.IO.File.WriteAllText(filePath, json);
 
+            // Auto-Detect Multi-Companion Cards (e.g. Malaika & Elizabeth) & Auto-Adjust Settings
+            bool isMultiCompanion = false;
+            var subNames = new List<string>();
+            var nameDelimiters = new[] { " & ", " and ", " / ", " + ", "&", "/" };
+            var nameParts = req.Name.Split(nameDelimiters, StringSplitOptions.RemoveEmptyEntries);
+            
+            if (nameParts.Length >= 2)
+            {
+                isMultiCompanion = true;
+                foreach (var p in nameParts)
+                {
+                    var cleanSub = p.Trim();
+                    if (!string.IsNullOrWhiteSpace(cleanSub) && cleanSub.Length > 1 && !subNames.Contains(cleanSub, StringComparer.OrdinalIgnoreCase))
+                    {
+                        subNames.Add(cleanSub);
+                        var subPath = Path.Combine(localDir, $"{cleanSub.ToLowerInvariant()}.json");
+                        if (!System.IO.File.Exists(subPath))
+                        {
+                            var subCfg = new CompanionConfig
+                            {
+                                Name = cleanSub,
+                                Description = $"Companion from multi-companion pair '{req.Name}'. {req.Description}",
+                                Personality = req.Personality,
+                                SystemPrompt = req.SystemPrompt,
+                                FirstMessage = $"Hi there! I'm {cleanSub}. {req.FirstMessage}",
+                                BodyType = req.BodyType,
+                                BodyShape = req.BodyShape
+                            };
+                            System.IO.File.WriteAllText(subPath, JsonSerializer.Serialize(subCfg, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+                        }
+                    }
+                }
+
+                if (subNames.Count >= 2)
+                {
+                    // Auto-register Group Chat for multi-companion pair
+                    var groupId = $"group_{cleanName.ToLowerInvariant()}";
+                    var charNamesString = string.Join(", ", subNames);
+                    await _db.SaveGroup(UserId, groupId, req.Name, charNamesString, req.Description, req.SystemPrompt);
+
+                    // Auto-adjust server settings: Enable Companion Lounge for multi-companion banter
+                    AshServer.AI.CompanionLoungeService.IsLoungeEnabled = true;
+                }
+            }
+
             var conv = !string.IsNullOrEmpty(req.ConversationId) 
                 ? await _db.GetConversation(req.ConversationId, UserId) 
                 : await _db.GetConversationByCompanion(UserId, req.Name);
@@ -3994,7 +4039,13 @@ public class CompanionsController : ControllerBase
                 );
             }
 
-            return Ok(new { ok = true, message = $"Companion '{req.Name}' saved locally successfully.", config = req });
+            return Ok(new { 
+                ok = true, 
+                message = $"Companion '{req.Name}' saved locally successfully.", 
+                isMultiCompanion = isMultiCompanion,
+                subCompanions = subNames,
+                config = req 
+            });
         }
         catch (Exception ex)
         {
