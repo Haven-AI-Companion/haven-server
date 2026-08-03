@@ -439,7 +439,7 @@ public class HardwareProfiler
             }
             else
             {
-                Console.Error.WriteLine("[profiler] sd-server.exe not found at C:\\Users\\admin\\stable-diffusion-cpp\\sd-server.exe");
+                Console.Error.WriteLine($"[profiler] sd-server.exe not found at {execPath}");
             }
         }
     }

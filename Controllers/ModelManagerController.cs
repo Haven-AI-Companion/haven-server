@@ -105,11 +105,20 @@ public class ModelManagerController : ControllerBase
                     Console.WriteLine("[ModelsAdmin] Stop requested to apply new model configuration...");
                     _profiler.StopLocalBackend();
                     
-                    // Give process termination a moment to release handles/ports
+                    // Give process termination a moment to release handles/ports/VRAM
                     await Task.Delay(2000);
 
                     Console.WriteLine($"[ModelsAdmin] Restarting local backends with active model: {modelFilename}...");
                     await _profiler.InitializeLocalBackendAsync();
+
+                    var hotswapEvent = new
+                    {
+                        type = "MODEL_HOTSWAPPED",
+                        model = modelFilename,
+                        timestamp = DateTime.UtcNow.ToString("o")
+                    };
+                    await AshServer.Chat.ChatHandler.BroadcastToAllSockets(hotswapEvent);
+                    await AshServer.Service.SyncHub.BroadcastRawJson(System.Text.Json.JsonSerializer.Serialize(hotswapEvent));
                 }
                 catch (Exception ex)
                 {
