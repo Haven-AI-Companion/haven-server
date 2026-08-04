@@ -795,7 +795,7 @@ public class BackendManager
 
             var cleanContent = System.Text.RegularExpressions.Regex.Replace(
                 msg.Content, 
-                @"<(?:\|channel>)?thought[^>]*>.*?</(?:\|channel>)?thought>", 
+                @"(?:<\|?channel\|?>)?thought[\s\S]*?(?:<\|?channel\|?>|</thought>|(?=\n\n[A-Z])|\Z)|<thought>[\s\S]*?</thought>|</?thought[^>]*>|<\|?channel\|?>[a-z_]*|<channel\|?>|<\|channel|<call>[\s\S]*?</call>|<call>[^>]*>", 
                 "", 
                 System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase
             );
