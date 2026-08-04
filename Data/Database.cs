@@ -2009,6 +2009,14 @@ public Task ClearLoungeChats() => Task.Run(() =>
     cmd.ExecuteNonQuery();
 });
 
+public Task PurgeAllMessagesAndConversations() => Task.Run(() =>
+{
+    using var conn = Open();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "DELETE FROM messages; DELETE FROM conversations; DELETE FROM lounge_chats; DELETE FROM conversation_states;";
+    cmd.ExecuteNonQuery();
+});
+
     public Task UpdateAffectState(int userId, string companionId, double valence, double arousal, double dominance, string primaryMood) => Task.Run(() =>
     {
         using var conn = Open();

@@ -5390,6 +5390,16 @@ public class LoungeController : ControllerBase
         await AshServer.Chat.ChatHandler.BroadcastToAllSockets(broadcastObj);
         return Ok(new { success = true, message = "Companion Lounge cleared successfully!" });
     }
+
+    [HttpPost("purge-all")]
+    public async Task<IActionResult> PurgeAllChats()
+    {
+        await _db.PurgeAllMessagesAndConversations();
+        CompanionLoungeService.ClearLoungeMessages();
+        var broadcastObj = new { type = "ALL_CHATS_PURGED" };
+        await AshServer.Chat.ChatHandler.BroadcastToAllSockets(broadcastObj);
+        return Ok(new { success = true, message = "All chat messages, conversations, and lounge history purged!" });
+    }
 }
 
 public record ProactiveToggleRequest(bool Enabled);
