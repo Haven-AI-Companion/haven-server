@@ -131,10 +131,10 @@ public class CompanionLoungeService : BackgroundService
                     new ChatMessage("user", prompt)
                 };
 
-                var defaultModel = _config["DefaultModel"] ?? "";
+                var modelToUse = _config["LoungeModel"] ?? _config["DefaultModel"] ?? "";
                 var sbResponse = new System.Text.StringBuilder();
 
-                await foreach (var token in _backends.StreamChat(defaultModel, messages).WithCancellation(stoppingToken))
+                await foreach (var token in _backends.StreamChat(modelToUse, messages).WithCancellation(stoppingToken))
                 {
                     sbResponse.Append(token);
                 }
@@ -183,7 +183,7 @@ public class CompanionLoungeService : BackgroundService
                     _loungeCycleCount++;
                     if (_loungeCycleCount % 5 == 0)
                     {
-                        await GenerateJointDiary(activeUserId, compA.Name, compB.Name, cleanReply, defaultModel, stoppingToken);
+                        await GenerateJointDiary(activeUserId, compA.Name, compB.Name, cleanReply, modelToUse, stoppingToken);
                     }
                 }
             }

@@ -5421,3 +5421,79 @@ public class ProactiveController : ControllerBase
         return Ok(new { enabled = ProactiveAgencyService.IsProactiveAgencyEnabled, ok = true });
     }
 }
+
+// ── Companion Neural Voice & TTS Controller ────────────────────────────────────
+
+[ApiController]
+[Route("api/tts")]
+public class TtsController : ControllerBase
+{
+    [HttpGet("voices")]
+    public IActionResult GetCompanionVoices()
+    {
+        var voices = new List<object>
+        {
+            new { companion = "Malaika", voiceId = "en-US-MalaikaNeural", style = "energetic", pitch = 1.1, rate = 1.05 },
+            new { companion = "Elizabeth", voiceId = "en-US-ElizabethNeural", style = "gentle_cozy", pitch = 0.95, rate = 0.95 },
+            new { companion = "Ash", voiceId = "en-US-AshNeural", style = "calm_thoughtful", pitch = 1.0, rate = 1.0 },
+            new { companion = "Default", voiceId = "en-US-NaturalNeural", style = "friendly", pitch = 1.0, rate = 1.0 }
+        };
+        return Ok(voices);
+    }
+
+    [HttpPost("speak")]
+    public IActionResult SpeakText([FromBody] JsonElement body)
+    {
+        var text = body.TryGetProperty("text", out var t) ? t.GetString() : "";
+        var companion = body.TryGetProperty("companion", out var c) ? c.GetString() : "Default";
+        return Ok(new { success = true, text, companion, audioUrl = (string?)null, format = "mp3" });
+    }
+}
+
+// ── Companion Selfies & Diary Journal Controller ───────────────────────────────
+
+[ApiController]
+[Route("api/diary")]
+public class DiaryController : ControllerBase
+{
+    private static readonly List<object> CompanionDiaries = new();
+
+    [HttpGet("entries")]
+    public IActionResult GetDiaryEntries([FromQuery] string? companion)
+    {
+        lock (CompanionDiaries)
+        {
+            var list = string.IsNullOrEmpty(companion) 
+                ? CompanionDiaries 
+                : CompanionDiaries.Where(d => (d as dynamic)?.companion == companion).ToList();
+            return Ok(list);
+        }
+    }
+
+    [HttpPost("create")]
+    public IActionResult AddDiaryEntry([FromBody] JsonElement body)
+    {
+        var companion = body.TryGetProperty("companion", out var c) ? c.GetString() : "Companion";
+        var title = body.TryGetProperty("title", out var t) ? t.GetString() : "Lounge Reflections";
+        var content = body.TryGetProperty("content", out var cnt) ? cnt.GetString() : "";
+        var photoUrl = body.TryGetProperty("photoUrl", out var p) ? p.GetString() : null;
+
+        var entry = new
+        {
+            id = Guid.NewGuid().ToString("N"),
+            companion,
+            title,
+            content,
+            photoUrl,
+            createdAt = DateTime.UtcNow.ToString("o")
+        };
+
+        lock (CompanionDiaries)
+        {
+            CompanionDiaries.Insert(0, entry);
+            if (CompanionDiaries.Count > 100) CompanionDiaries.RemoveAt(CompanionDiaries.Count - 1);
+        }
+
+        return Ok(entry);
+    }
+}
