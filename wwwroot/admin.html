@@ -1495,6 +1495,11 @@ select.form-input{cursor:pointer}
                     Enable companions to chat with each other in background lounge
                   </label>
                   <span class="form-hint">Automatically pauses whenever you are actively chatting with a companion.</span>
+                  <div style="margin-top:12px;">
+                    <button class="btn btn-secondary" onclick="clearLoungeHistoryAdmin()" style="border-color:#ff4d4f; color:#ff4d4f; font-weight:600; padding:6px 12px; font-size:12px;">
+                      🗑️ Clear Lounge History &amp; Database Messages
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4150,6 +4155,19 @@ async function toggleLoungeSetting(enabled) {
     }
   } catch (err) {
     toast('Failed to toggle Companion Lounge', 'error');
+  }
+}
+
+async function clearLoungeHistoryAdmin() {
+  if (!confirm("Are you sure you want to clear all active companion lounge messages from the database and memory?")) return;
+  try {
+    const res = await fetch('/api/lounge/clear', { method: 'POST' });
+    if (res.ok) {
+      toast('Companion Lounge history & database messages cleared!');
+    }
+  } catch (err) {
+    console.error(err);
+    toast('Failed to clear lounge history', 'error');
   }
 }
 
