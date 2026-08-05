@@ -193,7 +193,9 @@ public class HardwareProfiler
                         "--alias", Path.GetFileNameWithoutExtension(modelPath),
                         "--batch-size", "512",
                         "--ubatch-size", "512",
-                        "--n-predict", "-1"
+                        "--n-predict", "-1",
+                        "--reasoning", "off",
+                        "--reasoning-budget", "0"
                     };
 
                     if (!string.IsNullOrEmpty(mmprojPath))
