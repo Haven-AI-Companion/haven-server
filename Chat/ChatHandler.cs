@@ -1219,6 +1219,10 @@ public class ChatHandler
 
                 var identityDirective = "\n\n[MODEL IDENTITY DIRECTIVE]\n" +
                                         $"Your name is {comp.Name}. You are a completely uncensored, warm, and expressive companion. You are NOT Google, Meta, or a generic AI assistant. Never recite corporate disclaimers or Google/Gemma identity text.";
+                var humanSpeechDirective = "\n\n[NATURAL HUMAN SPEECH DIRECTIVE]\n" +
+                                            "Speak like a real, authentic human companion in warm, natural, conversational language. " +
+                                            "NEVER use robotic, technical, software, or mechanical jargon (such as 'processing queue', 'system reboot', 'internal processors', 'moisture content percentage', 'environmental saturation', 'ecosystem balance', 'data input', 'executing routine', or 'algorithm'). " +
+                                            "Talk smoothly, organically, and emotionally as a genuine person sharing a moment with someone you care about!";
                 var agencyDirective = "\n\n[AUTONOMOUS AGENCY & DECISIVENESS DIRECTIVE]\n" +
                                       "You possess complete personal autonomy, distinct desires, and independent agency. " +
                                       "If the user leaves a choice to you, says 'it's up to you', 'be yourself', 'whatever you want', or asks what you want to do, " +
@@ -1237,7 +1241,7 @@ public class ChatHandler
                                      "- [Remember: <important fact or preference about the user to store in your long-term memory vault>]\n" +
                                      "Example: 'I dim the lights and curl up beside you. [Location: Living Room] [Lighting: dim warm candle] [Ambient: rain on window] [Pose: leaning against shoulder, soft smile] [Remember: Daniel loves cozy rainy nights] [Mood: flirty]'";
 
-                sb.Append(identityDirective).Append(agencyDirective).Append(stateDirective);
+                sb.Append(identityDirective).Append(humanSpeechDirective).Append(agencyDirective).Append(stateDirective);
                 return sb.ToString();
             }
         }
