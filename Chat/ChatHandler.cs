@@ -237,6 +237,8 @@ public class ChatHandler
                         payloadCompanionId = ci.GetString();
                     }
 
+                    string? payloadMessageUuid = root.TryGetProperty("message_uuid", out var mu) ? mu.GetString() : root.TryGetProperty("messageUuid", out var mu2) ? mu2.GetString() : null;
+
                     string? groupId = null;
                     if (root.TryGetProperty("group_id", out var gProp) && !string.IsNullOrEmpty(gProp.GetString()))
                     {
@@ -328,7 +330,7 @@ public class ChatHandler
                     {
                         try
                         {
-                            await _db.AddMessage(conversationId, "user", userMessage);
+                            await _db.AddMessage(conversationId, "user", userMessage, messageUuid: payloadMessageUuid);
                         }
                         catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 19)
                         {
@@ -337,7 +339,7 @@ public class ChatHandler
                             _convCache.Remove(conversationId);
                             _convCache.Set(conversationId, new List<ChatMessage>(), CacheTtl);
                             await SafeSend(new { type = "conversation_id", content = conversationId }, cts.Token);
-                            await _db.AddMessage(conversationId, "user", userMessage);
+                            await _db.AddMessage(conversationId, "user", userMessage, messageUuid: payloadMessageUuid);
                         }
                     }
 
@@ -705,7 +707,8 @@ public class ChatHandler
                             }
                             else
                             {
-                                await _db.AddMessage(conversationId, "assistant", cleanResponseText, companionName);
+                                var asstUuid = payloadMessageUuid != null ? $"asst_{payloadMessageUuid}" : null;
+                                await _db.AddMessage(conversationId, "assistant", cleanResponseText, companionName, messageUuid: asstUuid);
                                 lock (history) { history.Add(new ChatMessage("assistant", cleanResponseText)); }
                             }
                         }

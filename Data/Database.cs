@@ -57,6 +57,8 @@ public class Database
                 conversation_id TEXT    NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                 role            TEXT    NOT NULL,
                 content         TEXT    NOT NULL,
+                sender_name     TEXT,
+                msg_uuid        TEXT,
                 created_at      TEXT    DEFAULT (datetime('now'))
             );
 
@@ -100,6 +102,13 @@ public class Database
             CREATE INDEX IF NOT EXISTS idx_semantic_user_comp   ON semantic_memories(user_id, companion_id);
             CREATE INDEX IF NOT EXISTS idx_paired_devices_token ON paired_devices(token, user_id);
             CREATE INDEX IF NOT EXISTS idx_diaries_lookup       ON companion_diaries(user_id, companion_name, date_string);
+            CREATE INDEX IF NOT EXISTS idx_messages_uuid        ON messages(msg_uuid) WHERE msg_uuid IS NOT NULL;
+
+            try {
+                using var alterUuidCmd = conn.CreateCommand();
+                alterUuidCmd.CommandText = "ALTER TABLE messages ADD COLUMN msg_uuid TEXT;";
+                alterUuidCmd.ExecuteNonQuery();
+            } catch {}
 
             CREATE TABLE IF NOT EXISTS mcp_servers (
                 id         TEXT    PRIMARY KEY,
@@ -756,12 +765,25 @@ public class Database
 
     // ── Messages ───────────────────────────────────────────────────────────
 
-    public Task AddMessage(string conversationId, string role, string content, string? senderName = null) => Task.Run(() =>
+    public Task AddMessage(string conversationId, string role, string content, string? senderName = null, string? messageUuid = null) => Task.Run(() =>
     {
         if (string.IsNullOrWhiteSpace(content)) return;
         using var conn = Open();
         
-        // Deduplication check: ignore if exact same message role and content was saved in last 30 seconds
+        // 1. UUID Check: If UUID is provided and already exists, ignore duplicate insert!
+        if (!string.IsNullOrWhiteSpace(messageUuid))
+        {
+            using var uuidCmd = conn.CreateCommand();
+            uuidCmd.CommandText = "SELECT COUNT(*) FROM messages WHERE msg_uuid = $uuid";
+            uuidCmd.Parameters.AddWithValue("$uuid", messageUuid.Trim());
+            if (Convert.ToInt32(uuidCmd.ExecuteScalar()) > 0)
+            {
+                // Duplicate UUID detected - skip insertion!
+                return;
+            }
+        }
+
+        // 2. Fallback Deduplication check: ignore if exact same message role and content was saved in last 30 seconds
         using (var checkCmd = conn.CreateCommand())
         {
             checkCmd.CommandText = "SELECT COUNT(*) FROM messages WHERE conversation_id = $c AND role = $r AND content = $cnt AND created_at >= datetime('now', '-30 seconds')";
@@ -778,13 +800,14 @@ public class Database
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO messages (conversation_id, role, content, sender_name) VALUES ($c, $r, $cnt, $s);
+            INSERT INTO messages (conversation_id, role, content, sender_name, msg_uuid) VALUES ($c, $r, $cnt, $s, $uuid);
             UPDATE conversations SET updated_at = datetime('now') WHERE id = $c;
             """;
         cmd.Parameters.AddWithValue("$c", conversationId);
         cmd.Parameters.AddWithValue("$r", role);
         cmd.Parameters.AddWithValue("$cnt", content);
         cmd.Parameters.AddWithValue("$s", (object?)senderName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$uuid", (object?)messageUuid ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     });
 
