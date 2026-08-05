@@ -758,7 +758,24 @@ public class Database
 
     public Task AddMessage(string conversationId, string role, string content, string? senderName = null) => Task.Run(() =>
     {
+        if (string.IsNullOrWhiteSpace(content)) return;
         using var conn = Open();
+        
+        // Deduplication check: ignore if exact same message role and content was saved in last 30 seconds
+        using (var checkCmd = conn.CreateCommand())
+        {
+            checkCmd.CommandText = "SELECT COUNT(*) FROM messages WHERE conversation_id = $c AND role = $r AND content = $cnt AND created_at >= datetime('now', '-30 seconds')";
+            checkCmd.Parameters.AddWithValue("$c", conversationId);
+            checkCmd.Parameters.AddWithValue("$r", role);
+            checkCmd.Parameters.AddWithValue("$cnt", content);
+            var existingCount = Convert.ToInt32(checkCmd.ExecuteScalar());
+            if (existingCount > 0)
+            {
+                // Duplicate message detected within 30s window - skip insertion!
+                return;
+            }
+        }
+
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO messages (conversation_id, role, content, sender_name) VALUES ($c, $r, $cnt, $s);
