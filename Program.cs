@@ -88,10 +88,22 @@ public class Program
         builder.Host.UseSystemd();
 
         // ── Config ──────────────────────────────────────────────────────────
-        // Merge appsettings.json with optional config.json beside the exe
+        // Merge appsettings.json with optional config.json beside the exe and project root
         var configPath = Path.Combine(AppContext.BaseDirectory, "config.json");
+        var rootConfigPath = Path.Combine(Directory.GetCurrentDirectory(), "config.json");
+        if (File.Exists(rootConfigPath) && !File.Exists(configPath))
+        {
+            try { File.Copy(rootConfigPath, configPath, overwrite: true); } catch {}
+        }
+        else if (File.Exists(configPath) && File.Exists(rootConfigPath) && File.GetLastWriteTimeUtc(rootConfigPath) > File.GetLastWriteTimeUtc(configPath))
+        {
+            try { File.Copy(rootConfigPath, configPath, overwrite: true); } catch {}
+        }
+
         if (File.Exists(configPath))
             builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: true);
+        if (File.Exists(rootConfigPath) && rootConfigPath != configPath)
+            builder.Configuration.AddJsonFile(rootConfigPath, optional: true, reloadOnChange: true);
 
         // Configure Kestrel based on network settings in configuration
         builder.WebHost.ConfigureKestrel(options =>

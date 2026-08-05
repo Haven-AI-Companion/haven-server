@@ -324,6 +324,12 @@ public class Database
             CREATE INDEX IF NOT EXISTS idx_group_messages ON group_messages(group_id);
             CREATE INDEX IF NOT EXISTS idx_lounge_created ON lounge_chats(created_at);
 
+            CREATE TABLE IF NOT EXISTS server_settings (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
                 content,
                 conversation_id UNINDEXED,
@@ -809,6 +815,45 @@ public class Database
         cmd.Parameters.AddWithValue("$s", (object?)senderName ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$uuid", (object?)messageUuid ?? DBNull.Value);
         cmd.ExecuteNonQuery();
+    });
+
+    // ── Persistent Server Settings ──────────────────────────────────────────
+
+    public Task<string?> GetSetting(string key, string? defaultValue = null) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT value FROM server_settings WHERE key = $k";
+        cmd.Parameters.AddWithValue("$k", key);
+        var obj = cmd.ExecuteScalar();
+        return obj != null && obj != DBNull.Value ? obj.ToString() : defaultValue;
+    });
+
+    public Task SetSetting(string key, string value) => Task.Run(() =>
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO server_settings (key, value, updated_at) VALUES ($k, $v, datetime('now'))
+            ON CONFLICT(key) DO UPDATE SET value = $v, updated_at = datetime('now');
+            """;
+        cmd.Parameters.AddWithValue("$k", key);
+        cmd.Parameters.AddWithValue("$v", value);
+        cmd.ExecuteNonQuery();
+    });
+
+    public Task<Dictionary<string, string>> GetAllSettings() => Task.Run(() =>
+    {
+        var dict = new Dictionary<string, string>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT key, value FROM server_settings";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            dict[r.GetString(0)] = r.GetString(1);
+        }
+        return dict;
     });
 
     public Task UpdateMessage(int messageId, string content) => Task.Run(() =>

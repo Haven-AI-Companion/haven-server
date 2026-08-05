@@ -108,6 +108,15 @@ public class ProactiveAgencyService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _log.LogInformation("[proactive-agency] Service started successfully.");
+        try
+        {
+            var storedSetting = await _db.GetSetting("ProactiveAgencyEnabled");
+            if (bool.TryParse(storedSetting, out var enabled))
+            {
+                IsProactiveAgencyEnabled = enabled;
+            }
+        }
+        catch {}
 
         while (!stoppingToken.IsCancellationRequested)
         {

@@ -5408,6 +5408,9 @@ public record ProactiveToggleRequest(bool Enabled);
 [Route("api/proactive")]
 public class ProactiveController : ControllerBase
 {
+    private readonly Database _db;
+    public ProactiveController(Database db) { _db = db; }
+
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
@@ -5415,9 +5418,10 @@ public class ProactiveController : ControllerBase
     }
 
     [HttpPost("toggle")]
-    public IActionResult ToggleProactive([FromBody] ProactiveToggleRequest req)
+    public async Task<IActionResult> ToggleProactive([FromBody] ProactiveToggleRequest req)
     {
         ProactiveAgencyService.IsProactiveAgencyEnabled = req.Enabled;
+        await _db.SetSetting("ProactiveAgencyEnabled", req.Enabled.ToString());
         return Ok(new { enabled = ProactiveAgencyService.IsProactiveAgencyEnabled, ok = true });
     }
 }
